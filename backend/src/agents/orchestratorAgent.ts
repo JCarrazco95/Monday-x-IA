@@ -142,8 +142,13 @@ async function processFormSubmitted(event: OrchestratorEvent): Promise<MondayWri
   return {
     itemId: input.itemId,
     itemName: input.itemName,
+    // Claves FIJAS y deterministas (no las que invente la IA en columnasMonday),
+    // para que el mapeo a columnas reales de Monday sea estable y sin errores.
     columnUpdates: {
-      ...result.columnasMonday,
+      vehiculo_interes: result.vehiculoInteres,
+      duracion_renta: result.duracionRenta,
+      tipo_cliente: result.tipoCliente,
+      urgencia: result.urgencia,
       disponible_en_flota: result.disponibleEnFlota ? "Sí" : "No"
     },
     comment: `🤖 Análisis de formulario:\n${result.resumen}\n\nPlantilla sugerida:\n${result.plantillaRespuesta}`

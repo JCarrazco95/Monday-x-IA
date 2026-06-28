@@ -20,6 +20,7 @@ const Logs = lazy(() => import('./pages/Logs').then((m) => ({ default: m.Logs })
 const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })))
 const MondayBoardView = lazy(() => import('./pages/monday/MondayBoardView').then((m) => ({ default: m.MondayBoardView })))
 const MondayItemView = lazy(() => import('./pages/monday/MondayItemView').then((m) => ({ default: m.MondayItemView })))
+const MondayDashboardView = lazy(() => import('./pages/monday/MondayDashboardView').then((m) => ({ default: m.MondayDashboardView })))
 const LandingPage = lazy(() => import('./pages/LandingPage').then((m) => ({ default: m.LandingPage })))
 
 function Loader() {
@@ -57,6 +58,7 @@ createRoot(document.getElementById('root')!).render(
             {/* Vistas embebidas en Monday.com — sin sidebar */}
             <Route path="monday/board" element={<MondayBoardView />} />
             <Route path="monday/item" element={<MondayItemView />} />
+            <Route path="monday/dashboard" element={<MondayDashboardView />} />
           </Routes>
         </Suspense>
       </RoleProvider>
