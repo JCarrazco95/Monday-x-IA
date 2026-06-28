@@ -1,0 +1,16 @@
+{
+  "name": "maxirent-call-intelligence-webhook",
+  "version": "1.0.0",
+  "description": "Dispara el analisis Sandler cuando entra una llamada nueva al board de Aircall en monday.",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "express": "^4.19.2"
+  }
+}

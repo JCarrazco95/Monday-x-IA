@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Call Intelligence — MAXIRent</title>
+<script src="https://cdn.jsdelivr.net/npm/monday-sdk-js/dist/main.js"></script>
+<style>
+  :root{
+    --purple:#6c4ff5; --blue:#0073ea; --dark:#323338; --gray:#676879; --line:#e6e9ef;
+    --bg:#ffffff; --cardbg:#fcfcfd; --chip:#eef0ff;
+    --red:#e2445c; --yellow:#fdab3d; --green:#00c875;
+    --track:#e9ebf0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--dark);
+    font-family:Figtree,Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .app{max-width:1180px;margin:0 auto;}
+
+  /* item header (réplica para preview; en monday lo provee el item view) */
+  .item-head{display:flex;align-items:center;gap:14px;padding:18px 22px 16px;}
+  .avatar{width:46px;height:46px;border-radius:10px;background:linear-gradient(135deg,#7b5cff,#9d7bff);
+    color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:15px;}
+  .item-title{font-size:18px;font-weight:700;}
+  .item-sub{font-size:12.5px;color:var(--gray);margin-top:2px;}
+  .active-pill{margin-left:auto;font-size:12px;font-weight:600;color:#1f9d6b;background:#e3f8ee;padding:6px 14px;border-radius:16px;}
+
+  .tabs{display:flex;gap:26px;padding:0 22px;border-bottom:1px solid var(--line);}
+  .tab{padding:12px 2px;font-size:14px;color:var(--gray);cursor:pointer;border-bottom:2px solid transparent;}
+  .tab.active{color:var(--purple);font-weight:600;border-bottom-color:var(--purple);}
+
+  .content{padding:20px 22px 28px;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px;}
+  .stat{background:var(--cardbg);border:1px solid var(--line);border-radius:12px;padding:16px 18px;}
+  .stat-label{font-size:12px;color:var(--gray);margin-bottom:6px;}
+  .stat-val{font-size:24px;font-weight:800;line-height:1.1;}
+  .stat-val .u{font-size:14px;font-weight:600;color:var(--gray);}
+  .stat-note{font-size:11.5px;color:var(--gray);margin-top:6px;}
+  .bar-track{height:9px;border-radius:6px;background:var(--track);overflow:hidden;margin-top:10px;position:relative;}
+  .bar-fill{height:9px;border-radius:6px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1);}
+
+  .panel{background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px;}
+  .panel h3{font-size:14.5px;font-weight:700;margin:0 0 12px;display:flex;align-items:center;gap:8px;}
+  .panel p{font-size:13.5px;line-height:1.6;color:#4b4d5a;margin:0;}
+
+  .audio-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+  audio{height:34px;}
+  .linkbtn{font-size:12.5px;color:var(--blue);text-decoration:none;font-weight:600;}
+  .src-note{font-size:11.5px;color:var(--gray);}
+
+  /* etapas */
+  .stage{margin-bottom:14px;}
+  .stage:last-child{margin-bottom:0;}
+  .stage-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .stage-name{font-size:13px;font-weight:600;flex:1;}
+  .stage-weight{font-size:11px;color:var(--gray);}
+  .stage-score{font-size:13px;font-weight:700;width:40px;text-align:right;}
+  .mini-track{height:8px;border-radius:5px;background:var(--track);overflow:hidden;}
+  .mini-fill{height:8px;border-radius:5px;width:0;transition:width .9s ease;}
+  .tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px;}
+  .toggle{font-size:11px;color:var(--purple);cursor:pointer;font-weight:600;user-select:none;}
+  .detail{margin-top:8px;font-size:12.5px;color:#4b4d5a;display:none;}
+  .detail.open{display:block;}
+  .detail ul{margin:4px 0 8px;padding-left:18px;}
+  .ok{color:#0a8f59;} .bad{color:#c5364c;}
+
+  .twocol{display:grid;grid-template-columns:1fr 1fr;gap:18px;}
+  .twocol h4{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--gray);margin:0 0 6px;}
+  .twocol ul{margin:0;padding-left:16px;font-size:13px;line-height:1.55;}
+  .keymoment{margin-top:14px;padding:11px 14px;background:var(--cardbg);border:1px solid var(--line);border-radius:8px;font-size:13px;}
+  .keymoment b{color:var(--purple);}
+
+  .rec{display:flex;gap:10px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line);}
+  .rec:first-of-type{border-top:none;}
+  .check{color:var(--green);font-weight:800;margin-top:1px;}
+  .prio{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;white-space:nowrap;margin-left:auto;}
+  .prio.alta{background:#fbe8eb;color:var(--red);}
+  .prio.media{background:#fff3e2;color:#b9740f;}
+  .prio.baja{background:var(--line);color:var(--gray);}
+  .rec-body{font-size:13.5px;flex:1;}
+  .rec-body .frase{margin-top:3px;font-style:italic;color:var(--gray);font-size:12.5px;}
+  @media(max-width:640px){.stat-row{grid-template-columns:1fr 1fr;}.twocol{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- Header de item (réplica para vista previa) -->
+  <div class="item-head">
+    <div class="avatar" id="avatar">JG</div>
+    <div>
+      <div class="item-title" id="itemTitle">Juan García — Construye MX SA de CV</div>
+      <div class="item-sub">Board: Leads MAXIRent · Grupo: Nuevos</div>
+    </div>
+    <div class="active-pill">Activo</div>
+  </div>
+  <div class="tabs">
+    <div class="tab">Principal</div>
+    <div class="tab">Actualizaciones</div>
+    <div class="tab">Análisis IA</div>
+    <div class="tab active">✦ Call Intelligence</div>
+    <div class="tab">Archivos</div>
+  </div>
+
+  <div class="content">
+    <!-- Stat cards -->
+    <div class="stat-row">
+      <div class="stat">
+        <div class="stat-label">Puntaje de la llamada</div>
+        <div class="stat-val"><span id="scoreNum">--</span><span class="u">/100</span></div>
+        <div class="bar-track"><div class="bar-fill" id="scoreBar"></div></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Desempeño</div>
+        <div class="stat-val" id="bandVal">--</div>
+        <div class="stat-note" id="bandNote"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Etapa más débil</div>
+        <div class="stat-val" id="weakVal" style="font-size:19px;">--</div>
+        <div class="stat-note" id="weakNote"></div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Sentimiento llamada</div>
+        <div class="stat-val" id="sentVal" style="font-size:21px;">--</div>
+        <div class="stat-note" id="sentNote"></div>
+      </div>
+    </div>
+
+    <!-- Grabación Aircall -->
+    <div class="panel">
+      <h3>🎧 Grabación (Aircall)</h3>
+      <div class="audio-row">
+        <audio id="player" controls preload="none"></audio>
+        <a class="linkbtn" id="recLink" target="_blank" rel="noopener">Abrir en nueva pestaña ↗</a>
+        <span class="src-note" id="recNote"></span>
+      </div>
+    </div>
+
+    <!-- Resumen -->
+    <div class="panel">
+      <h3>📋 Resumen de la llamada</h3>
+      <p id="resumenP"></p>
+      <div class="keymoment" id="keymoment"></div>
+    </div>
+
+    <!-- Etapas Sandler -->
+    <div class="panel">
+      <h3>📊 Desempeño por etapa — Modelo Sandler</h3>
+      <div id="stages"></div>
+    </div>
+
+    <!-- Fortalezas / mejoras -->
+    <div class="panel">
+      <h3>⚖️ Lectura general</h3>
+      <div class="twocol">
+        <div><h4>Fortalezas</h4><ul id="fortalezas"></ul></div>
+        <div><h4>Áreas de mejora</h4><ul id="mejoras"></ul></div>
+      </div>
+    </div>
+
+    <!-- Recomendaciones -->
+    <div class="panel">
+      <h3>✓ Acciones recomendadas para el vendedor</h3>
+      <div id="recs"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =================== CONFIG (board de llamadas Aircall) ===================
+   Ajusta estos nombres cuando conectemos el board real. La app busca columnas
+   por id o por título (coincidencia laxa). Por ahora puedes pasar el item de la
+   llamada por URL:  ...call-intelligence-tab.html?callItemId=123456789           */
+const CONFIG = {
+  // títulos/ids posibles de la columna que guarda el JSON del agente:
+  colAnalisis: ['analisis','call intelligence','sandler','analysis'],
+  // títulos/ids posibles de la columna con la URL del recording de Aircall:
+  colRecording: ['recording','grabacion','grabación','audio','aircall url','url']
+};
+
+/* =================== DATOS MOCK (se reemplazan por la salida del agente) =================== */
+const MOCK = {
+  meta:{id_llamada:"AIRCALL-77120",vendedor:"L. Gómez",prospecto:"Construye MX SA de CV",
+        fecha:"2026-06-15T10:30:00",duracion_seg:612,fuente:"audio",transcripcion_disponible:true,
+        sentimiento:"positivo",idioma:"es",
+        recording_url:"https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3"},
+  puntaje_final:59, banda:"amarillo",
+  etapas:[
+    {id:1,nombre:"Vínculo y confianza",peso:12,sub_puntaje:82,estado:"cumplida",
+     aciertos:["Saludo profesional y uso del nombre","Tono honesto, sin adulación"],
+     fallos:["Pasó a producto un poco rápido"],
+     evidencia:[{cita:"Gracias por tomar la llamada, Sr. García.",marca_tiempo:"00:08",hablante:"vendedor"}]},
+    {id:2,nombre:"Contrato previo",peso:15,sub_puntaje:48,estado:"deficiente",
+     aciertos:["Mencionó duración aproximada"],
+     fallos:["No acordó objetivo ni próximo paso","No dio permiso para decir no"],
+     evidencia:[{cita:"Le robo unos minutos…",marca_tiempo:"00:30",hablante:"vendedor"}]},
+    {id:3,nombre:"Dolor",peso:25,sub_puntaje:55,estado:"parcial",
+     aciertos:["Detectó tiempos muertos por falta de unidades en obra"],
+     fallos:["No cuantificó el costo del downtime","Saltó a solución sin profundizar el impacto"],
+     evidencia:[{cita:"¿Y eso cada cuánto les frena la obra?",marca_tiempo:"04:12",hablante:"vendedor"}]},
+    {id:4,nombre:"Presupuesto",peso:15,sub_puntaje:38,estado:"deficiente",
+     aciertos:[],
+     fallos:["Evitó el tema del precio cuando el prospecto lo mencionó"],
+     evidencia:[{cita:"Eso lo vemos al final, no se preocupe.",marca_tiempo:"06:48",hablante:"vendedor"}]},
+    {id:5,nombre:"Decisión",peso:15,sub_puntaje:70,estado:"parcial",
+     aciertos:["Preguntó por plazos del proyecto (8 meses)"],
+     fallos:["No identificó si hay otros decisores en la empresa"],
+     evidencia:[{cita:"¿Para cuándo necesitarían las unidades?",marca_tiempo:"08:20",hablante:"vendedor"}]},
+    {id:6,nombre:"Solución",peso:10,sub_puntaje:78,estado:"cumplida",
+     aciertos:["Propuso renta-compra a plazo acorde al proyecto"],
+     fallos:["Agregó dos beneficios no solicitados"],
+     evidencia:[{cita:"El esquema renta-compra le conviene por los 8 meses…",marca_tiempo:"09:05",hablante:"vendedor"}]},
+    {id:7,nombre:"Aseguramiento",peso:8,sub_puntaje:58,estado:"parcial",
+     aciertos:["Acordó enviar cotización"],
+     fallos:["No definió fecha de seguimiento","No anticipó posibles obstáculos"],
+     evidencia:[{cita:"Le mando la cotización y vemos.",marca_tiempo:"10:02",hablante:"vendedor"}]}
+  ],
+  resumen:{
+    fortalezas:["Buen rapport inicial","Tono honesto y directo","Solución a medida (renta-compra)"],
+    areas_mejora:["Profundizar y cuantificar el dolor","Abordar el presupuesto sin rodeos","Identificar al decisor"],
+    momento_clave:"El prospecto mencionó presupuesto limitado y el vendedor cambió de tema en vez de calificarlo — ahí se perdió control de la venta."
+  },
+  recomendaciones:[
+    {prioridad:"alta",etapa:4,accion:"Aborda el presupuesto de frente cuando surja; vincúlalo al costo del problema.",
+     ejemplo_frase:"Para recomendarle el esquema correcto, ¿en qué rango de inversión mensual están pensando?"},
+    {prioridad:"alta",etapa:3,accion:"Cuantifica el costo del problema antes de presentar.",
+     ejemplo_frase:"Si cada día sin unidad frena la obra, ¿cuánto les cuesta ese día parado?"},
+    {prioridad:"media",etapa:5,accion:"Confirma quién más participa en la decisión.",
+     ejemplo_frase:"Además de usted, ¿quién más revisaría esta cotización?"},
+    {prioridad:"media",etapa:2,accion:"Cierra un contrato previo al inicio: objetivo, duración y próximo paso."},
+    {prioridad:"baja",etapa:7,accion:"Define fecha y hora concretas de seguimiento antes de colgar."}
+  ]
+};
+
+/* =================== HELPERS =================== */
+const BANDS={rojo:{c:'var(--red)',bg:'#fbe8eb',t:'Deficiente'},
+             amarillo:{c:'var(--yellow)',bg:'#fff3e2',t:'Aceptable'},
+             verde:{c:'var(--green)',bg:'#e3f8ee',t:'Bueno'}};
+const bandFor=n=>n<50?'rojo':n<75?'amarillo':'verde';
+const colorFor=n=>BANDS[bandFor(n)].c;
+const SENT={positivo:{t:'Positivo',c:'var(--blue)'},neutro:{t:'Neutro',c:'var(--gray)'},negativo:{t:'Negativo',c:'var(--red)'}};
+const estadoTag={cumplida:'cumplida',parcial:'parcial',deficiente:'deficiente',omitida:'omitida',no_aplica:'N/A'};
+
+function render(d){
+  const m=d.meta||{};
+  const band=d.banda||bandFor(d.puntaje_final), bc=BANDS[band];
+  // header
+  if(m.prospecto) document.getElementById('itemTitle').textContent=(m.vendedor?m.vendedor+' → ':'')+m.prospecto;
+  // score
+  document.getElementById('scoreNum').textContent=d.puntaje_final;
+  document.getElementById('scoreNum').style.color=bc.c;
+  setTimeout(()=>{const b=document.getElementById('scoreBar');b.style.width=d.puntaje_final+'%';b.style.background=bc.c;},120);
+  // banda
+  document.getElementById('bandVal').textContent=bc.t;
+  document.getElementById('bandVal').style.color=bc.c;
+  document.getElementById('bandNote').textContent=d.puntaje_final+' / 100 · modelo Sandler';
+  // etapa más débil (peor sub_puntaje válido, mayor peso como desempate)
+  const ev=d.etapas.filter(e=>e.sub_puntaje!==null);
+  const weak=ev.slice().sort((a,b)=>(a.sub_puntaje-b.sub_puntaje)||(b.peso-a.peso))[0];
+  if(weak){document.getElementById('weakVal').textContent=weak.nombre;
+    document.getElementById('weakVal').style.color=colorFor(weak.sub_puntaje);
+    document.getElementById('weakNote').textContent=weak.sub_puntaje+'/100 · peso '+weak.peso+'%';}
+  // sentimiento
+  const s=SENT[m.sentimiento]||{t:'—',c:'var(--gray)'};
+  document.getElementById('sentVal').textContent=s.t;
+  document.getElementById('sentVal').style.color=s.c;
+  const dur=m.duracion_seg?`${Math.floor(m.duracion_seg/60)}m ${m.duracion_seg%60}s`:'';
+  document.getElementById('sentNote').textContent=[m.fuente,dur].filter(Boolean).join(' · ');
+  // grabación
+  const url=m.recording_url;
+  const player=document.getElementById('player'), link=document.getElementById('recLink'), note=document.getElementById('recNote');
+  if(url){player.src=url;link.href=url;note.textContent=m.aircall_item_id?('Aircall item '+m.aircall_item_id):'';}
+  else{player.style.display='none';link.style.display='none';note.textContent='Sin URL de grabación vinculada todavía.';}
+  // resumen
+  const r=d.resumen||{};
+  document.getElementById('resumenP').textContent=
+    `Llamada de ${m.vendedor||'vendedor'} con ${m.prospecto||'prospecto'}. `+
+    `Puntaje ${d.puntaje_final}/100 (${bc.t.toLowerCase()}). ${r.areas_mejora&&r.areas_mejora.length?'Foco de mejora: '+r.areas_mejora.join(', ')+'.':''}`;
+  document.getElementById('keymoment').innerHTML=r.momento_clave?`<b>Momento clave:</b> ${r.momento_clave}`:'';
+  // etapas
+  const cont=document.getElementById('stages');cont.innerHTML='';
+  d.etapas.forEach((e,i)=>{
+    const sp=e.sub_puntaje, col=sp===null?'var(--gray)':colorFor(sp);
+    const bnd=sp===null?'amarillo':bandFor(sp), bb=BANDS[bnd];
+    const div=document.createElement('div');div.className='stage';
+    div.innerHTML=`
+      <div class="stage-row">
+        <span class="stage-name">${e.id}. ${e.nombre}</span>
+        <span class="tag" style="background:${bb.bg};color:${bb.c}">${estadoTag[e.estado]||e.estado}</span>
+        <span class="stage-weight">peso ${e.peso}%</span>
+        <span class="stage-score" style="color:${col}">${sp===null?'N/A':sp}</span>
+      </div>
+      <div class="mini-track"><div class="mini-fill" style="background:${col}"></div></div>
+      <span class="toggle" data-i="${i}">ver detalle ▾</span>
+      <div class="detail" id="det${i}">
+        ${e.aciertos&&e.aciertos.length?'<b class="ok">✓ Aciertos</b><ul>'+e.aciertos.map(a=>`<li class="ok">${a}</li>`).join('')+'</ul>':''}
+        ${e.fallos&&e.fallos.length?'<b class="bad">✕ Fallos</b><ul>'+e.fallos.map(f=>`<li class="bad">${f}</li>`).join('')+'</ul>':''}
+        ${e.evidencia&&e.evidencia.length?'<b>Evidencia</b><ul>'+e.evidencia.map(x=>`<li>“${x.cita}” <span style="color:var(--gray)">— ${x.hablante||''} ${x.marca_tiempo||''}</span></li>`).join('')+'</ul>':''}
+      </div>`;
+    cont.appendChild(div);
+    setTimeout(()=>{div.querySelector('.mini-fill').style.width=(sp===null?0:sp)+'%';},150+i*60);
+  });
+  cont.querySelectorAll('.toggle').forEach(t=>t.onclick=()=>{
+    const det=document.getElementById('det'+t.dataset.i);det.classList.toggle('open');
+    t.textContent=det.classList.contains('open')?'ocultar detalle ▴':'ver detalle ▾';});
+  // lectura general
+  document.getElementById('fortalezas').innerHTML=(r.fortalezas||[]).map(x=>`<li>${x}</li>`).join('');
+  document.getElementById('mejoras').innerHTML=(r.areas_mejora||[]).map(x=>`<li>${x}</li>`).join('');
+  // recomendaciones
+  const rc=document.getElementById('recs');rc.innerHTML='';
+  (d.recomendaciones||[]).forEach(x=>{
+    const div=document.createElement('div');div.className='rec';
+    div.innerHTML=`<span class="check">✓</span>
+      <div class="rec-body">${x.accion}${x.ejemplo_frase?`<div class="frase">💬 “${x.ejemplo_frase}”</div>`:''}</div>
+      <span class="prio ${x.prioridad}">${x.prioridad}</span>`;
+    rc.appendChild(div);});
+}
+
+/* =================== INTEGRACIÓN MONDAY / AIRCALL ===================
+   1) Si hay ?callItemId= en la URL → lee ese item del board de llamadas.
+   2) Si no, usa el contexto del item view de monday.
+   3) Si nada está disponible → MOCK.                                            */
+function pickCol(cols,names){
+  return cols.find(c=>names.some(n=>((c.title||'').toLowerCase().includes(n))||((c.id||'').toLowerCase().includes(n))));
+}
+function loadFromItem(monday,itemId){
+  const q=`query{items(ids:[${itemId}]){name column_values{id title text value}}}`;
+  return monday.api(q).then(r=>{
+    const it=r.data.items[0]; const cols=it.column_values;
+    const aCol=pickCol(cols,CONFIG.colAnalisis);
+    const rCol=pickCol(cols,CONFIG.colRecording);
+    let data;
+    const raw=aCol&&(aCol.text||aCol.value);
+    try{ data = raw && raw.trim().startsWith('{') ? JSON.parse(raw) : null; }catch(e){ data=null; }
+    if(!data) data=JSON.parse(JSON.stringify(MOCK)); // estructura base mientras se desarrolla
+    data.meta=data.meta||{};
+    if(rCol && (rCol.text||rCol.value)){
+      let u=rCol.text||''; try{const v=JSON.parse(rCol.value||'{}');u=v.url||v.text||u;}catch(e){}
+      if(u) data.meta.recording_url=u;
+    }
+    data.meta.aircall_item_id=String(itemId);
+    render(data);
+  }).catch(()=>render(MOCK));
+}
+function boot(){
+  const qp=new URLSearchParams(location.search);
+  const manualId=qp.get('callItemId');
+  try{
+    if(typeof mondaySdk!=='function'){return render(MOCK);}
+    const monday=mondaySdk();
+    if(manualId){return loadFromItem(monday,manualId);}
+    monday.get("context").then(res=>{
+      const ctx=res.data||{};
+      const itemId=(ctx.itemIds&&ctx.itemIds[0])||ctx.itemId;
+      if(itemId) loadFromItem(monday,itemId); else render(MOCK);
+    }).catch(()=>render(MOCK));
+  }catch(e){render(MOCK);}
+}
+boot();
+</script>
+</body>
+</html>

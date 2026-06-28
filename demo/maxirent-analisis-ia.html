@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MAXIRent · Análisis IA del lead (preview)</title>
+<style>
+  :root{
+    --bg:#15161f; --surface:#1c1e2b; --surface2:#23253433; --border:#2e303f;
+    --accent:#a25ddc; --accent2:#6161ff; --purple:#863bff;
+    --success:#00c875; --warning:#fdab3d; --danger:#e44258; --info:#579bfc;
+    --text:#e6e7eb; --muted:#9699a6;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased;padding:22px;}
+  .wrap{max-width:920px;margin:0 auto;}
+  .head{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;}
+  .head h1{font-size:18px;margin:0;font-weight:600;}
+  .head p{font-size:12px;margin:2px 0 0;color:var(--muted);}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;}
+  .item-head{display:flex;align-items:center;gap:12px;padding:16px 18px;border-bottom:1px solid var(--border);}
+  .avatar{width:44px;height:44px;border-radius:11px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;color:#fff;}
+  .item-head .t1{font-size:15px;font-weight:600;}
+  .item-head .t2{font-size:12px;color:var(--muted);margin-top:2px;}
+  .pill{margin-left:auto;border-radius:999px;padding:5px 12px;font-size:12px;font-weight:600;background:rgba(0,200,117,.15);color:var(--success);}
+  .tabs{display:flex;gap:2px;padding:0 12px;border-bottom:1px solid var(--border);background:#ffffff05;}
+  .tab{padding:12px 16px;font-size:13px;color:var(--muted);}
+  .tab.on{color:var(--accent);border-bottom:2px solid var(--accent);font-weight:600;}
+  .body{padding:18px;display:flex;flex-direction:column;gap:16px;}
+  .metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .metric{background:#ffffff05;border:1px solid var(--border);border-radius:10px;padding:12px;}
+  .metric .l{font-size:11px;color:var(--muted);}
+  .metric .v{font-size:20px;font-weight:700;margin-top:4px;}
+  .metric .s{font-size:11px;color:var(--muted);margin-top:2px;}
+  .bar{height:6px;border-radius:99px;background:#ffffff14;overflow:hidden;margin-top:6px;}
+  .bar i{display:block;height:100%;border-radius:99px;}
+  .badge{display:inline-block;border-radius:5px;padding:2px 7px;font-size:10px;font-weight:700;text-transform:uppercase;}
+  .b-tibia{background:rgba(253,171,61,.2);color:var(--warning);}
+  .block{border:1px solid var(--border);border-radius:12px;padding:14px 16px;}
+  .block h3{margin:0 0 10px;font-size:13px;display:flex;align-items:center;gap:8px;font-weight:600;}
+  .factor{margin-bottom:10px;}
+  .factor .top{display:flex;justify-content:space-between;font-size:12px;}
+  .factor .j{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4;}
+  .imm{border:1px solid rgba(0,200,117,.4);background:rgba(0,200,117,.07);border-radius:12px;padding:14px 16px;}
+  .imm .l{font-size:12px;font-weight:600;color:var(--success);margin-bottom:4px;}
+  ol,ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:7px;}
+  li{font-size:13px;display:flex;gap:9px;align-items:flex-start;}
+  .num{flex:0 0 20px;height:20px;border-radius:50%;background:rgba(162,93,220,.18);color:var(--accent);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+  .research{border:1px solid rgba(162,93,220,.3);background:rgba(162,93,220,.05);border-radius:12px;padding:14px 16px;}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .chip{background:#ffffff0f;border-radius:8px;padding:4px 10px;font-size:12px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .mini{border:1px solid var(--border);border-radius:10px;padding:10px 12px;}
+  .mini .t{font-size:12px;font-weight:600;margin-bottom:6px;}
+  .tag{border-radius:8px;padding:4px 10px;font-size:12px;}
+  .foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--border);background:#ffffff05;font-size:12px;color:var(--muted);}
+  @media(max-width:680px){.metrics{grid-template-columns:repeat(2,1fr);}.grid2{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="logo">M</div>
+    <div><h1>MAXIRent · Análisis IA del lead</h1><p>Preview del estado actual — modo demo (datos heurísticos)</p></div>
+  </div>
+
+  <div class="card">
+    <div class="item-head">
+      <div class="avatar">CM</div>
+      <div>
+        <div class="t1">Carlos Méndez — Construye MX SA de CV</div>
+        <div class="t2">Board: Leads MAXIRent · Grupo: Nuevos · RFC CMX950101AB9</div>
+      </div>
+      <span class="pill">Activo</span>
+    </div>
+    <div class="tabs">
+      <div class="tab">Principal</div><div class="tab">Actualizaciones</div>
+      <div class="tab on">✦ Análisis IA</div><div class="tab">Archivos</div>
+    </div>
+    <div class="body">
+      <div class="metrics">
+        <div class="metric">
+          <div class="l">Score del lead</div>
+          <div class="v" style="color:var(--warning)">68<span style="font-size:12px;color:var(--muted)">/100</span> <span class="badge b-tibia">tibia</span></div>
+          <div class="bar"><i style="width:68%;background:var(--warning)"></i></div>
+        </div>
+        <div class="metric"><div class="l">Riesgo</div><div class="v" style="color:var(--warning)">Medio</div><div class="s">RFC validado, sin duplicados</div></div>
+        <div class="metric"><div class="l">Empresa</div><div class="v">Verificada</div><div class="s">Razón social coincide</div></div>
+        <div class="metric"><div class="l">Sentimiento llamada</div><div class="v" style="color:var(--muted)">Sin llamada</div><div class="s">—</div></div>
+      </div>
+
+      <div class="block">
+        <h3>📊 Desglose del score — 68/100</h3>
+        <div class="factor"><div class="top"><span>Necesidad / intención vehicular</span><b>17/28</b></div><div class="bar"><i style="width:61%;background:var(--warning)"></i></div><div class="j">Estimada por sector "Construcción"; confirmar en discovery (factor decisivo).</div></div>
+        <div class="factor"><div class="top"><span>Ajuste de sector a renta de flota</span><b>15/16</b></div><div class="bar"><i style="width:94%;background:var(--success)"></i></div><div class="j">Sector "Construcción" con clara necesidad de transporte.</div></div>
+        <div class="factor"><div class="top"><span>Tamaño y capacidad de la empresa</span><b>9/14</b></div><div class="bar"><i style="width:64%;background:var(--warning)"></i></div><div class="j">Persona moral (SA de CV): potencial de flota mayor.</div></div>
+        <div class="factor"><div class="top"><span>Calidad y completitud de datos</span><b>14/14</b></div><div class="bar"><i style="width:100%;background:var(--success)"></i></div><div class="j">Razón social sí, RFC válido, email corporativo, teléfono sí.</div></div>
+        <div class="factor"><div class="top"><span>Formalidad y presencia digital</span><b>6/10</b></div><div class="bar"><i style="width:60%;background:var(--warning)"></i></div><div class="j">Pendiente verificar web/LinkedIn (modo demo).</div></div>
+        <div class="factor"><div class="top"><span>Oportunidad vs. competencia</span><b>5/10</b></div><div class="bar"><i style="width:50%;background:var(--warning)"></i></div><div class="j">Sin datos de competencia todavía; oportunidad media.</div></div>
+        <div class="factor" style="margin-bottom:0"><div class="top"><span>Sector gobierno / contratos</span><b>2/8</b></div><div class="bar"><i style="width:25%;background:var(--danger)"></i></div><div class="j">Sin verificar en CompraNet/DOF (requiere búsqueda web o API).</div></div>
+      </div>
+
+      <div class="imm">
+        <div class="l">⚡ Acción inmediata</div>
+        <div style="font-size:14px">Confirmar necesidad de flota y datos faltantes antes de cotizar (esta semana).</div>
+      </div>
+
+      <div class="research">
+        <h3>🔎 Investigación de la empresa <span style="margin-left:auto;font-size:11px;font-weight:400;color:var(--muted)">confianza baja · Demo</span></h3>
+        <div class="chips"><span class="chip">Construcción</span><span class="chip" style="color:var(--muted)">PyME / mediana</span></div>
+        <div class="grid2">
+          <div class="mini"><div class="t">⚠️ Debilidades / oportunidades</div><ul><li style="color:var(--warning)">• <span style="color:var(--text)">Flota propia ociosa entre proyectos</span></li><li style="color:var(--warning)">• <span style="color:var(--text)">Altos costos de mantenimiento de vehículos pesados</span></li></ul></div>
+          <div class="mini"><div class="t">✅ Qué le resolvemos</div><ul><li style="color:var(--success)">• <span style="color:var(--text)">Renta de pick-ups 4x4 y camiones por duración de obra</span></li><li style="color:var(--success)">• <span style="color:var(--text)">Flota escalable sin inmovilizar capital</span></li></ul></div>
+        </div>
+        <p style="font-size:13px;margin:10px 0 0"><span style="color:var(--muted)">🚚 Flota sugerida: </span>Pick-ups 4x4, camiones de carga y de volteo ligero</p>
+        <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+          <span class="tag" style="background:#ffffff0f;color:var(--muted)">🏁 Competencia: No detectada</span>
+          <span class="tag" style="background:#ffffff0f;color:var(--muted)">🏛️ Gobierno: Sin contratos detectados</span>
+        </div>
+        <div style="margin-top:12px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#ffffff05">
+          <div style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:6px">💬 Argumentario de venta</div>
+          <ul><li>▸ Renta sin inversión inicial: CAPEX → gasto 100% deducible.</li><li>▸ Mantenimiento, seguro y reemplazo incluidos: cero distracción operativa.</li><li>▸ Flota escalable: sube o baja unidades según la demanda del proyecto.</li></ul>
+        </div>
+      </div>
+
+      <div class="block">
+        <h3>🧭 Siguientes pasos (playbook)</h3>
+        <ol>
+          <li><span class="num">1</span>Contactar al decisor y validar la necesidad real de transporte.</li>
+          <li><span class="num">2</span>Calificar volumen de unidades, plazo y presupuesto aproximado.</li>
+          <li><span class="num">3</span>Proponer flota sugerida: pick-ups 4x4 y camiones por duración de obra.</li>
+          <li><span class="num">4</span>Enviar cotización con opción de renta a plazo y beneficios fiscales.</li>
+          <li><span class="num">5</span>Agendar seguimiento y, si aplica, visita a la flota disponible.</li>
+        </ol>
+      </div>
+
+      <div class="block">
+        <h3>❓ Preguntas para la primera llamada</h3>
+        <ul>
+          <li style="color:var(--accent)">▸ <span style="color:var(--text)">¿Cuántas unidades necesitarían y para qué uso específico?</span></li>
+          <li style="color:var(--accent)">▸ <span style="color:var(--text)">¿Por cuánto tiempo (días, meses, contrato anual)?</span></li>
+          <li style="color:var(--accent)">▸ <span style="color:var(--text)">¿Hoy tienen flota propia o rentan con alguien? ¿Qué mejorarían?</span></li>
+          <li style="color:var(--accent)">▸ <span style="color:var(--text)">¿Quién toma la decisión y en qué plazo?</span></li>
+          <li style="color:var(--accent)">▸ <span style="color:var(--text)">¿Tienen un presupuesto mensual estimado para movilidad?</span></li>
+        </ul>
+      </div>
+
+      <div class="block">
+        <h3>🚩 Riesgos a vigilar</h3>
+        <ul><li style="color:var(--warning)">• <span style="color:var(--text)">Competencia posiblemente ya instalada: indagar contrato vigente y fecha de renovación.</span></li></ul>
+      </div>
+    </div>
+    <div class="foot"><span><span style="color:var(--accent)">✦</span> Generado por Lead Enrichment Agent</span><span>hace un momento</span></div>
+  </div>
+  <p style="font-size:12px;color:var(--muted);margin-top:12px">Preview fiel del estado actual en modo demo. Con <code>ANTHROPIC_API_KEY</code> real, el desglose, la investigación y las fuentes se llenan con búsqueda web en vivo.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,111 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallIntelligenceResult",
+  "description": "Salida estructurada del agente Call Intelligence (MAXIRent). El agente DEBE devolver únicamente un objeto que valide contra este esquema, sin texto adicional.",
+  "type": "object",
+  "required": ["meta", "puntaje_final", "banda", "etapas", "resumen", "recomendaciones"],
+  "additionalProperties": false,
+  "properties": {
+    "meta": {
+      "type": "object",
+      "required": ["fuente", "idioma", "id_llamada"],
+      "additionalProperties": false,
+      "properties": {
+        "id_llamada": { "type": "string", "description": "ID del item de monday u otro identificador." },
+        "vendedor": { "type": "string" },
+        "prospecto": { "type": "string" },
+        "fecha": { "type": "string", "format": "date-time" },
+        "duracion_seg": { "type": "integer", "minimum": 0 },
+        "fuente": { "type": "string", "enum": ["transcripcion", "audio"], "description": "Insumo recibido." },
+        "transcripcion_disponible": { "type": "boolean" },
+        "sentimiento": { "type": "string", "enum": ["positivo", "neutro", "negativo"], "description": "Sentimiento global de la llamada." },
+        "recording_url": { "type": "string", "description": "URL del recording de Aircall (audio)." },
+        "aircall_item_id": { "type": "string", "description": "ID del item en el board de llamadas Aircall." },
+        "idioma": { "type": "string", "default": "es" }
+      }
+    },
+    "puntaje_final": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Suma ponderada redondeada de los sub-puntajes por etapa."
+    },
+    "banda": {
+      "type": "string",
+      "enum": ["rojo", "amarillo", "verde"],
+      "description": "rojo 0-49, amarillo 50-74, verde 75-100."
+    },
+    "etapas": {
+      "type": "array",
+      "minItems": 7,
+      "maxItems": 7,
+      "description": "Una entrada por cada etapa Sandler, en orden 1..7.",
+      "items": {
+        "type": "object",
+        "required": ["id", "nombre", "peso", "sub_puntaje", "estado", "aciertos", "fallos", "evidencia"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "integer", "minimum": 1, "maximum": 7 },
+          "nombre": {
+            "type": "string",
+            "enum": ["Vínculo y confianza", "Contrato previo", "Dolor", "Presupuesto", "Decisión", "Solución", "Aseguramiento"]
+          },
+          "peso": { "type": "integer", "description": "12,15,25,15,15,10,8." },
+          "sub_puntaje": {
+            "type": ["integer", "null"],
+            "minimum": 0,
+            "maximum": 100,
+            "description": "null = no aplica (se excluye y se renormaliza). 0 = omitida."
+          },
+          "estado": {
+            "type": "string",
+            "enum": ["cumplida", "parcial", "deficiente", "omitida", "no_aplica"]
+          },
+          "aciertos": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Qué SÍ cumplió el vendedor en esta etapa."
+          },
+          "fallos": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Qué falló o faltó en esta etapa."
+          },
+          "evidencia": {
+            "type": "array",
+            "description": "Citas textuales que justifican el sub-puntaje.",
+            "items": {
+              "type": "object",
+              "required": ["cita"],
+              "additionalProperties": false,
+              "properties": {
+                "cita": { "type": "string" },
+                "marca_tiempo": { "type": "string", "description": "mm:ss si está disponible." },
+                "hablante": { "type": "string", "enum": ["vendedor", "prospecto", "desconocido"] }
+              }
+            }
+          }
+        }
+      }
+    },
+    "resumen": {
+      "type": "object",
+      "required": ["fortalezas", "areas_mejora", "momento_clave"],
+      "additionalProperties": false,
+      "properties": {
+        "fortalezas": { "type": "array", "items": { "type": "string" }, "maxItems": 5 },
+        "areas_mejora": { "type": "array", "items": { "type": "string" }, "maxItems": 5 },
+        "momento_clave": { "type": "string", "description": "El punto de inflexión de la llamada (oportunidad ganada o perdida)." }
+      }
+    },
+    "recomendaciones": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "description": "Acciones concretas para el vendedor, priorizadas.",
+      "items": {
+        "type": "object",
+        "required": ["prioridad", "etapa", "accion"],
+        "additionalProperties": false,
+        "properties": {
+          "prioridad": {

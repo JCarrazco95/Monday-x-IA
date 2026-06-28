@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Call Intelligence — MAXIRent</title>
+<script src="https://cdn.jsdelivr.net/npm/monday-sdk-js/dist/main.js"></script>
+<style>
+  :root{
+    --mblue:#0073ea; --mdark:#323338; --mgray:#676879; --mline:#e6e9ef;
+    --bg:#f6f7fb; --card:#ffffff;
+    --red:#e2445c; --redbg:#fbe8eb;
+    --yellow:#fdab3d; --yellowbg:#fff3e2;
+    --green:#00c875; --greenbg:#e3f8ee;
+    --radius:10px; --shadow:0 4px 14px rgba(0,0,0,.06);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--mdark);
+    font-family:Figtree,Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:760px;margin:0 auto;padding:18px;}
+  .topbar{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;}
+  .brand{font-size:13px;font-weight:600;color:var(--mgray);letter-spacing:.3px;}
+  .meta{font-size:12px;color:var(--mgray);text-align:right;line-height:1.5;}
+
+  .card{background:var(--card);border:1px solid var(--mline);border-radius:var(--radius);
+    box-shadow:var(--shadow);padding:20px;margin-bottom:14px;}
+
+  /* Score hero */
+  .score-head{display:flex;align-items:baseline;gap:10px;margin-bottom:12px;}
+  .score-num{font-size:46px;font-weight:800;line-height:1;}
+  .score-max{font-size:18px;color:var(--mgray);font-weight:600;}
+  .badge{margin-left:auto;font-size:12px;font-weight:700;padding:6px 12px;border-radius:20px;}
+  .bar-track{position:relative;height:14px;border-radius:8px;background:linear-gradient(90deg,
+      var(--red) 0%,var(--red) 49%,var(--yellow) 49%,var(--yellow) 74%,var(--green) 74%,var(--green) 100%);
+      opacity:.22;}
+  .bar-fill{position:absolute;top:0;left:0;height:14px;border-radius:8px;width:0;transition:width 1s cubic-bezier(.2,.8,.2,1);}
+  .bar-wrap{position:relative;margin:6px 0 4px;}
+  .marker{position:absolute;top:-4px;width:3px;height:22px;background:var(--mdark);border-radius:2px;
+    transform:translateX(-1px);transition:left 1s cubic-bezier(.2,.8,.2,1);}
+  .scale{display:flex;justify-content:space-between;font-size:11px;color:var(--mgray);margin-top:4px;}
+
+  h2{font-size:15px;font-weight:700;margin:0 0 14px;}
+  .stage{margin-bottom:16px;}
+  .stage:last-child{margin-bottom:0;}
+  .stage-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  .stage-name{font-size:13px;font-weight:600;flex:1;}
+  .stage-weight{font-size:11px;color:var(--mgray);}
+  .stage-score{font-size:13px;font-weight:700;width:42px;text-align:right;}
+  .mini-track{height:8px;border-radius:5px;background:var(--mline);overflow:hidden;}
+  .mini-fill{height:8px;border-radius:5px;width:0;transition:width .9s ease;}
+  .tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.3px;}
+  .detail{margin-top:8px;font-size:12.5px;color:#4b4d5a;display:none;}
+  .detail.open{display:block;}
+  .detail ul{margin:4px 0 8px;padding-left:18px;}
+  .detail li{margin:2px 0;}
+  .ok{color:#0a8f59;} .bad{color:#c5364c;}
+  .toggle{font-size:11px;color:var(--mblue);cursor:pointer;font-weight:600;user-select:none;}
+
+  .rec{display:flex;gap:10px;padding:12px 0;border-top:1px solid var(--mline);}
+  .rec:first-of-type{border-top:none;}
+  .prio{font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;height:fit-content;white-space:nowrap;}
+  .prio.alta{background:var(--redbg);color:var(--red);}
+  .prio.media{background:var(--yellowbg);color:#b9740f;}
+  .prio.baja{background:var(--mline);color:var(--mgray);}
+  .rec-body{font-size:13px;}
+  .rec-body .frase{margin-top:4px;font-style:italic;color:var(--mgray);font-size:12.5px;}
+  .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .summary-grid h3{font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--mgray);margin:0 0 6px;}
+  .summary-grid ul{margin:0;padding-left:16px;font-size:12.5px;}
+  .keymoment{margin-top:14px;padding:10px 12px;background:var(--bg);border-radius:8px;font-size:12.5px;}
+  .keymoment b{color:var(--mblue);}
+  @media(max-width:520px){.summary-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div class="brand">📞 CALL INTELLIGENCE · MAXIRent · Modelo Sandler</div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <div class="card">
+    <div class="score-head">
+      <span class="score-num" id="scoreNum">--</span>
+      <span class="score-max">/100</span>
+      <span class="badge" id="badge"></span>
+    </div>
+    <div class="bar-wrap">
+      <div class="bar-track"></div>
+      <div class="bar-fill" id="barFill"></div>
+      <div class="marker" id="marker"></div>
+    </div>
+    <div class="scale"><span>0 · Deficiente</span><span>50 · Aceptable</span><span>75 · Bueno · 100</span></div>
+  </div>
+
+  <div class="card">
+    <h2>Desempeño por etapa Sandler</h2>
+    <div id="stages"></div>
+  </div>
+
+  <div class="card">
+    <h2>Resumen</h2>
+    <div class="summary-grid">
+      <div><h3>Fortalezas</h3><ul id="fortalezas"></ul></div>
+      <div><h3>Áreas de mejora</h3><ul id="mejoras"></ul></div>
+    </div>
+    <div class="keymoment" id="keymoment"></div>
+  </div>
+
+  <div class="card">
+    <h2>Recomendaciones para el vendedor</h2>
+    <div id="recs"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- DATOS MOCK (reemplazables por la salida real del agente) ---------- */
+const MOCK = {
+  meta:{id_llamada:"MNDY-10293",vendedor:"L. Gómez",prospecto:"Transportes del Bajío",
+        fecha:"2026-06-15T10:30:00",duracion_seg:612,fuente:"transcripcion",
+        transcripcion_disponible:true,idioma:"es"},
+  puntaje_final:60, banda:"amarillo",
+  etapas:[
+    {id:1,nombre:"Vínculo y confianza",peso:12,sub_puntaje:82,estado:"cumplida",
+     aciertos:["Saludo profesional y uso del nombre","Tono honesto, sin adulación"],
+     fallos:["Pasó a producto un poco rápido"],
+     evidencia:[{cita:"Gracias por tomar la llamada, Sr. Reyes.",marca_tiempo:"00:08",hablante:"vendedor"}]},
+    {id:2,nombre:"Contrato previo",peso:15,sub_puntaje:48,estado:"deficiente",
+     aciertos:["Mencionó duración aproximada"],
+     fallos:["No acordó objetivo ni próximo paso","No dio permiso para decir no"],
+     evidencia:[{cita:"Le robo unos minutos…",marca_tiempo:"00:30",hablante:"vendedor"}]},
+    {id:3,nombre:"Dolor",peso:25,sub_puntaje:55,estado:"parcial",
+     aciertos:["Detectó tiempos muertos en la flota actual"],
+     fallos:["No cuantificó el costo del downtime","Saltó a solución sin profundizar el impacto"],
+     evidencia:[{cita:"¿Y eso cada cuánto les pasa?",marca_tiempo:"04:12",hablante:"vendedor"}]},
+    {id:4,nombre:"Presupuesto",peso:15,sub_puntaje:40,estado:"deficiente",
+     aciertos:[],
+     fallos:["Evitó el tema del precio cuando el prospecto lo mencionó"],
+     evidencia:[{cita:"Eso lo vemos al final, no se preocupe.",marca_tiempo:"06:48",hablante:"vendedor"}]},
+    {id:5,nombre:"Decisión",peso:15,sub_puntaje:70,estado:"parcial",
+     aciertos:["Preguntó por plazos de decisión"],
+     fallos:["No identificó si hay otros decisores"],
+     evidencia:[{cita:"¿Para cuándo necesitarían tenerlo?",marca_tiempo:"08:20",hablante:"vendedor"}]},
+    {id:6,nombre:"Solución",peso:10,sub_puntaje:78,estado:"cumplida",
+     aciertos:["Presentó solo el plan de renta acorde al uso descrito"],
+     fallos:["Agregó dos beneficios no pedidos"],
+     evidencia:[{cita:"El plan mensual le da reemplazo inmediato…",marca_tiempo:"09:05",hablante:"vendedor"}]},
+    {id:7,nombre:"Aseguramiento",peso:8,sub_puntaje:58,estado:"parcial",
+     aciertos:["Acordó enviar propuesta"],
+     fallos:["No definió fecha de seguimiento","No anticipó posibles obstáculos"],
+     evidencia:[{cita:"Le mando la info y vemos.",marca_tiempo:"10:02",hablante:"vendedor"}]}
+  ],
+  resumen:{
+    fortalezas:["Buen rapport inicial","Tono honesto y directo","Solución a medida"],
+    areas_mejora:["Profundizar y cuantificar el dolor","Abordar el presupuesto sin miedo","Identificar al decisor"],
+    momento_clave:"El prospecto mencionó presupuesto limitado y el vendedor cambió de tema en vez de calificarlo — ahí se perdió control de la venta."
+  },
+  recomendaciones:[
+    {prioridad:"alta",etapa:4,accion:"Aborda el presupuesto de frente cuando surja; vincúlalo al costo del problema.",
+     ejemplo_frase:"Para recomendarle el plan correcto, ¿en qué rango de inversión mensual están pensando?"},
+    {prioridad:"alta",etapa:3,accion:"Cuantifica el costo del problema antes de presentar.",
+     ejemplo_frase:"Si cada vehículo parado les cuesta X al día, ¿cuántos días al mes pasa esto?"},
+    {prioridad:"media",etapa:5,accion:"Confirma quién más participa en la decisión.",
+     ejemplo_frase:"Además de usted, ¿quién más revisaría esta propuesta?"},
+    {prioridad:"media",etapa:2,accion:"Cierra un contrato previo: objetivo, duración y próximo paso al inicio."},
+    {prioridad:"baja",etapa:7,accion:"Define fecha y hora concretas de seguimiento antes de colgar."}
+  ]
+};
+
+/* ---------- COLORES ---------- */
+const COL = {rojo:{c:'var(--red)',bg:'var(--redbg)',t:'Deficiente'},
+             amarillo:{c:'var(--yellow)',bg:'var(--yellowbg)',t:'Aceptable'},
+             verde:{c:'var(--green)',bg:'var(--greenbg)',t:'Bueno'}};
+function bandFor(n){return n<50?'rojo':n<75?'amarillo':'verde';}
+function colorFor(n){return COL[bandFor(n)].c;}
+const estadoTag={cumplida:{t:'Cumplida',b:bandFor(80)},parcial:{t:'Parcial',b:bandFor(60)},
+  deficiente:{t:'Deficiente',b:bandFor(30)},omitida:{t:'Omitida',b:bandFor(0)},no_aplica:{t:'N/A',b:null}};
+
+/* ---------- RENDER ---------- */
+function render(d){
+  const band = d.banda || bandFor(d.puntaje_final);
+  const bc = COL[band];
+  // meta
+  const m=d.meta||{};
+  const dur=m.duracion_seg?`${Math.floor(m.duracion_seg/60)}m ${m.duracion_seg%60}s`:'';
+  document.getElementById('meta').innerHTML=
+    `${m.vendedor?'Vendedor: <b>'+m.vendedor+'</b>':''}${m.prospecto?' · '+m.prospecto:''}<br>`+
+    `${m.id_llamada||''}${dur?' · '+dur:''}${m.fuente?' · '+m.fuente:''}`;
+  // score
+  document.getElementById('scoreNum').textContent=d.puntaje_final;
+  document.getElementById('scoreNum').style.color=bc.c;
+  const badge=document.getElementById('badge');
+  badge.textContent=bc.t.toUpperCase(); badge.style.background=bc.bg; badge.style.color=bc.c;
+  setTimeout(()=>{
+    document.getElementById('barFill').style.width=d.puntaje_final+'%';
+    document.getElementById('barFill').style.background=bc.c;
+    document.getElementById('marker').style.left=d.puntaje_final+'%';
+  },120);
+  // etapas
+  const cont=document.getElementById('stages'); cont.innerHTML='';
+  d.etapas.forEach((e,i)=>{
+    const sp=(e.sub_puntaje===null)?null:e.sub_puntaje;
+    const col=sp===null?'var(--mgray)':colorFor(sp);
+    const tag=estadoTag[e.estado]||{t:e.estado,b:band};
+    const tagcol=tag.b?COL[tag.b]:{c:'var(--mgray)',bg:'var(--mline)'};
+    const div=document.createElement('div'); div.className='stage';
+    div.innerHTML=`
+      <div class="stage-row">
+        <span class="stage-name">${e.id}. ${e.nombre}</span>
+        <span class="tag" style="background:${tagcol.bg};color:${tagcol.c}">${tag.t}</span>
+        <span class="stage-weight">peso ${e.peso}%</span>
+        <span class="stage-score" style="color:${col}">${sp===null?'N/A':sp}</span>
+      </div>
+      <div class="mini-track"><div class="mini-fill" style="background:${col}"></div></div>
+      <span class="toggle" data-i="${i}">ver detalle ▾</span>
+      <div class="detail" id="det${i}">
+        ${e.aciertos&&e.aciertos.length?'<b class="ok">✓ Aciertos</b><ul>'+e.aciertos.map(a=>`<li class="ok">${a}</li>`).join('')+'</ul>':''}
+        ${e.fallos&&e.fallos.length?'<b class="bad">✕ Fallos</b><ul>'+e.fallos.map(f=>`<li class="bad">${f}</li>`).join('')+'</ul>':''}
+        ${e.evidencia&&e.evidencia.length?'<b>Evidencia</b><ul>'+e.evidencia.map(ev=>`<li>“${ev.cita}” <span style="color:var(--mgray)">— ${ev.hablante||''} ${ev.marca_tiempo||''}</span></li>`).join('')+'</ul>':''}
+      </div>`;
+    cont.appendChild(div);
+    setTimeout(()=>{div.querySelector('.mini-fill').style.width=(sp===null?0:sp)+'%';},150+i*60);
+  });
+  cont.querySelectorAll('.toggle').forEach(t=>t.onclick=()=>{
+    const det=document.getElementById('det'+t.dataset.i);
+    det.classList.toggle('open');
+    t.textContent=det.classList.contains('open')?'ocultar detalle ▴':'ver detalle ▾';
+  });
+  // resumen
+  const r=d.resumen||{};
+  document.getElementById('fortalezas').innerHTML=(r.fortalezas||[]).map(x=>`<li>${x}</li>`).join('');
+  document.getElementById('mejoras').innerHTML=(r.areas_mejora||[]).map(x=>`<li>${x}</li>`).join('');
+  document.getElementById('keymoment').innerHTML=r.momento_clave?`<b>Momento clave:</b> ${r.momento_clave}`:'';
+  // recomendaciones
+  const rc=document.getElementById('recs'); rc.innerHTML='';
+  (d.recomendaciones||[]).forEach(x=>{
+    const div=document.createElement('div'); div.className='rec';
+    div.innerHTML=`<span class="prio ${x.prioridad}">${x.prioridad}</span>
+      <div class="rec-body">${x.accion}${x.ejemplo_frase?`<div class="frase">💬 “${x.ejemplo_frase}”</div>`:''}</div>`;
+    rc.appendChild(div);
+  });
+}
+
+/* ---------- INTEGRACIÓN MONDAY ----------
+   Lee el JSON del agente desde una columna del item (por defecto "long_text" llamada
+   'analisis'). Si no hay contexto monday o falla, usa MOCK. */
+function tryMonday(){
+  try{
+    if(typeof mondaySdk!=='function') return render(MOCK);
+    const monday=mondaySdk();
+    monday.listen("context",()=>{}); // mantiene viva la sesión
+    monday.get("context").then(res=>{
+      const ctx=res.data||{};
+      const itemId=(ctx.itemIds&&ctx.itemIds[0])||ctx.itemId;
+      if(!itemId) return render(MOCK);
+      const q=`query{items(ids:[${itemId}]){column_values{id title text value}}}`;
+      monday.api(q).then(r=>{
+        try{
+          const cols=r.data.items[0].column_values;
+          const col=cols.find(c=>/anal|call|intelligence|sandler/i.test(c.title||c.id))||cols.find(c=>c.text&&c.text.trim().startsWith('{'));
+          const raw=col&&(col.text||col.value);
+          render(raw?JSON.parse(raw):MOCK);
+        }catch(e){render(MOCK);}
+      }).catch(()=>render(MOCK));
+    }).catch(()=>render(MOCK));
+  }catch(e){render(MOCK);}
+}
+tryMonday();
+</script>
+</body>
+</html>

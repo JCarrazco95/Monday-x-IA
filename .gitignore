@@ -1,0 +1,29 @@
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+dist-ssr/
+
+# Variables de entorno (NUNCA commitear: contienen claves reales)
+.env
+.env.*
+!.env.example
+
+# Base de datos local (SQLite)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+logs/
+
+# Sistema operativo / editores
+.DS_Store
+Thumbs.db
+*.local
+
+# Claude Code (config local del usuario)
+.claude/settings.local.json

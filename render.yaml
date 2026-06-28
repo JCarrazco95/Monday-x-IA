@@ -1,0 +1,74 @@
+# ===========================================================================
+#  Blueprint de Render para MAXIRent (deploy de un clic).
+#  Render -> New -> Blueprint -> conecta el repo. Crea 2 servicios:
+#   - maxirent-backend  (Node/Express + node:sqlite, con disco persistente)
+#   - maxirent-frontend (Vite -> Nginx, hace proxy de /api al backend)
+#  Tras el primer deploy: copia la URL del backend y pegala en la variable
+#  BACKEND_URL del frontend (Manual Deploy o Settings -> Environment).
+#  Las mismas imagenes Docker funcionan igual en Railway/Fly.io.
+# ===========================================================================
+services:
+  - type: web
+    name: maxirent-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # Base de datos durable (Postgres gestionado, definido en "databases" abajo).
+      # Con DATABASE_URL presente, el backend usa Postgres en vez de SQLite.
+      - key: DATABASE_URL
+        fromDatabase:
+          name: maxirent-db
+          property: connectionString
+      # IA: usa gemini para pruebas (gratis) o claude en produccion.
+      - key: AI_PROVIDER
+        value: gemini
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Monday (con el token, los agentes ESCRIBEN en el tablero).
+      - key: MONDAY_API_TOKEN
+        sync: false
+      - key: MONDAY_BOARD_ID_LEADS
+        sync: false
+      - key: MONDAY_WEBHOOK_SECRET
+        sync: false
+      # Aircall (opcional, llamadas reales + transcripcion).
+      - key: AIRCALL_API_ID
+        sync: false
+      - key: AIRCALL_API_TOKEN
+        sync: false
+      - key: AIRCALL_WEBHOOK_TOKEN
+        sync: false
+      - key: DEEPGRAM_API_KEY
+        sync: false
+
+  - type: web
+    name: maxirent-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    autoDeploy: true
+    envVars:
+      # Pega aqui la URL publica del backend tras su primer deploy,
+      # p. ej. https://maxirent-backend.onrender.com  (sin barra final).
+      - key: BACKEND_URL
+        sync: false
+
+# ===========================================================================
+#  Postgres gestionado (durable, con respaldos). El backend lo usa vía
+#  DATABASE_URL. En el plan free, Render expira la BD a los 90 días: para
+#  producción real subir a un plan de pago o usar Neon/Supabase.
+# ===========================================================================
+databases:
+  - name: maxirent-db
+    plan: free
+    databaseName: maxirent
+    user: maxirent
