@@ -1,18 +1,15 @@
-import { Dashboard } from "../Dashboard";
+import { Navigate } from "react-router-dom";
 
 // ===========================================================================
-//  Dashboard Widget para Monday.com — embebe el Dashboard operativo completo
-//  (el mismo de la app: simular, analizar empresa, KPIs, distribución por
-//  prioridad, top leads, actividad reciente y estado de agentes), pero SIN la
-//  barra lateral (esa la pone el Layout en la app standalone).
+//  Dashboard Widget para Monday.com.
 //
 //  Se registra como feature "Dashboard Widget" apuntando a {URL}/monday/dashboard.
+//  Redirige a la app completa (Layout + barra lateral + navegación) para que el
+//  equipo use TODAS las vistas (Dashboard, Análisis IA, Pipeline, Coaching, etc.)
+//  desde el dashboard de Monday. El rol (admin/vendedor) lo resuelve el SDK de
+//  Monday dentro del iframe.
 // ===========================================================================
 
 export function MondayDashboardView() {
-  return (
-    <div className="min-h-screen bg-bg px-5 py-5 text-text">
-      <Dashboard />
-    </div>
-  );
+  return <Navigate to="/" replace />;
 }
