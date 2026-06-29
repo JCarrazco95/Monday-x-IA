@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
   PieChart, Pie, LineChart, Line
 } from "recharts";
 import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning } from "lucide-react";
@@ -159,16 +158,24 @@ export function Coaching() {
               </ResponsiveContainer>
             </Panel>
 
-            <Panel title="Radar de habilidades del equipo">
-              <ResponsiveContainer width="100%" height={260}>
-                <RadarChart data={habilidades} outerRadius={90}>
-                  <PolarGrid stroke={C.border} />
-                  <PolarAngleAxis dataKey="habilidad" tick={{ fontSize: 11, fill: C.muted }} />
-                  <PolarRadiusAxis domain={[0, 100]} tick={{ fontSize: 10, fill: C.muted }} />
-                  <Radar dataKey="valor" stroke={C.accent} fill={C.accent} fillOpacity={0.35} />
-                  <Tooltip />
-                </RadarChart>
-              </ResponsiveContainer>
+            <Panel title="Habilidades del equipo (promedio)">
+              {habilidades.length === 0 ? (
+                <div className="py-6 text-center text-sm text-text-muted">Sin datos aún.</div>
+              ) : (
+                <ul className="space-y-2.5 py-1">
+                  {habilidades.map((h) => (
+                    <li key={h.habilidad}>
+                      <div className="flex items-center justify-between text-[12px]">
+                        <span className="text-text">{h.habilidad}</span>
+                        <span className="font-semibold" style={{ color: colorForScore(h.valor) }}>{h.valor}/100</span>
+                      </div>
+                      <div className="mt-1 h-2 overflow-hidden rounded-full bg-black/10">
+                        <div className="h-full rounded-full" style={{ width: `${h.valor}%`, background: colorForScore(h.valor) }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </Panel>
 
             <Panel title="Perfil del vendedor (Challenger)">

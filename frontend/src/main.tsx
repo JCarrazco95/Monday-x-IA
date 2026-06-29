@@ -5,6 +5,7 @@ import './index.css'
 import { Layout } from './components/Layout'
 import { RoleProvider } from './lib/useRole'
 import { RequireAdmin } from './components/RequireAdmin'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })))
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })))
@@ -56,9 +57,9 @@ createRoot(document.getElementById('root')!).render(
             <Route path="landing" element={<LandingPage />} />
 
             {/* Vistas embebidas en Monday.com — sin sidebar */}
-            <Route path="monday/board" element={<MondayBoardView />} />
-            <Route path="monday/item" element={<MondayItemView />} />
-            <Route path="monday/dashboard" element={<MondayDashboardView />} />
+            <Route path="monday/board" element={<ErrorBoundary><MondayBoardView /></ErrorBoundary>} />
+            <Route path="monday/item" element={<ErrorBoundary><MondayItemView /></ErrorBoundary>} />
+            <Route path="monday/dashboard" element={<ErrorBoundary><MondayDashboardView /></ErrorBoundary>} />
           </Routes>
         </Suspense>
       </RoleProvider>

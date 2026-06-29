@@ -1,5 +1,6 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { ErrorBoundary } from "./ErrorBoundary";
 import { LayoutDashboard, Bot, Sparkles, Phone, ListChecks, TrendingUp, GraduationCap, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { useRole } from "../lib/useRole";
@@ -28,6 +29,7 @@ function setRoleParam(role: "admin" | "sales") {
 export function Layout() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const { isAdmin, loading: roleLoading, user } = useRole();
+  const location = useLocation();
 
   const visibleNav = navItems.filter((item) => isAdmin || !item.adminOnly);
 
@@ -128,7 +130,9 @@ export function Layout() {
       </aside>
 
       <main className="flex-1 overflow-y-auto px-8 py-6">
-        <Outlet />
+        <ErrorBoundary key={location.pathname}>
+          <Outlet />
+        </ErrorBoundary>
       </main>
     </div>
   );
