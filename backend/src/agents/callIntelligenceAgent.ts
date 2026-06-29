@@ -346,9 +346,70 @@ const banda = (s: number): "rojo" | "amarillo" | "verde" => (s >= 75 ? "verde" :
 
 type SandlerPass = Omit<CallIntelligenceOutput, "challenger" | "integrado"> & { sandler: SandlerAnalysis };
 
-async function runSandler(input: CallIntelligenceInput): Promise<SandlerPass> {
-  return structuredCompletion<SandlerPass>({
-    system: SANDLER_SYSTEM,
+// ===== Pasadas CONSOLIDADAS (2 en lugar de 5) para reducir consumo de tokens =====
+// Misma salida que antes (no cambia el frontend ni coaching/forecast/upsell), pero
+// deja de re-enviar la transcripcion 5 veces: ahora solo 2 llamadas a la IA.
+//   Pasada 1: Sandler + Challenger + Integrado + basicos.
+//   Pasada 2: Coaching del vendedor + analisis profundo + oportunidades.
+
+const VENTA_SYSTEM = `${SANDLER_SYSTEM}
+
+================ ADEMAS, EN LA MISMA RESPUESTA, EVALUA CHALLENGER ================
+${CHALLENGER_SYSTEM}
+
+================ Y FUSIONA AMBOS MODELOS EN "integrado" ================
+${INTEGRADO_SYSTEM}
+
+REGLA FINAL: entrega UNA sola respuesta con la herramienta "venta_result" que contenga los basicos, "sandler", "challenger" e "integrado".`;
+
+const VENTA_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    ...(SANDLER_SCHEMA.properties as Record<string, unknown>),
+    challenger: CHALLENGER_SCHEMA,
+    integrado: INTEGRADO_SCHEMA
+  },
+  required: [...(SANDLER_SCHEMA.required as string[]), "challenger", "integrado"]
+};
+
+const COACH_OPS_SYSTEM = `${COACHING_SYSTEM}
+
+================ ADEMAS, EN LA MISMA RESPUESTA, DETECTA OPORTUNIDADES ================
+${UPSELL_SYSTEM}
+
+REGLA FINAL: entrega UNA sola respuesta con la herramienta "coaching_oportunidades_result" con las claves "vendedor", "analisisProfundo" y "oportunidades".`;
+
+const COACH_OPS_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  properties: {
+    ...(COACHING_SCHEMA.properties as Record<string, unknown>),
+    oportunidades: UPSELL_SCHEMA
+  },
+  required: ["vendedor", "analisisProfundo", "oportunidades"]
+};
+
+type VentaPass = SandlerPass & { challenger: ChallengerAnalysis; integrado: IntegratedAnalysis };
+type CoachOpsResult = CoachingResult & { oportunidades: UpsellAnalysis };
+
+function mockVenta(input: CallIntelligenceInput): VentaPass {
+  const s = mockSandler(input);
+  const ch = mockChallenger(input);
+  return { ...s, challenger: ch, integrado: mockIntegrado(s.sandler, ch) };
+}
+
+function mockCoachOps(
+  input: CallIntelligenceInput,
+  sandler: SandlerAnalysis,
+  challenger: ChallengerAnalysis
+): CoachOpsResult {
+  const c = mockCoaching(input, sandler, challenger);
+  return { vendedor: c.vendedor, analisisProfundo: c.analisisProfundo, oportunidades: mockUpsell(input) };
+}
+
+// Pasada 1 — Sandler + Challenger + Integrado + basicos (una sola llamada a la IA).
+async function runVenta(input: CallIntelligenceInput): Promise<VentaPass> {
+  return structuredCompletion<VentaPass>({
+    system: VENTA_SYSTEM,
     model: MODEL_HEAVY,
     prompt: `Item de Monday: ${input.itemName} (ID: ${input.itemId})
 
@@ -357,64 +418,22 @@ Transcripcion de la llamada:
 ${input.transcript}
 """
 
-Evalua la llamada con el Sistema Sandler (7 etapas) y extrae los basicos.`,
-    toolName: "sandler_result",
-    toolDescription: "Analisis detallado de la llamada bajo el Sistema Sandler (por etapas).",
-    inputSchema: SANDLER_SCHEMA,
-    mockFn: () => mockSandler(input)
+Evalua la llamada con Sandler (7 etapas), Challenger (6 dimensiones) y la fusion Integrada, y extrae los basicos. Todo en una sola respuesta.`,
+    toolName: "venta_result",
+    toolDescription: "Analisis de la llamada: Sandler + Challenger + Integrado + basicos.",
+    inputSchema: VENTA_SCHEMA,
+    mockFn: () => mockVenta(input)
   });
 }
 
-async function runChallenger(input: CallIntelligenceInput): Promise<ChallengerAnalysis> {
-  return structuredCompletion<ChallengerAnalysis>({
-    system: CHALLENGER_SYSTEM,
-    model: MODEL_HEAVY,
-    prompt: `Item de Monday: ${input.itemName} (ID: ${input.itemId})
-
-Transcripcion de la llamada:
-"""
-${input.transcript}
-"""
-
-Evalua la llamada con la rubrica Challenger y devuelve el desglose.`,
-    toolName: "challenger_result",
-    toolDescription: "Evaluacion de la llamada bajo el metodo Challenger Sale.",
-    inputSchema: CHALLENGER_SCHEMA,
-    mockFn: () => mockChallenger(input)
-  });
-}
-
-async function runIntegrado(
+// Pasada 2 — coaching del vendedor + analisis profundo + oportunidades (una sola llamada).
+async function runCoachingOps(
   input: CallIntelligenceInput,
   sandler: SandlerAnalysis,
   challenger: ChallengerAnalysis
-): Promise<IntegratedAnalysis> {
-  return structuredCompletion<IntegratedAnalysis>({
-    system: INTEGRADO_SYSTEM,
-    model: MODEL_HEAVY,
-    prompt: `Llamada: ${input.itemName} (ID: ${input.itemId})
-
-== Evaluacion SANDLER (JSON) ==
-${JSON.stringify(sandler)}
-
-== Evaluacion CHALLENGER (JSON) ==
-${JSON.stringify(challenger)}
-
-Funde ambas evaluaciones en un unico analisis integrado y potenciado.`,
-    toolName: "integrado_result",
-    toolDescription: "Analisis integrado que fusiona Sandler y Challenger en uno solo.",
-    inputSchema: INTEGRADO_SCHEMA,
-    mockFn: () => mockIntegrado(sandler, challenger)
-  });
-}
-
-async function runCoaching(
-  input: CallIntelligenceInput,
-  sandler: SandlerAnalysis,
-  challenger: ChallengerAnalysis
-): Promise<CoachingResult> {
-  return structuredCompletion<CoachingResult>({
-    system: COACHING_SYSTEM,
+): Promise<CoachOpsResult> {
+  return structuredCompletion<CoachOpsResult>({
+    system: COACH_OPS_SYSTEM,
     model: MODEL_HEAVY,
     prompt: `Llamada: ${input.itemName} (ID: ${input.itemId})
 
@@ -429,93 +448,42 @@ ${JSON.stringify(sandler)}
 == Challenger (JSON) ==
 ${JSON.stringify(challenger)}
 
-Genera el coaching del vendedor y el analisis profundo de la llamada.`,
-    toolName: "coaching_result",
-    toolDescription: "Coaching del vendedor y analisis profundo de toda la llamada.",
-    inputSchema: COACHING_SCHEMA,
-    mockFn: () => mockCoaching(input, sandler, challenger)
-  });
-}
-
-async function runUpsell(
-  input: CallIntelligenceInput,
-  basics: { vehiculosMencionados: string[]; analisisProfundo?: DeepCallAnalysis }
-): Promise<UpsellAnalysis> {
-  return structuredCompletion<UpsellAnalysis>({
-    system: UPSELL_SYSTEM,
-    model: MODEL_HEAVY,
-    prompt: `Llamada: ${input.itemName} (ID: ${input.itemId})
-
-Transcripcion:
-"""
-${input.transcript}
-"""
-
-Vehiculos mencionados: ${basics.vehiculosMencionados.join(", ") || "N/D"}
-${basics.analisisProfundo ? `Necesidades detectadas: ${basics.analisisProfundo.necesidadesCliente.join("; ")}\nSenales de compra: ${basics.analisisProfundo.senalesCompra.join("; ")}` : ""}
-
-Detecta oportunidades de upsell/cross-sell para crecer la cuenta.`,
-    toolName: "upsell_result",
-    toolDescription: "Deteccion de oportunidades de upsell/cross-sell en la llamada.",
-    inputSchema: UPSELL_SCHEMA,
-    mockFn: () => mockUpsell(input)
+Genera el coaching del vendedor, el analisis profundo de la llamada y las oportunidades de upsell/cross-sell. Todo en una sola respuesta.`,
+    toolName: "coaching_oportunidades_result",
+    toolDescription: "Coaching del vendedor + analisis profundo + oportunidades.",
+    inputSchema: COACH_OPS_SCHEMA,
+    mockFn: () => mockCoachOps(input, sandler, challenger)
   });
 }
 
 export async function runCallIntelligenceAgent(
   input: CallIntelligenceInput
 ): Promise<CallIntelligenceOutput> {
-  // 1) Sandler (detallado) — incluye los basicos de la llamada.
-  let sandlerPass: SandlerPass;
+  // Pasada 1: Sandler + Challenger + Integrado + basicos (1 llamada a la IA).
+  let venta: VentaPass;
   try {
-    sandlerPass = await runSandler(input);
+    venta = await runVenta(input);
   } catch {
-    sandlerPass = mockSandler(input);
+    venta = mockVenta(input);
   }
 
-  // 2) Challenger.
-  let challenger: ChallengerAnalysis;
+  // Pasada 2: coaching + analisis profundo + oportunidades (1 llamada a la IA).
+  let coachOps: CoachOpsResult;
   try {
-    challenger = await runChallenger(input);
+    coachOps = await runCoachingOps(input, venta.sandler, venta.challenger);
   } catch {
-    challenger = mockChallenger(input);
+    coachOps = mockCoachOps(input, venta.sandler, venta.challenger);
   }
 
-  // 3) Integrado (funde ambos).
-  let integrado: IntegratedAnalysis;
-  try {
-    integrado = await runIntegrado(input, sandlerPass.sandler, challenger);
-  } catch {
-    integrado = mockIntegrado(sandlerPass.sandler, challenger);
-  }
-
-  // 4) Coaching del vendedor + analisis profundo de la llamada.
-  let coaching: CoachingResult;
-  try {
-    coaching = await runCoaching(input, sandlerPass.sandler, challenger);
-  } catch {
-    coaching = mockCoaching(input, sandlerPass.sandler, challenger);
-  }
-
-  // 5) Oportunidades comerciales (upsell / cross-sell).
-  let oportunidades: UpsellAnalysis;
-  try {
-    oportunidades = await runUpsell(input, {
-      vehiculosMencionados: sandlerPass.vehiculosMencionados,
-      analisisProfundo: coaching.analisisProfundo
-    });
-  } catch {
-    oportunidades = mockUpsell(input);
-  }
-
+  const { challenger, integrado, ...sandlerBasics } = venta;
   return {
-    ...sandlerPass,
+    ...sandlerBasics,
     telefono: input.telefono ?? null,
     challenger,
     integrado,
-    vendedor: coaching.vendedor,
-    analisisProfundo: coaching.analisisProfundo,
-    oportunidades
+    vendedor: coachOps.vendedor,
+    analisisProfundo: coachOps.analisisProfundo,
+    oportunidades: coachOps.oportunidades
   };
 }
 

@@ -35,7 +35,7 @@ Monorepo en `maxirent-monday/`:
 - **orchestratorAgent.ts** — enruta eventos (`lead_created`, `form_submitted`, `call_recorded`).
 - **leadEnrichmentAgent.ts** — score 0-100, prioridad, riesgo, investigación de empresa (web/CompraNet), duplicados.
 - **formAnalysisAgent.ts** — interpreta formularios de cotización.
-- **callIntelligenceAgent.ts** — **5 pasadas** sobre la transcripción:
+- **callIntelligenceAgent.ts** — los 5 análisis se ejecutan en **2 llamadas a la IA consolidadas** (`runVenta` = Sandler+Challenger+Integrado+básicos; `runCoachingOps` = Coaching+Profundo+Oportunidades) para reducir consumo de tokens. La salida (`CallIntelligenceOutput`) es idéntica, así que frontend/coaching/forecast/upsell no cambian. Contenido de los 5 análisis:
   1. Sandler detallado (7 etapas con peso/puntaje/estado/aciertos/fallos/evidencia, recomendaciones).
   2. Challenger Sale (6 dimensiones, perfil del vendedor, insight/reframe/siguiente paso).
   3. Integrado (funde ambos: scoreGlobal, resumen ejecutivo, plan de acción, próxima llamada).
