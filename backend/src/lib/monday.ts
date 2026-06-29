@@ -89,6 +89,26 @@ export async function getMondayItem(itemId: string): Promise<MondayItemData | nu
   };
 }
 
+/** Lista las columnas (id, título, tipo) de un board. Útil para mapear IDs reales. */
+export async function getBoardColumns(
+  boardId: string
+): Promise<{ id: string; title: string; type: string }[]> {
+  const query = `
+    query ($ids: [ID!]) {
+      boards (ids: $ids) {
+        id
+        name
+        columns { id title type }
+      }
+    }
+  `;
+  const data = await mondayRequest<{ boards?: Array<{ columns?: Array<{ id: string; title: string; type: string }> }> }>(
+    query,
+    { ids: [boardId] }
+  );
+  return data?.boards?.[0]?.columns ?? [];
+}
+
 export async function updateMondayColumn(opts: {
   boardId: string;
   itemId: string;
