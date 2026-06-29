@@ -2,16 +2,49 @@ import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, Orch
 
 const BASE = "/api";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Reintenta ante 502/503/504: en el plan free de Render el backend "duerme" y
+// la PRIMERA petición tarda ~30s en despertarlo. En vez de fallar, esperamos y
+// reintentamos para que la vista (incluida la embebida en Monday) cargue sola.
+const GATEWAY_STATUSES = new Set([502, 503, 504]);
+const MAX_RETRIES = 5;
+const RETRY_DELAY_MS = 4000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { "Content-Type": "application/json" },
-    ...init
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Error ${res.status}`);
+  const isGet = !init?.method || init.method.toUpperCase() === "GET";
+  let lastErr: unknown;
+
+  for (let attempt = 0; attempt <= (isGet ? MAX_RETRIES : 0); attempt++) {
+    let res: Response;
+    try {
+      res = await fetch(`${BASE}${path}`, {
+        headers: { "Content-Type": "application/json" },
+        ...init
+      });
+    } catch (err) {
+      // Error de red (backend aún despertando): reintenta si es GET.
+      lastErr = err;
+      if (isGet && attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS);
+        continue;
+      }
+      throw err;
+    }
+
+    if (GATEWAY_STATUSES.has(res.status) && isGet && attempt < MAX_RETRIES) {
+      await sleep(RETRY_DELAY_MS);
+      continue;
+    }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.error ?? `Error ${res.status}`);
+    }
+    return res.json() as Promise<T>;
   }
-  return res.json() as Promise<T>;
+
+  throw lastErr instanceof Error ? lastErr : new Error("No se pudo conectar con el backend.");
 }
 
 export const api = {

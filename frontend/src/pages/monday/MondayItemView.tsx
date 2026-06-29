@@ -644,7 +644,18 @@ export function MondayItemView() {
           </div>
         )}
 
-        {!loading && error && (
+        {!loading && error && /no encontrado|sin an[aá]lisis/i.test(error) && (
+          <div className="rounded-xl border border-border bg-surface p-8 text-center">
+            <p className="text-2xl mb-3">✨</p>
+            <p className="text-sm font-medium text-text">Este lead aún no tiene análisis IA</p>
+            <p className="mx-auto mt-1 max-w-md text-xs text-text-muted">
+              El análisis se genera automáticamente cuando el lead se procesa (webhook al crear el item, o desde el panel
+              con “Simular/Analizar”). Vuelve a abrir esta vista cuando el lead haya sido analizado.
+            </p>
+          </div>
+        )}
+
+        {!loading && error && !/no encontrado|sin an[aá]lisis/i.test(error) && (
           <div className="rounded-xl border border-danger/30 bg-danger/10 p-6 text-center">
             <p className="text-sm font-medium text-danger">Error al cargar el análisis</p>
             <p className="mt-1 text-xs text-text-muted">{error}</p>
