@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS agents (
   description   TEXT NOT NULL,
   priority      INTEGER NOT NULL DEFAULT 0,
   status        TEXT NOT NULL DEFAULT 'paused',
-  model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-5',
+  model         TEXT NOT NULL DEFAULT 'claude-haiku-4-5',
   tools         TEXT NOT NULL DEFAULT '[]',
   version       TEXT NOT NULL DEFAULT '0.1.0',
   last_run_at   TEXT,

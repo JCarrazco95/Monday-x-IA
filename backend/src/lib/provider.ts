@@ -39,8 +39,11 @@ export const isMockMode = PROVIDER === "demo";
 // Los agentes piden MODEL_DEFAULT / MODEL_HEAVY sin saber el proveedor; aquí se
 // traducen al modelo correcto del proveedor activo.
 
-const CLAUDE_DEFAULT = process.env.CLAUDE_MODEL_DEFAULT ?? "claude-sonnet-4-5";
-const CLAUDE_HEAVY = process.env.CLAUDE_MODEL_HEAVY ?? "claude-opus-4-5";
+// Por defecto Haiku 4.5 (el modelo más económico: $1/$5 por 1M tokens). Rinde
+// bien para el análisis de llamadas y reduce el consumo. Si se quiere más
+// profundidad en una pasada concreta, subir CLAUDE_MODEL_HEAVY a sonnet/opus.
+const CLAUDE_DEFAULT = process.env.CLAUDE_MODEL_DEFAULT ?? "claude-haiku-4-5";
+const CLAUDE_HEAVY = process.env.CLAUDE_MODEL_HEAVY ?? "claude-haiku-4-5";
 
 // Modelos Gemini gratuitos por defecto (configurables). Flash es gratis.
 const GEMINI_DEFAULT = process.env.GEMINI_MODEL_DEFAULT ?? "gemini-2.5-flash";

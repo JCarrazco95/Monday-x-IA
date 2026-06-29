@@ -9,7 +9,7 @@ const agents = [
       "Recibe los eventos (webhooks de Monday y Make), determina qué agente especializado debe procesar cada caso, consolida resultados y dispara al Monday Writer Agent. Actúa como el punto único de entrada de todo el sistema.",
     priority: 0,
     status: "active",
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     tools: JSON.stringify([
       "route_event",
       "get_monday_item",
@@ -26,7 +26,7 @@ const agents = [
       "Analiza las respuestas de formularios de cotización/contacto. Identifica vehículo de interés, duración de renta, tipo de cliente (personal/empresarial), nivel de urgencia y mapea los campos a las columnas correspondientes en Monday. Sugiere una plantilla de respuesta.",
     priority: 1,
     status: "active",
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     tools: JSON.stringify([
       "map_to_monday_columns",
       "classify_lead_intent",
@@ -42,7 +42,7 @@ const agents = [
       "Al crearse un lead, busca duplicados en Monday por email/RFC, enriquece datos de la empresa (sector, tamaño), calcula un score de viabilidad 0-100 y sugiere la siguiente acción comercial.",
     priority: 2,
     status: "active",
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     tools: JSON.stringify([
       "search_monday_duplicates",
       "enrich_company",
@@ -58,7 +58,7 @@ const agents = [
       "Transcribe (Deepgram/Whisper) y analiza llamadas de ventas con dos modelos: Sandler (resumen, vehículos, objeciones, compromisos, sentimiento, probabilidad de cierre) y Challenger Sale (score, perfil del vendedor, insight/reframe/siguiente paso).",
     priority: 3,
     status: "active",
-    model: "claude-opus-4-5",
+    model: "claude-haiku-4-5",
     tools: JSON.stringify([
       "transcribe_audio",
       "extract_commitments",
@@ -87,7 +87,7 @@ const agents = [
       "Recibe los resultados estructurados de los demás agentes y los escribe en las columnas, subitems y comentarios correspondientes del board de Monday vía API GraphQL.",
     priority: 99,
     status: "active",
-    model: "claude-sonnet-4-5",
+    model: "claude-haiku-4-5",
     tools: JSON.stringify([
       "update_monday_column",
       "create_monday_subitem",
