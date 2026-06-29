@@ -115,18 +115,26 @@ export async function updateMondayColumn(opts: {
   columnId: string;
   value: unknown;
 }) {
+  // change_simple_column_value acepta un STRING plano y funciona para texto,
+  // números (como "93") y estado (por etiqueta). create_labels_if_missing crea
+  // la etiqueta de estado (p.ej. "Sí"/"No") si aún no existe. Más robusto que
+  // change_column_value, que exige un JSON distinto por tipo de columna.
   const query = `
-    mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: JSON!) {
-      change_column_value(board_id: $boardId, item_id: $itemId, column_id: $columnId, value: $value) {
+    mutation ($boardId: ID!, $itemId: ID!, $columnId: String!, $value: String) {
+      change_simple_column_value(
+        board_id: $boardId, item_id: $itemId, column_id: $columnId,
+        value: $value, create_labels_if_missing: true
+      ) {
         id
       }
     }
   `;
+  const value = opts.value === null || opts.value === undefined ? "" : String(opts.value);
   return mondayRequest(query, {
     boardId: opts.boardId,
     itemId: opts.itemId,
     columnId: opts.columnId,
-    value: JSON.stringify(opts.value)
+    value
   });
 }
 
