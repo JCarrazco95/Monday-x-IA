@@ -26,7 +26,7 @@ scraperRouter.get("/lusha/diagnose", async (req, res) => {
 });
 
 scraperRouter.post("/search", async (req, res) => {
-  const { source, sector, ciudad, limite } = (req.body ?? {}) as Record<string, unknown>;
+  const { source, sector, ciudad, limite, page } = (req.body ?? {}) as Record<string, unknown>;
   if (typeof source !== "string" || !source.trim()) {
     return res.status(400).json({ error: "Se requiere 'source'." });
   }
@@ -38,7 +38,8 @@ scraperRouter.post("/search", async (req, res) => {
       source: source.trim(),
       sector: sector.trim(),
       ciudad: typeof ciudad === "string" ? ciudad.trim() : undefined,
-      limite: typeof limite === "number" ? limite : undefined
+      limite: typeof limite === "number" ? limite : undefined,
+      page: typeof page === "number" ? page : undefined
     });
     res.json(result);
   } catch (err) {

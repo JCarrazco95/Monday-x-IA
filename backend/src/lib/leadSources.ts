@@ -35,6 +35,8 @@ export interface SearchParams {
   sector: string;
   ciudad?: string;
   limite?: number;
+  /** Página (0-based) para fuentes que paginan (Lusha). Permite traer leads nuevos. */
+  page?: number;
 }
 
 export interface LeadSource {

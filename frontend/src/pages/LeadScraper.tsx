@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Radar, Search, Loader2, Phone, Globe, MapPin, Download, CheckCircle2, AlertTriangle, Info } from "lucide-react";
+import { Radar, Search, Loader2, Phone, Globe, MapPin, Download, CheckCircle2, AlertTriangle, Info, Plus } from "lucide-react";
 import { api } from "../lib/api";
 import type { ScraperSource, ScoredProspect, ScraperImportResult } from "../types";
 
@@ -18,10 +18,13 @@ export function LeadScraper() {
   const [limite, setLimite] = useState(20);
 
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [demo, setDemo] = useState(false);
   const [rows, setRows] = useState<ScoredProspect[]>([]);
+  const [page, setPage] = useState(0);
+  const [noMore, setNoMore] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importResult, setImportResult] = useState<ScraperImportResult | null>(null);
 
@@ -42,17 +45,51 @@ export function LeadScraper() {
     setLoading(true);
     setError(null);
     setImportResult(null);
+    setNoMore(false);
+    setPage(0);
     try {
-      const res = await api.searchProspects({ source, sector: sector.trim(), ciudad: ciudad.trim(), limite });
+      const res = await api.searchProspects({ source, sector: sector.trim(), ciudad: ciudad.trim(), limite, page: 0 });
       setRows(res.prospects);
       setDemo(res.demo);
-      // Preselecciona los NO duplicados.
-      setSelected(new Set(res.prospects.map((_, i) => i).filter((i) => !res.prospects[i].duplicado)));
+      // Preselecciona todos (ya vienen solo los nuevos).
+      setSelected(new Set(res.prospects.map((_, i) => i)));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al buscar.");
       setRows([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Trae MÁS prospectos (página siguiente) y los acumula sin repetir.
+  async function onLoadMore() {
+    if (!sector.trim() || !source) return;
+    setLoadingMore(true);
+    setError(null);
+    const next = page + 1;
+    try {
+      const res = await api.searchProspects({ source, sector: sector.trim(), ciudad: ciudad.trim(), limite, page: next });
+      setPage(next);
+      const have = new Set(rows.map((r) => r.externalId || r.nombre.toLowerCase()));
+      const fresh = res.prospects.filter((p) => !have.has(p.externalId || p.nombre.toLowerCase()));
+      if (fresh.length === 0) {
+        setNoMore(true);
+      } else {
+        setRows((prev) => {
+          const merged = [...prev, ...fresh];
+          // Preselecciona los recién añadidos.
+          setSelected((sel) => {
+            const s = new Set(sel);
+            for (let i = prev.length; i < merged.length; i++) s.add(i);
+            return s;
+          });
+          return merged;
+        });
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cargar más.");
+    } finally {
+      setLoadingMore(false);
     }
   }
 
@@ -83,8 +120,6 @@ export function LeadScraper() {
     if (selected.size === rows.length) setSelected(new Set());
     else setSelected(new Set(rows.map((_, i) => i)));
   }
-
-  const nuevos = rows.filter((r) => !r.duplicado).length;
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -191,9 +226,7 @@ export function LeadScraper() {
         <div className="mt-4 rounded-xl border border-border bg-surface">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
             <div className="text-sm text-text-muted">
-              <span className="font-semibold text-text">{rows.length}</span> prospecto(s) ·{" "}
-              <span className="font-semibold text-success">{nuevos}</span> nuevo(s) ·{" "}
-              <span className="font-semibold text-warning">{rows.length - nuevos}</span> duplicado(s)
+              <span className="font-semibold text-success">{rows.length}</span> prospecto(s) nuevo(s)
               {demo && <span className="ml-2 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] font-semibold text-warning">DEMO</span>}
             </div>
             <button
@@ -257,6 +290,22 @@ export function LeadScraper() {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Cargar más prospectos (página siguiente, sin repetir) */}
+          <div className="flex items-center justify-center border-t border-border px-4 py-3">
+            {noMore ? (
+              <span className="text-xs text-text-muted">No hay más prospectos nuevos para esta búsqueda.</span>
+            ) : (
+              <button
+                onClick={onLoadMore}
+                disabled={loadingMore}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-muted hover:text-text disabled:opacity-50"
+              >
+                {loadingMore ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />}
+                Más resultados
+              </button>
+            )}
           </div>
         </div>
       )}

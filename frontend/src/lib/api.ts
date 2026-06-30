@@ -136,7 +136,7 @@ export const api = {
 
   // Scraper / prospección de leads.
   getScraperSources: () => request<{ sources: ScraperSource[] }>("/scraper/sources"),
-  searchProspects: (data: { source: string; sector: string; ciudad?: string; limite?: number }) =>
+  searchProspects: (data: { source: string; sector: string; ciudad?: string; limite?: number; page?: number }) =>
     request<ScraperSearchResult>("/scraper/search", { method: "POST", body: JSON.stringify(data) }),
   importProspects: (prospects: Prospect[]) =>
     request<ScraperImportResult>("/scraper/import", { method: "POST", body: JSON.stringify({ prospects }) })

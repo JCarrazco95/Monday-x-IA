@@ -101,7 +101,8 @@ function buildSearchBody(
   sector: string,
   ciudad: string | undefined,
   size: number,
-  useIndustry = false
+  useIndustry = false,
+  page = 0
 ): Record<string, unknown> {
   const companyInclude: Record<string, unknown> = {
     locations: ciudad ? [{ city: ciudad }] : [{ country: LUSHA_DEFAULT_COUNTRY }]
@@ -109,7 +110,7 @@ function buildSearchBody(
   if (useIndustry && sector.trim()) companyInclude.industriesLabels = [sector.trim()];
   return {
     filters: { companies: { include: companyInclude } },
-    pages: { page: 0, size }
+    pages: { page: Math.max(page, 0), size }
   };
 }
 
@@ -155,9 +156,11 @@ export async function searchLushaProspects(params: {
   sector: string;
   ciudad?: string;
   limite?: number;
+  page?: number;
 }): Promise<Prospect[] | null> {
   if (!LUSHA_API_KEY) return null;
   const limit = Math.min(Math.max(params.limite ?? 20, 1), 40);
+  const page = Math.max(params.page ?? 0, 0);
 
   const size = Math.max(limit, LUSHA_MIN_PAGE_SIZE);
 
@@ -167,7 +170,7 @@ export async function searchLushaProspects(params: {
       const res = await fetch(`${LUSHA_BASE}${LUSHA_SEARCH_PATH}`, {
         method: "POST",
         headers: headers(),
-        body: JSON.stringify(buildSearchBody(params.sector, params.ciudad, size, useIndustry)),
+        body: JSON.stringify(buildSearchBody(params.sector, params.ciudad, size, useIndustry, page)),
         signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
       });
       if (!res.ok) return null;

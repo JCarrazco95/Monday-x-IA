@@ -61,39 +61,64 @@ async function existingLeadNames(): Promise<Set<string>> {
   }
 }
 
+// Cuántas páginas como máximo recorremos buscando prospectos NUEVOS antes de
+// rendirnos (evita bucles largos si la fuente se agota o no pagina).
+const MAX_PAGES = Number(process.env.SCRAPER_MAX_PAGES ?? 8);
+
 export async function searchProspects(params: SearchParams & { source: string }): Promise<SearchResult> {
   const source = getLeadSource(params.source);
   if (!source) throw new Error(`Fuente desconocida: ${params.source}`);
 
-  const { prospects, demo } = await source.search(params);
+  const limite = Math.min(Math.max(params.limite ?? 20, 1), 40);
   const existing = await existingLeadNames();
 
-  // Dedupe contra existentes + dentro del mismo lote.
-  const seenInBatch = new Set<string>();
-  const scored: ScoredProspect[] = prospects.map((p) => {
-    const key = normalize(p.nombre);
-    const dupExisting = existing.has(key);
-    const dupBatch = seenInBatch.has(key);
-    seenInBatch.add(key);
-    return { ...p, duplicado: dupExisting || dupBatch };
-  });
+  // Recorremos páginas acumulando SOLO prospectos nuevos (que no existan ya como
+  // lead ni se hayan juntado en este lote). Así cada búsqueda —y especialmente
+  // re-buscar tras importar— trae prospectos frescos en vez de los mismos.
+  const seen = new Set<string>(); // nombres ya juntados en este lote
+  const nuevos: ScoredProspect[] = [];
+  let omitidosPorExistir = 0;
+  let demo = false;
+  const startPage = params.page ?? 0;
 
-  const duplicados = scored.filter((p) => p.duplicado).length;
+  for (let page = startPage; page < startPage + MAX_PAGES && nuevos.length < limite; page++) {
+    const res = await source.search({ ...params, limite, page });
+    demo = res.demo;
+    let agregadosEnPagina = 0;
+
+    for (const p of res.prospects) {
+      const key = normalize(p.nombre);
+      if (!key) continue;
+      if (existing.has(key)) {
+        omitidosPorExistir++;
+        continue;
+      }
+      if (seen.has(key)) continue; // misma empresa repetida en la página
+      seen.add(key);
+      nuevos.push({ ...p, duplicado: false });
+      agregadosEnPagina++;
+      if (nuevos.length >= limite) break;
+    }
+
+    // Si la página no aportó NADA nuevo, la fuente no pagina o se agotó → paramos.
+    if (agregadosEnPagina === 0) break;
+  }
+
   logActivity({
     agentId: "lead_scraper",
     type: "info",
     title: `Prospección: ${source.label}`,
-    detail: `"${params.sector}"${params.ciudad ? ` · ${params.ciudad}` : ""} → ${scored.length} prospecto(s), ${scored.length - duplicados} nuevo(s)${demo ? " (demo)" : ""}`,
+    detail: `"${params.sector}"${params.ciudad ? ` · ${params.ciudad}` : ""} → ${nuevos.length} nuevo(s)${omitidosPorExistir ? `, ${omitidosPorExistir} ya existían` : ""}${demo ? " (demo)" : ""}`,
     reference: `scraper · ${source.id}`
   });
 
   return {
     fuente: source.id,
     demo,
-    total: scored.length,
-    nuevos: scored.length - duplicados,
-    duplicados,
-    prospects: scored
+    total: nuevos.length,
+    nuevos: nuevos.length,
+    duplicados: omitidosPorExistir,
+    prospects: nuevos
   };
 }
 
