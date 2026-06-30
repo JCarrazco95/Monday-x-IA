@@ -86,23 +86,35 @@ function pickStr(arr: unknown, key: string): string | null {
 }
 
 /**
+ * Construye el cuerpo del SEARCH. Los filtros de Lusha van envueltos en
+ * `include` (y opcionalmente `exclude`) dentro de companies/contacts.
+ */
+function buildSearchBody(sector: string, ciudad: string | undefined, size: number): Record<string, unknown> {
+  const companyInclude: Record<string, unknown> = { industriesLabels: [sector] };
+  if (ciudad) companyInclude.locations = [ciudad];
+  return {
+    filters: { companies: { include: companyInclude } },
+    pages: { page: 0, size }
+  };
+}
+
+/**
  * Diagnóstico de conexión: hace SOLO el search (no gasta créditos) y reporta
  * el status HTTP y el mensaje de Lusha. No expone la API key. Sirve para saber
  * si el fallo es de plan (401/403), endpoint (404), filtros (400) o red.
+ * `rawBody` permite probar un cuerpo a medida (para depurar el esquema de filtros).
  */
 export async function diagnoseLusha(params: {
   sector?: string;
   ciudad?: string;
+  rawBody?: Record<string, unknown>;
 }): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string }> {
   if (!LUSHA_API_KEY) {
     return { configured: false, ok: false, status: null, detail: "Falta LUSHA_API_KEY." };
   }
   const url = `${LUSHA_BASE}${LUSHA_SEARCH_PATH}`;
   try {
-    const body = {
-      filters: { companies: { industriesLabels: [params.sector || "logistics"], ...(params.ciudad ? { locations: [params.ciudad] } : {}) } },
-      pages: { page: 0, size: LUSHA_MIN_PAGE_SIZE }
-    };
+    const body = params.rawBody ?? buildSearchBody(params.sector || "logistics", params.ciudad, LUSHA_MIN_PAGE_SIZE);
     const res = await fetch(url, {
       method: "POST",
       headers: headers(),
@@ -136,15 +148,7 @@ export async function searchLushaProspects(params: {
   // ── Paso 1: SEARCH (no consume créditos) ──────────────────────────────────
   let search: LushaSearchResponse;
   try {
-    const body = {
-      filters: {
-        companies: {
-          industriesLabels: [params.sector],
-          ...(params.ciudad ? { locations: [params.ciudad] } : {})
-        }
-      },
-      pages: { page: 0, size: Math.max(limit, LUSHA_MIN_PAGE_SIZE) }
-    };
+    const body = buildSearchBody(params.sector, params.ciudad, Math.max(limit, LUSHA_MIN_PAGE_SIZE));
     const res = await fetch(`${LUSHA_BASE}${LUSHA_SEARCH_PATH}`, {
       method: "POST",
       headers: headers(),

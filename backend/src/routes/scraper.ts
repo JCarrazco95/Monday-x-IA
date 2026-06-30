@@ -25,6 +25,17 @@ scraperRouter.get("/lusha/diagnose", async (req, res) => {
   res.json(await diagnoseLusha({ sector, ciudad }));
 });
 
+// Variante POST: permite enviar un cuerpo Lusha a medida en `rawBody` para
+// depurar el esquema de filtros sin redesplegar.
+scraperRouter.post("/lusha/diagnose", async (req, res) => {
+  const { sector, ciudad, rawBody } = (req.body ?? {}) as {
+    sector?: string;
+    ciudad?: string;
+    rawBody?: Record<string, unknown>;
+  };
+  res.json(await diagnoseLusha({ sector, ciudad, rawBody }));
+});
+
 scraperRouter.post("/search", async (req, res) => {
   const { source, sector, ciudad, limite } = (req.body ?? {}) as Record<string, unknown>;
   if (typeof source !== "string" || !source.trim()) {
