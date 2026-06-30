@@ -74,6 +74,7 @@ Monorepo en `maxirent-monday/`:
 - **Por URL de grabación (cualquier proveedor)**: `ingestCallFromUrl({ url, telefono?, contacto? })` + `POST /api/calls/from-url` — transcribe con Deepgram el audio de una URL (Twilio/Aircall/S3…) y analiza; `itemId` = `url-<hash>`. Requiere `DEEPGRAM_API_KEY` y que la URL apunte al audio accesible. Útil porque los IDs de Aircall son numéricos: un Call SID de Twilio (`CA…`) NO existe en Aircall.
 - **Transcripción ya existente (la más simple)**: `ingestCallFromTranscript({ transcript, prospecto?, telefono? })` + `POST /api/calls/analyze-transcript` — analiza un texto YA transcrito (Aircall/Twilio ya lo hicieron), sin re-transcribir ni credenciales; `itemId` = `call-<hash>`. Es la vía recomendada cuando el proveedor ya transcribió la llamada.
 - Frontend: panel "Analizar una llamada" en `CallIntelligenceList.tsx` con tres vías (pegar transcripción · ID de Aircall · URL de grabación); abre el análisis al terminar.
+- **Tablero de llamadas de Aircall en Monday (sincronización)**: Aircall registra cada llamada como item en un board propio (`MONDAY_BOARD_ID_CALLS`, def. `18398458590`) con columnas call id (`MONDAY_COL_CALL_ID`=`text_mm07x5tn`), link a la llamada (`MONDAY_COL_CALL_LINK`=`link_mm07s8jf`) y relación al lead (`MONDAY_COL_CALL_LEAD`=`board_relation_mm1whczc`). `monday.getCallsBoardItems()` lee esos items; `syncCallsBoard()` (en `aircallIngest.ts`) analiza las NUEVAS (por call id vía Aircall, o por el link vía Deepgram), idempotente, hasta `CALLS_SYNC_MAX` (def. 25). Rutas: `GET /api/calls/board` (preview), `POST /api/calls/sync-board` (analiza). Botón "Sincronizar Aircall" en Call Intelligence.
 
 ## 6. Integración Monday — DECISIONES tomadas
 - En la vista embebida mostramos SOLO **Análisis IA + Call Intelligence**.
@@ -125,4 +126,5 @@ AI_PROVIDER=demo en backend/.env
 ## 11. Env vars (backend/.env — ver `.env.example`)
 `AI_PROVIDER`, `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `MONDAY_API_TOKEN`, `MONDAY_BOARD_ID_LEADS`,
 `MONDAY_WEBHOOK_SECRET`, `MONDAY_COL_*`, `GOV_API_*`, `AIRCALL_API_ID/TOKEN`, `AIRCALL_WEBHOOK_TOKEN`,
-`DEEPGRAM_API_KEY`, `DATABASE_PATH`, `GOOGLE_PLACES_API_KEY`, `LUSHA_API_KEY`, `DIRECTORY_SCRAPER_ENABLED`.
+`DEEPGRAM_API_KEY`, `DATABASE_PATH`, `GOOGLE_PLACES_API_KEY`, `LUSHA_API_KEY`, `DIRECTORY_SCRAPER_ENABLED`,
+`MONDAY_BOARD_ID_CALLS` (+ `MONDAY_COL_CALL_ID/LINK/LEAD`, `CALLS_SYNC_MAX`), `MONDAY_GROUP_PROSPECCION`.

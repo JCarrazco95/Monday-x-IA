@@ -100,6 +100,24 @@ export function CallIntelligenceList() {
       setIngesting(false);
     }
   }
+  const [syncing, setSyncing] = useState(false);
+  async function onSyncBoard() {
+    setSyncing(true);
+    setIngestMsg(null);
+    try {
+      const r = await api.syncCallsBoard();
+      setIngestMsg({
+        ok: r.errores.length === 0,
+        text: `Tablero de Aircall: ${r.leidas} leídas · ${r.analizadas} analizadas · ${r.yaAnalizadas} ya estaban${r.errores.length ? ` · ${r.errores.length} sin transcripción` : ""}.`
+      });
+      load();
+    } catch (e) {
+      setIngestMsg({ ok: false, text: e instanceof Error ? e.message : "Error al sincronizar el tablero." });
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const onIngestId = () => callId.trim() && runIngest(() => api.ingestAircallCall(callId.trim()));
   const onIngestUrl = () => recUrl.trim() && runIngest(() => api.ingestCallFromUrl(recUrl.trim()));
   const onIngestTranscript = () =>
@@ -133,12 +151,23 @@ export function CallIntelligenceList() {
             Historial de llamadas · Sandler + Challenger · {s?.total ?? 0} registros
           </p>
         </div>
-        <button
-          onClick={load}
-          className="ml-auto flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:text-text"
-        >
-          <RefreshCw size={13} /> Actualizar
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={onSyncBoard}
+            disabled={syncing}
+            className="flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            title="Lee el tablero de llamadas de Aircall en Monday y analiza las nuevas"
+          >
+            <RefreshCw size={13} className={syncing ? "animate-spin" : ""} />
+            {syncing ? "Sincronizando…" : "Sincronizar Aircall"}
+          </button>
+          <button
+            onClick={load}
+            className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs text-text-muted hover:text-text"
+          >
+            <RefreshCw size={13} /> Actualizar
+          </button>
+        </div>
       </div>
 
       {/* Traer una llamada y analizarla: por ID de Aircall o por URL de la grabación */}

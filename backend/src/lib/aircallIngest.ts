@@ -16,6 +16,8 @@ import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
 import { logActivity } from "./activityLog.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
+import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
+import { db } from "../db/index.js";
 
 export interface AircallIngestResult {
   ok: boolean;
@@ -163,4 +165,101 @@ export async function ingestCallFromUrl(opts: {
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, result };
+}
+
+// ===========================================================================
+//  Sincronización del TABLERO DE LLAMADAS de Aircall en Monday.
+//
+//  Lee los items del tablero de llamadas (call id, link, lead relacionado) y,
+//  por cada llamada aún no analizada, trae la transcripción (por call id vía
+//  Aircall, o por el link de la grabación) y la analiza. El resultado aparece
+//  en Call Intelligence ligado al lead. Idempotente: no re-analiza lo ya hecho.
+// ===========================================================================
+export interface CallsSyncResult {
+  leidas: number;
+  analizadas: number;
+  yaAnalizadas: number;
+  sinFuente: number;
+  errores: { itemName: string; motivo: string }[];
+  detalle: { itemName: string; estado: string }[];
+}
+
+const CALLS_SYNC_MAX = Number(process.env.CALLS_SYNC_MAX ?? 25);
+
+/** itemIds de llamadas ya analizadas (desde la bitácora) para no repetir. */
+async function analyzedCallItemIds(): Promise<Set<string>> {
+  const set = new Set<string>();
+  try {
+    const rows = await db.query<{ reference: string }>(
+      `SELECT DISTINCT reference FROM logs WHERE agent_id = 'call_intelligence' AND reference IS NOT NULL`,
+      []
+    );
+    for (const r of rows) {
+      const m = r.reference?.match(/^#(\S+)\s*·/);
+      if (m?.[1]) set.add(m[1]);
+    }
+  } catch { /* noop */ }
+  return set;
+}
+
+export async function syncCallsBoard(): Promise<CallsSyncResult> {
+  const out: CallsSyncResult = { leidas: 0, analizadas: 0, yaAnalizadas: 0, sinFuente: 0, errores: [], detalle: [] };
+  if (!callsBoardConfigured) {
+    throw new Error("Falta MONDAY_BOARD_ID_CALLS (tablero de llamadas de Aircall).");
+  }
+
+  const items = await getCallsBoardItems();
+  out.leidas = items.length;
+  const analyzed = await analyzedCallItemIds();
+
+  for (const it of items) {
+    if (out.analizadas >= CALLS_SYNC_MAX) break;
+    const callId = it.callId;
+    const link = it.link;
+    const nombre = it.leadName ?? it.itemName;
+
+    // Ids candidatos con los que se guardaría el análisis (para deduplicar).
+    const urlHash = link ? crypto.createHash("md5").update(link).digest("hex").slice(0, 10) : null;
+    const candidatos = [callId ? `aircall-${callId}` : null, urlHash ? `url-${urlHash}` : null].filter(Boolean) as string[];
+    if (candidatos.some((c) => analyzed.has(c))) {
+      out.yaAnalizadas++;
+      out.detalle.push({ itemName: nombre, estado: "ya analizada" });
+      continue;
+    }
+
+    if (!callId && !link) {
+      out.sinFuente++;
+      out.detalle.push({ itemName: nombre, estado: "sin call id ni link" });
+      continue;
+    }
+
+    try {
+      // 1) Intento por call id (Aircall trae su propia transcripción, sin gastar).
+      let res = callId ? await ingestAircallCall(callId, { contactoHint: nombre }) : null;
+      // 2) Si no se logró y hay link a la grabación, intento por URL (Deepgram).
+      if ((!res || !res.analizada) && link) {
+        res = await ingestCallFromUrl({ url: link, contacto: nombre });
+      }
+      if (res?.analizada) {
+        out.analizadas++;
+        if (res.itemId) analyzed.add(res.itemId);
+        out.detalle.push({ itemName: nombre, estado: "analizada" });
+      } else {
+        out.errores.push({ itemName: nombre, motivo: res?.motivo ?? "No se pudo obtener la transcripción." });
+        out.detalle.push({ itemName: nombre, estado: "sin transcripción" });
+      }
+    } catch (err) {
+      out.errores.push({ itemName: nombre, motivo: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  logActivity({
+    agentId: "call_intelligence",
+    type: out.errores.length ? "warning" : "success",
+    title: "Sincronización del tablero de llamadas (Aircall)",
+    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.errores.length} con error`,
+    reference: `calls-sync`
+  });
+
+  return out;
 }

@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
-import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript } from "../lib/aircallIngest.js";
+import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
+import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -162,6 +163,25 @@ callsRouter.post("/aircall/:callId", async (req, res) => {
     });
     // Si no se pudo analizar (sin transcripción/credenciales), 422 con el motivo.
     res.status(out.analizada ? 200 : 422).json(out);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// GET /api/calls/board -> vista previa de las llamadas en el tablero de Aircall.
+callsRouter.get("/board", async (_req, res) => {
+  try {
+    const items = await getCallsBoardItems();
+    res.json({ configured: callsBoardConfigured, total: items.length, items });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/calls/sync-board -> lee el tablero de Aircall y analiza lo nuevo.
+callsRouter.post("/sync-board", async (_req, res) => {
+  try {
+    res.json(await syncCallsBoard());
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

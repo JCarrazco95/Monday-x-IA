@@ -113,6 +113,80 @@ export async function getBoardColumns(
   return data?.boards?.[0]?.columns ?? [];
 }
 
+// ===========================================================================
+//  Tablero de llamadas de Aircall en Monday.
+//  Aircall registra cada llamada como un item con: el call id (texto), un link a
+//  la llamada (con grabación/transcripción) y la relación al lead. Leemos esos
+//  items para analizarlos en Call Intelligence. IDs configurables por env.
+// ===========================================================================
+const CALLS_BOARD_ID = process.env.MONDAY_BOARD_ID_CALLS;
+const CALLS_COL_ID = process.env.MONDAY_COL_CALL_ID ?? "text_mm07x5tn";
+const CALLS_COL_LINK = process.env.MONDAY_COL_CALL_LINK ?? "link_mm07s8jf";
+const CALLS_COL_LEAD = process.env.MONDAY_COL_CALL_LEAD ?? "board_relation_mm1whczc";
+
+export interface CallBoardItem {
+  itemId: string;
+  itemName: string;
+  callId: string | null;
+  link: string | null;
+  leadId: string | null;
+  leadName: string | null;
+}
+
+export const callsBoardConfigured = Boolean(CALLS_BOARD_ID);
+
+/** Lee las llamadas registradas en el tablero de Aircall (call id, link, lead). */
+export async function getCallsBoardItems(limit = 200): Promise<CallBoardItem[]> {
+  if (isMondayMockMode || !CALLS_BOARD_ID) return [];
+  const query = `
+    query ($ids: [ID!], $cols: [String!], $limit: Int!) {
+      boards (ids: $ids) {
+        items_page (limit: $limit) {
+          items {
+            id
+            name
+            column_values (ids: $cols) {
+              id
+              type
+              text
+              value
+              ... on BoardRelationValue { linked_item_ids display_value }
+              ... on LinkValue { url }
+            }
+          }
+        }
+      }
+    }
+  `;
+  type CV = { id: string; type?: string; text?: string; value?: string; url?: string; linked_item_ids?: string[]; display_value?: string };
+  const data = await mondayRequest<{ boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; column_values?: CV[] }> } }> }>(
+    query,
+    { ids: [CALLS_BOARD_ID], cols: [CALLS_COL_ID, CALLS_COL_LINK, CALLS_COL_LEAD], limit }
+  );
+  const items = data?.boards?.[0]?.items_page?.items ?? [];
+  return items.map((it) => {
+    const cvs = it.column_values ?? [];
+    const byId = (id: string) => cvs.find((c) => c.id === id);
+    const callCv = byId(CALLS_COL_ID);
+    const linkCv = byId(CALLS_COL_LINK);
+    const leadCv = byId(CALLS_COL_LEAD);
+    // El link puede venir como url (LinkValue) o dentro del JSON `value`.
+    let link: string | null = linkCv?.url ?? null;
+    if (!link && linkCv?.value) {
+      try { link = (JSON.parse(linkCv.value) as { url?: string }).url ?? null; } catch { /* noop */ }
+    }
+    if (!link && linkCv?.text) link = linkCv.text.split(" - ")[0] || null;
+    return {
+      itemId: it.id,
+      itemName: it.name,
+      callId: callCv?.text?.trim() || null,
+      link,
+      leadId: leadCv?.linked_item_ids?.[0] ?? null,
+      leadName: leadCv?.display_value?.trim() || null
+    };
+  });
+}
+
 export async function updateMondayColumn(opts: {
   boardId: string;
   itemId: string;

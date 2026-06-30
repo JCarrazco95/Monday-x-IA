@@ -141,6 +141,17 @@ export const api = {
       { method: "POST", body: JSON.stringify({ transcript, ...opts }) }
     ),
 
+  // Tablero de llamadas de Aircall en Monday: vista previa y sincronización.
+  getCallsBoard: () =>
+    request<{ configured: boolean; total: number; items: { itemId: string; itemName: string; callId: string | null; link: string | null; leadName: string | null }[] }>(
+      `/calls/board`
+    ),
+  syncCallsBoard: () =>
+    request<{ leidas: number; analizadas: number; yaAnalizadas: number; sinFuente: number; errores: { itemName: string; motivo: string }[] }>(
+      `/calls/sync-board`,
+      { method: "POST" }
+    ),
+
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),
