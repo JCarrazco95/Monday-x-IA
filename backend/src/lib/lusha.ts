@@ -35,6 +35,7 @@ export const lushaEnabled = Boolean(LUSHA_API_KEY);
 
 interface LushaSearchResponse {
   requestId?: string;
+  totalResults?: number;
   data?: {
     id?: string | number;
     contactId?: string | number;
@@ -43,6 +44,8 @@ interface LushaSearchResponse {
     jobTitle?: string;
     companyName?: string;
     company?: { name?: string };
+    fqdn?: string;
+    companyId?: number | string;
     hasEmails?: boolean;
     hasPhones?: boolean;
   }[];
@@ -86,13 +89,24 @@ function pickStr(arr: unknown, key: string): string | null {
 }
 
 /**
- * Construye el cuerpo del SEARCH. Los filtros de Lusha van envueltos en
- * `include` (y opcionalmente `exclude`) dentro de companies/contacts.
+ * Construye el cuerpo del SEARCH. Los filtros van envueltos en `include` dentro
+ * de companies. El filtro fiable es UBICACIÓN (locations = array de OBJETOS
+ * {city}/{country}); sin ciudad usamos país por defecto. `sector` se aplica
+ * como industriesLabels SOLO si `useIndustry` (debe coincidir con el catálogo
+ * exacto de Lusha; si no, da 0 resultados → el adaptador reintenta sin él).
  */
-function buildSearchBody(sector: string, ciudad: string | undefined, size: number): Record<string, unknown> {
-  const companyInclude: Record<string, unknown> = { industriesLabels: [sector] };
-  // Lusha espera locations como array de OBJETOS (no strings).
-  if (ciudad) companyInclude.locations = [{ city: ciudad }];
+const LUSHA_DEFAULT_COUNTRY = process.env.LUSHA_DEFAULT_COUNTRY ?? "Mexico";
+
+function buildSearchBody(
+  sector: string,
+  ciudad: string | undefined,
+  size: number,
+  useIndustry = false
+): Record<string, unknown> {
+  const companyInclude: Record<string, unknown> = {
+    locations: ciudad ? [{ city: ciudad }] : [{ country: LUSHA_DEFAULT_COUNTRY }]
+  };
+  if (useIndustry && sector.trim()) companyInclude.industriesLabels = [sector.trim()];
   return {
     filters: { companies: { include: companyInclude } },
     pages: { page: 0, size }
@@ -147,24 +161,46 @@ export async function searchLushaProspects(params: {
   if (!LUSHA_API_KEY) return null;
   const limit = Math.min(Math.max(params.limite ?? 20, 1), 40);
 
-  // ── Paso 1: SEARCH (no consume créditos) ──────────────────────────────────
-  let search: LushaSearchResponse;
-  try {
-    const body = buildSearchBody(params.sector, params.ciudad, Math.max(limit, LUSHA_MIN_PAGE_SIZE));
-    const res = await fetch(`${LUSHA_BASE}${LUSHA_SEARCH_PATH}`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
-    });
-    if (!res.ok) return null;
-    search = (await res.json()) as LushaSearchResponse;
-  } catch {
-    return null;
+  const size = Math.max(limit, LUSHA_MIN_PAGE_SIZE);
+
+  // Una pasada de SEARCH (no consume créditos). Devuelve la respuesta o null.
+  const attempt = async (useIndustry: boolean): Promise<LushaSearchResponse | null> => {
+    try {
+      const res = await fetch(`${LUSHA_BASE}${LUSHA_SEARCH_PATH}`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify(buildSearchBody(params.sector, params.ciudad, size, useIndustry)),
+        signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as LushaSearchResponse;
+    } catch {
+      return null;
+    }
+  };
+
+  // ── Paso 1: SEARCH ────────────────────────────────────────────────────────
+  // Primero intentamos con el sector como industria (por si coincide con el
+  // catálogo de Lusha); si da 0, reintentamos solo por ubicación (fiable).
+  let search = await attempt(true);
+  if (!search || (search.data?.length ?? 0) === 0) {
+    const widened = await attempt(false);
+    if (widened) search = widened;
   }
+  if (!search) return null;
+
+  // Dedupe por empresa: nos quedamos con un contacto por compañía (el primero,
+  // que Lusha ordena por relevancia/seniority).
+  const seenCo = new Set<string>();
+  const previews = (search.data ?? []).filter((p) => {
+    const co = (p.companyName ?? p.company?.name ?? "").toLowerCase().trim();
+    if (!co) return true;
+    if (seenCo.has(co)) return false;
+    seenCo.add(co);
+    return true;
+  });
 
   const requestId = search.requestId;
-  const previews = search.data ?? [];
   const ids = previews
     .map((p) => p.contactId ?? p.id)
     .filter((x): x is string | number => x !== undefined && x !== null)
@@ -172,19 +208,22 @@ export async function searchLushaProspects(params: {
 
   if (ids.length === 0) return [];
 
-  // Si no queremos revelar (ahorro de créditos) o falta requestId, devolvemos
-  // lo que ya trae el preview (nombre/empresa/cargo sin email/teléfono).
+  // Mapea un preview (sin email/teléfono: eso requiere reveal) a Prospect.
+  const mapPreview = (p: NonNullable<LushaSearchResponse["data"]>[number]): Prospect => ({
+    nombre: p.companyName ?? p.company?.name ?? p.name ?? p.fullName ?? "Empresa sin nombre",
+    telefono: null,
+    email: null,
+    sitioWeb: p.fqdn ? `https://${p.fqdn}` : null,
+    direccion: params.ciudad ?? null,
+    categoria: [p.jobTitle, p.name ?? p.fullName].filter(Boolean).join(" · ") || params.sector,
+    fuente: "lusha",
+    externalId: String(p.contactId ?? p.id ?? "")
+  });
+
+  // Si no revelamos (ahorro de créditos) o falta requestId, devolvemos el
+  // preview (empresa/cargo/contacto/web), sin gastar.
   if (!LUSHA_REVEAL || !requestId) {
-    return previews.slice(0, limit).map((p) => ({
-      nombre: p.companyName ?? p.company?.name ?? p.name ?? p.fullName ?? "Empresa sin nombre",
-      telefono: null,
-      email: null,
-      sitioWeb: null,
-      direccion: null,
-      categoria: [p.jobTitle, p.name ?? p.fullName].filter(Boolean).join(" · ") || params.sector,
-      fuente: "lusha",
-      externalId: String(p.contactId ?? p.id ?? "")
-    }));
+    return previews.slice(0, limit).map(mapPreview);
   }
 
   // ── Paso 2: ENRICH (consume créditos por dato revelado) ───────────────────

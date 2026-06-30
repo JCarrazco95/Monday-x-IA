@@ -211,7 +211,7 @@ const lushaSource: LeadSource = {
   label: "Lusha (B2B tipo LinkedIn)",
   enabled: lushaEnabled,
   aviso:
-    "Contactos vía Lusha (proveedor con cumplimiento). NO se scrapea LinkedIn directamente. El enriquecimiento consume créditos de tu plan Lusha.",
+    "Contactos vía Lusha (proveedor con cumplimiento). Filtra por ubicación (la ciudad que indiques, o México por defecto); el sector se aplica solo si coincide con el catálogo de Lusha. El email/teléfono requiere reveal y consume créditos (LUSHA_REVEAL=false los omite). NO se scrapea LinkedIn directamente.",
   async search(params) {
     const prospects = await searchLushaProspects(params);
     if (prospects === null) return { prospects: demoProspects(params, "lusha"), demo: true };
