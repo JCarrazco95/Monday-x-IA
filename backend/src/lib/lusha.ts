@@ -27,6 +27,9 @@ const LUSHA_TIMEOUT_MS = Number(process.env.LUSHA_TIMEOUT_MS ?? 12000);
 // Si lo pones en "false", solo busca (no enriquece) y NO consume créditos —
 // útil para validar la conexión sin gastar.
 const LUSHA_REVEAL = (process.env.LUSHA_REVEAL ?? "true").toLowerCase() !== "false";
+// Lusha exige un tamaño de página mínimo de 10. Pedimos al menos eso y luego
+// recortamos al límite real solicitado por el usuario.
+const LUSHA_MIN_PAGE_SIZE = 10;
 
 export const lushaEnabled = Boolean(LUSHA_API_KEY);
 
@@ -98,7 +101,7 @@ export async function diagnoseLusha(params: {
   try {
     const body = {
       filters: { companies: { industriesLabels: [params.sector || "logistics"], ...(params.ciudad ? { locations: [params.ciudad] } : {}) } },
-      pages: { page: 0, size: 1 }
+      pages: { page: 0, size: LUSHA_MIN_PAGE_SIZE }
     };
     const res = await fetch(url, {
       method: "POST",
@@ -140,7 +143,7 @@ export async function searchLushaProspects(params: {
           ...(params.ciudad ? { locations: [params.ciudad] } : {})
         }
       },
-      pages: { page: 0, size: limit }
+      pages: { page: 0, size: Math.max(limit, LUSHA_MIN_PAGE_SIZE) }
     };
     const res = await fetch(`${LUSHA_BASE}${LUSHA_SEARCH_PATH}`, {
       method: "POST",
@@ -166,7 +169,7 @@ export async function searchLushaProspects(params: {
   // Si no queremos revelar (ahorro de créditos) o falta requestId, devolvemos
   // lo que ya trae el preview (nombre/empresa/cargo sin email/teléfono).
   if (!LUSHA_REVEAL || !requestId) {
-    return previews.map((p) => ({
+    return previews.slice(0, limit).map((p) => ({
       nombre: p.companyName ?? p.company?.name ?? p.name ?? p.fullName ?? "Empresa sin nombre",
       telefono: null,
       email: null,
