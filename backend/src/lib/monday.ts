@@ -45,11 +45,14 @@ export async function createMondayItem(opts: {
   boardId?: string;
   itemName: string;
   columnValues?: Record<string, unknown>;
+  /** Grupo del board donde crear el item (opcional). Si no, va al grupo por defecto. */
+  groupId?: string;
 }): Promise<{ create_item?: { id: string } }> {
   const boardId = opts.boardId ?? process.env.MONDAY_BOARD_ID_LEADS;
+  // Si se pasa groupId, lo incluimos como argumento opcional de la mutación.
   const query = `
-    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON) {
-      create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues) {
+    mutation ($boardId: ID!, $itemName: String!, $columnValues: JSON, $groupId: String) {
+      create_item(board_id: $boardId, item_name: $itemName, column_values: $columnValues, group_id: $groupId) {
         id
       }
     }
@@ -57,7 +60,8 @@ export async function createMondayItem(opts: {
   return mondayRequest<{ create_item?: { id: string } }>(query, {
     boardId,
     itemName: opts.itemName,
-    columnValues: opts.columnValues ? JSON.stringify(opts.columnValues) : undefined
+    columnValues: opts.columnValues ? JSON.stringify(opts.columnValues) : undefined,
+    groupId: opts.groupId ?? null
   });
 }
 

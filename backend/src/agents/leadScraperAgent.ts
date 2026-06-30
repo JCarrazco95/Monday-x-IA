@@ -65,6 +65,10 @@ async function existingLeadNames(): Promise<Set<string>> {
 // rendirnos (evita bucles largos si la fuente se agota o no pagina).
 const MAX_PAGES = Number(process.env.SCRAPER_MAX_PAGES ?? 8);
 
+// Grupo del board donde se crean los prospectos importados ("Prospección").
+// Configurable por env; por defecto el grupo indicado por el cliente.
+const PROSPECCION_GROUP_ID = process.env.MONDAY_GROUP_PROSPECCION ?? "group_mm4s77d3";
+
 export async function searchProspects(params: SearchParams & { source: string }): Promise<SearchResult> {
   const source = getLeadSource(params.source);
   if (!source) throw new Error(`Fuente desconocida: ${params.source}`);
@@ -147,8 +151,8 @@ export async function importProspects(prospects: Prospect[]): Promise<ImportResu
     seen.add(key);
 
     try {
-      // 1) Crea el item del lead en Monday (mock devuelve id simulado).
-      const created = await createMondayItem({ itemName: p.nombre });
+      // 1) Crea el item del lead en Monday, en el grupo de Prospección.
+      const created = await createMondayItem({ itemName: p.nombre, groupId: PROSPECCION_GROUP_ID });
       const itemId = created?.create_item?.id ?? String(Date.now());
 
       // 2) Dispara el análisis (enriquecimiento + scoring + Writer).
