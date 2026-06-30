@@ -119,7 +119,7 @@ export async function getBoardColumns(
 //  la llamada (con grabación/transcripción) y la relación al lead. Leemos esos
 //  items para analizarlos en Call Intelligence. IDs configurables por env.
 // ===========================================================================
-const CALLS_BOARD_ID = process.env.MONDAY_BOARD_ID_CALLS;
+const CALLS_BOARD_ID = process.env.MONDAY_BOARD_ID_CALLS ?? "18398458590";
 const CALLS_COL_ID = process.env.MONDAY_COL_CALL_ID ?? "text_mm07x5tn";
 const CALLS_COL_LINK = process.env.MONDAY_COL_CALL_LINK ?? "link_mm07s8jf";
 const CALLS_COL_LEAD = process.env.MONDAY_COL_CALL_LEAD ?? "board_relation_mm1whczc";
