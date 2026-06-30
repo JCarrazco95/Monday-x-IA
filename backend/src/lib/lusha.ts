@@ -83,6 +83,42 @@ function pickStr(arr: unknown, key: string): string | null {
 }
 
 /**
+ * Diagnóstico de conexión: hace SOLO el search (no gasta créditos) y reporta
+ * el status HTTP y el mensaje de Lusha. No expone la API key. Sirve para saber
+ * si el fallo es de plan (401/403), endpoint (404), filtros (400) o red.
+ */
+export async function diagnoseLusha(params: {
+  sector?: string;
+  ciudad?: string;
+}): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string }> {
+  if (!LUSHA_API_KEY) {
+    return { configured: false, ok: false, status: null, detail: "Falta LUSHA_API_KEY." };
+  }
+  const url = `${LUSHA_BASE}${LUSHA_SEARCH_PATH}`;
+  try {
+    const body = {
+      filters: { companies: { industriesLabels: [params.sector || "logistics"], ...(params.ciudad ? { locations: [params.ciudad] } : {}) } },
+      pages: { page: 0, size: 1 }
+    };
+    const res = await fetch(url, {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
+    });
+    const text = (await res.text().catch(() => "")).slice(0, 400);
+    return {
+      configured: true,
+      ok: res.ok,
+      status: res.status,
+      detail: res.ok ? `Conexión OK (${url})` : `Lusha respondió ${res.status}: ${text || "(sin cuerpo)"}`
+    };
+  } catch (err) {
+    return { configured: true, ok: false, status: null, detail: `Error de red/timeout: ${err instanceof Error ? err.message : String(err)}` };
+  }
+}
+
+/**
  * Busca prospectos en Lusha por sector + ciudad/país. Devuelve Prospect[]
  * normalizados o null si no se pudo (sin key, error de red, shape inesperado).
  */

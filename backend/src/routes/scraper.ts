@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { listLeadSources } from "../lib/leadSources.js";
 import { searchProspects, importProspects } from "../agents/leadScraperAgent.js";
+import { diagnoseLusha } from "../lib/lusha.js";
 import type { Prospect } from "../lib/leadSources.js";
 
 // ===========================================================================
@@ -14,6 +15,14 @@ export const scraperRouter = Router();
 
 scraperRouter.get("/sources", (_req, res) => {
   res.json({ sources: listLeadSources() });
+});
+
+// Diagnóstico de Lusha: dice por qué falla (plan/endpoint/filtros) sin gastar
+// créditos ni exponer la API key.
+scraperRouter.get("/lusha/diagnose", async (req, res) => {
+  const sector = typeof req.query.sector === "string" ? req.query.sector : undefined;
+  const ciudad = typeof req.query.ciudad === "string" ? req.query.ciudad : undefined;
+  res.json(await diagnoseLusha({ sector, ciudad }));
 });
 
 scraperRouter.post("/search", async (req, res) => {
