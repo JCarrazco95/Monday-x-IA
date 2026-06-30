@@ -9,11 +9,12 @@ import { getBoardColumns, isMondayMockMode } from "../lib/monday.js";
 
 export const mondayRouter = Router();
 
-mondayRouter.get("/columns", async (_req, res) => {
+mondayRouter.get("/columns", async (req, res) => {
   if (isMondayMockMode) {
     return res.status(400).json({ error: "MONDAY_API_TOKEN no configurado (modo mock)." });
   }
-  const boardId = process.env.MONDAY_BOARD_ID_LEADS;
+  // Permite inspeccionar cualquier board con ?boardId= (def. el de Leads).
+  const boardId = (req.query.boardId as string | undefined)?.trim() || process.env.MONDAY_BOARD_ID_LEADS;
   if (!boardId) {
     return res.status(400).json({ error: "MONDAY_BOARD_ID_LEADS no configurado." });
   }
