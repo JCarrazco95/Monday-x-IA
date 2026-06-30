@@ -174,7 +174,7 @@ const doc = new Document({
       // ---------------- 1. RESUMEN EJECUTIVO ----------------
       new Paragraph({ pageBreakBefore: true, heading: HeadingLevel.HEADING_1, children: [t("1. Resumen ejecutivo")] }),
       body("MAXIRent compite en un mercado donde la velocidad de respuesta, la disciplina de seguimiento y la calidad de cada conversación de venta determinan quién cierra el contrato de flotilla. Hoy, gran parte de ese valor se pierde en el camino: leads que se enfrían, llamadas que nadie analiza y oportunidades de renovación o ampliación de flota que pasan desapercibidas."),
-      body("Analy-sys propone una plataforma de inteligencia comercial impulsada por IA, integrada de forma nativa a Monday.com, que automatiza la calificación de cada prospecto, analiza cada llamada de ventas con metodologías profesionales (Sandler y Challenger), nunca olvida un seguimiento, detecta oportunidades de upsell y proyecta el pipeline — todo dentro del tablero que su equipo ya usa."),
+      body("Analy-sys propone una plataforma de inteligencia comercial impulsada por IA, integrada de forma nativa a Monday.com, que genera nuevos prospectos B2B desde fuentes oficiales, automatiza la calificación de cada lead, analiza cada llamada de ventas con metodologías profesionales (Sandler y Challenger), nunca olvida un seguimiento, detecta oportunidades de upsell y proyecta el pipeline — todo dentro del tablero que su equipo ya usa."),
       body("La propuesta económica está diseñada para ser de bajo riesgo: la inversión se liquida en planes de 6 o 12 meses y, como verá en la sección de ROI, el sistema se paga a sí mismo con apenas unos cuantos contratos adicionales al año. El resto es utilidad incremental directa para MAXIRent."),
       spacer(60),
       table([2340, 2340, 2340, 2340], [
@@ -222,20 +222,29 @@ const doc = new Document({
       h1("4. Capacidades a detalle"),
       h2("4.1 Captación y calificación de leads con IA"),
       body("Cada prospecto (de landing, formulario o creado en Monday) se enriquece y califica automáticamente: score de viabilidad 0–100 con desglose transparente, prioridad (caliente/tibia/fría), nivel de riesgo, investigación de la empresa (sector, tamaño, presencia digital, contratos de gobierno, si ya renta con la competencia), detección de duplicados, y un plan de acción con preguntas de descubrimiento listas para la primera llamada."),
-      h2("4.2 Call Intelligence — análisis profesional de cada llamada"),
+
+      h2("4.2 Prospección inteligente de leads (outbound)"),
+      body("Además de captar leads entrantes, la plataforma genera prospectos B2B de forma proactiva. Su equipo busca empresas por sector y ciudad —por ejemplo, constructoras, transportistas o empresas de logística en Monterrey— desde fuentes oficiales y con pleno cumplimiento legal, y las incorpora al pipeline con un clic, ya enriquecidas y calificadas por la IA. Deja de depender únicamente de que el lead llegue: ahora también lo sale a buscar, con criterio."),
+      bullet([t("Fuentes legales y conectables: ", { bold: true }), t("Google Places (directorio oficial de empresas), Lusha (proveedor B2B con cumplimiento, con datos de contactos y decisores tipo LinkedIn), licitaciones públicas de gobierno e importación de listas propias. La arquitectura permite sumar nuevas fuentes sin rehacer nada.")]),
+      bullet([t("Cumplimiento por diseño: ", { bold: true }), t("no se hace scraping de LinkedIn ni de sitios que lo prohíben — eso viola sus Términos de Servicio y la Ley Federal de Protección de Datos. Se usan APIs oficiales y proveedores que ya resolvieron la base legal del dato, protegiendo a MAXIRent de cualquier riesgo.")]),
+      bullet([t("Anti-duplicados: ", { bold: true }), t("detecta y omite automáticamente las empresas que ya están en su tablero, de modo que cada búsqueda traiga prospectos nuevos y no repita trabajo.")]),
+      bullet([t("Alta directa a Monday: ", { bold: true }), t("los prospectos seleccionados se crean en un grupo dedicado del tablero (“Prospección”) y se analizan al instante con score, prioridad y perfil de empresa — listos para que el vendedor los trabaje.")]),
+      bullet([t("Costo bajo control: ", { bold: true }), t("la búsqueda base no consume créditos; los datos de contacto directo (email y teléfono) se revelan únicamente cuando usted lo decide, prospecto por prospecto.")]),
+
+      h2("4.3 Call Intelligence — análisis profesional de cada llamada"),
       body("La grabación de Aircall se transcribe automáticamente (Aircall AI o Deepgram) y se analiza en cinco pasadas complementarias:"),
       numItem([t("Sandler: ", { bold: true }), t("evaluación por las 7 etapas del método (vínculo, dolor, presupuesto, decisión, cierre…) con evidencia textual.")]),
       numItem([t("Challenger Sale: ", { bold: true }), t("6 dimensiones, perfil del vendedor e insight comercial sugerido.")]),
       numItem([t("Análisis integrado: ", { bold: true }), t("fusiona ambos modelos en un score global, resumen ejecutivo y plan de acción.")]),
       numItem([t("Coaching + análisis profundo: ", { bold: true }), t("qué hizo bien el vendedor, qué falló y su impacto, habilidades, banderas rojas y citas clave.")]),
       numItem([t("Oportunidades: ", { bold: true }), t("detección de upsell y cross-sell (expansión de flota, renovación próxima, servicios adicionales).")]),
-      h2("4.3 Next Best Action — el supervisor que nunca olvida"),
+      h2("4.4 Next Best Action — el supervisor que nunca olvida"),
       body("Vigila la operación y levanta alertas accionables: compromisos vencidos o sin seguimiento, leads calientes que se enfrían y llamadas con banderas rojas. Escribe las de alta prioridad en Monday para que las notificaciones nativas avisen al vendedor."),
-      h2("4.4 Coaching del equipo"),
+      h2("4.5 Coaching del equipo"),
       body("Agrega el desempeño del equipo: promedios Sandler/Challenger, la etapa más débil a entrenar, distribución de perfiles, radar de habilidades, banderas rojas y objeciones recurrentes, y tendencia mensual. Convierte el análisis de llamadas en mejora medible del equipo."),
-      h2("4.5 Pipeline & Forecast"),
+      h2("4.6 Pipeline & Forecast"),
       body("Pondera cada oportunidad por su probabilidad de cierre y proyecta el ingreso esperado por mes, con funnel por etapa. Da a dirección un pronóstico para planear flota e inversión, con supuestos transparentes."),
-      h2("4.6 Asistente comercial (Chat con su histórico)"),
+      h2("4.7 Asistente comercial (Chat con su histórico)"),
       body("Un chat que responde preguntas en lenguaje natural sobre todo el histórico (“¿qué leads de construcción objetaron precio este mes?”), convirtiendo meses de datos en respuestas inmediatas."),
 
       // ---------------- 5. ROI ----------------
@@ -256,7 +265,8 @@ const doc = new Document({
       new Paragraph({ spacing: { after: 160 }, children: [t("Cifras ilustrativas; se sustituyen por los datos reales de MAXIRent.", { size: 18, color: MUTED, italics: true })] }),
 
       h2("5.2 De dónde viene el valor"),
-      body("La plataforma incrementa los ingresos por tres vías, sin canibalizarse entre sí:"),
+      body("La plataforma incrementa los ingresos por cuatro vías, sin canibalizarse entre sí:"),
+      bullet([t("Más leads (outbound): ", { bold: true }), t("la prospección inteligente suma prospectos nuevos al embudo —empresas que hoy no llegarían solas— ampliando la base sobre la que opera todo lo demás.")]),
       bullet([t("Más conversión: ", { bold: true }), t("respuesta inmediata a leads calientes, priorización por score y coaching de llamadas elevan la tasa de cierre.")]),
       bullet([t("Menos fugas: ", { bold: true }), t("el seguimiento automático recupera compromisos y leads que hoy se pierden.")]),
       bullet([t("Más ticket: ", { bold: true }), t("la detección de upsell/cross-sell amplía contratos existentes (expansión y renovación de flota).")]),
@@ -328,6 +338,8 @@ const doc = new Document({
         row(["Motor de IA (Claude / Gemini)", "El “cerebro” que analiza leads y llamadas. Pago por uso; optimizable por modelo.", "$500 – $2,500"], [2700, 4060, 2600]),
         row(["Aircall", "Telefonía y grabación de llamadas (probablemente ya contratado).", "Según plan actual"], [2700, 4060, 2600], { fill: FILL_LITE }),
         row(["Deepgram (opcional)", "Transcripción de llamadas si no se usa Aircall AI. Pago por minuto.", "$300 – $1,000"], [2700, 4060, 2600]),
+        row(["Lusha (prospección B2B)", "Datos de empresas y decisores tipo LinkedIn, con cumplimiento legal. Empieza con plan gratuito; planes de pago por volumen de contactos revelados.", "Desde $0 (plan gratuito)"], [2700, 4060, 2600], { fill: FILL_LITE }),
+        row(["Google Places (prospección)", "Directorio oficial de empresas por sector y zona. Incluye $200 USD/mes de uso sin costo de Google.", "$0 – $600"], [2700, 4060, 2600]),
         row([{ __cell: true, v: "Total estimado adicional", bold: true },
              { __cell: true, v: "Excluyendo Monday/Aircall que ya tengan", color: GRAY },
              { __cell: true, v: fmt(suscMesMin).replace(" MXN", "") + " – " + fmt(suscMesMax), bold: true, color: NAVY, align: AlignmentType.CENTER }], [2700, 4060, 2600]),
@@ -352,6 +364,7 @@ const doc = new Document({
       bullet([t("Solución a la medida de MAXIRent: ", { bold: true }), t("construida para la renta de flotillas y su proceso comercial, no un software genérico.")]),
       bullet([t("Sus datos, su control: ", { bold: true }), t("las cuentas y la información son de MAXIRent; nada queda cautivo.")]),
       bullet([t("Integración no invasiva: ", { bold: true }), t("trabaja dentro de Monday sin romper sus automatizaciones actuales.")]),
+      bullet([t("Prospección con cumplimiento: ", { bold: true }), t("genera leads nuevos desde fuentes oficiales y proveedores con base legal, sin exponer a MAXIRent a los riesgos del scraping ilegal.")]),
       bullet([t("IA de última generación: ", { bold: true }), t("modelos líderes (Claude / Gemini), con costo optimizado y modo demostración sin gasto de IA.")]),
       bullet([t("Acompañamiento real: ", { bold: true }), t("implementación, capacitación y soporte durante el primer año incluidos.")]),
 
@@ -370,6 +383,8 @@ const doc = new Document({
 });
 
 Packer.toBuffer(doc).then((buf) => {
-  fs.writeFileSync("Propuesta-Analy-sys-MAXIRent.docx", buf);
-  console.log("OK -> Propuesta-Analy-sys-MAXIRent.docx (" + buf.length + " bytes)");
+  // Permite un nombre de salida alterno (p. ej. si el archivo está abierto en Word).
+  const out = process.env.OUT || process.argv[2] || "Propuesta-Analy-sys-MAXIRent.docx";
+  fs.writeFileSync(out, buf);
+  console.log("OK -> " + out + " (" + buf.length + " bytes)");
 });
