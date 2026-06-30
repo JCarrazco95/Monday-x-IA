@@ -91,7 +91,8 @@ function pickStr(arr: unknown, key: string): string | null {
  */
 function buildSearchBody(sector: string, ciudad: string | undefined, size: number): Record<string, unknown> {
   const companyInclude: Record<string, unknown> = { industriesLabels: [sector] };
-  if (ciudad) companyInclude.locations = [ciudad];
+  // Lusha espera locations como array de OBJETOS (no strings).
+  if (ciudad) companyInclude.locations = [{ city: ciudad }];
   return {
     filters: { companies: { include: companyInclude } },
     pages: { page: 0, size }
@@ -108,7 +109,7 @@ export async function diagnoseLusha(params: {
   sector?: string;
   ciudad?: string;
   rawBody?: Record<string, unknown>;
-}): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string }> {
+}): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string; sample?: string }> {
   if (!LUSHA_API_KEY) {
     return { configured: false, ok: false, status: null, detail: "Falta LUSHA_API_KEY." };
   }
@@ -121,12 +122,13 @@ export async function diagnoseLusha(params: {
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
     });
-    const text = (await res.text().catch(() => "")).slice(0, 400);
+    const text = (await res.text().catch(() => "")).slice(0, 1200);
     return {
       configured: true,
       ok: res.ok,
       status: res.status,
-      detail: res.ok ? `Conexión OK (${url})` : `Lusha respondió ${res.status}: ${text || "(sin cuerpo)"}`
+      detail: res.ok ? `Conexión OK (${url})` : `Lusha respondió ${res.status}: ${text || "(sin cuerpo)"}`,
+      sample: text
     };
   } catch (err) {
     return { configured: true, ok: false, status: null, detail: `Error de red/timeout: ${err instanceof Error ? err.message : String(err)}` };
