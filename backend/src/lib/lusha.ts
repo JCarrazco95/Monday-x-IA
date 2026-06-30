@@ -114,35 +114,33 @@ function buildSearchBody(
 }
 
 /**
- * Diagnóstico de conexión: hace SOLO el search (no gasta créditos) y reporta
- * el status HTTP y el mensaje de Lusha. No expone la API key. Sirve para saber
+ * Diagnóstico de conexión: hace SOLO el search (no gasta créditos) y reporta el
+ * status HTTP. No expone la API key ni los datos de contactos. Sirve para saber
  * si el fallo es de plan (401/403), endpoint (404), filtros (400) o red.
- * `rawBody` permite probar un cuerpo a medida (para depurar el esquema de filtros).
  */
 export async function diagnoseLusha(params: {
   sector?: string;
   ciudad?: string;
-  rawBody?: Record<string, unknown>;
-}): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string; sample?: string }> {
+}): Promise<{ configured: boolean; ok: boolean; status: number | null; detail: string }> {
   if (!LUSHA_API_KEY) {
     return { configured: false, ok: false, status: null, detail: "Falta LUSHA_API_KEY." };
   }
   const url = `${LUSHA_BASE}${LUSHA_SEARCH_PATH}`;
   try {
-    const body = params.rawBody ?? buildSearchBody(params.sector || "logistics", params.ciudad, LUSHA_MIN_PAGE_SIZE);
+    const body = buildSearchBody(params.sector || "", params.ciudad, LUSHA_MIN_PAGE_SIZE);
     const res = await fetch(url, {
       method: "POST",
       headers: headers(),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(LUSHA_TIMEOUT_MS)
     });
-    const text = (await res.text().catch(() => "")).slice(0, 1200);
+    // En error mostramos el mensaje de Lusha (sin datos de contactos); en OK no.
+    const detailBody = res.ok ? "" : (await res.text().catch(() => "")).slice(0, 300);
     return {
       configured: true,
       ok: res.ok,
       status: res.status,
-      detail: res.ok ? `Conexión OK (${url})` : `Lusha respondió ${res.status}: ${text || "(sin cuerpo)"}`,
-      sample: text
+      detail: res.ok ? `Conexión OK (${url})` : `Lusha respondió ${res.status}: ${detailBody || "(sin cuerpo)"}`
     };
   } catch (err) {
     return { configured: true, ok: false, status: null, detail: `Error de red/timeout: ${err instanceof Error ? err.message : String(err)}` };

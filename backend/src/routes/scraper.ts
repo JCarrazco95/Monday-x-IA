@@ -17,23 +17,12 @@ scraperRouter.get("/sources", (_req, res) => {
   res.json({ sources: listLeadSources() });
 });
 
-// Diagnóstico de Lusha: dice por qué falla (plan/endpoint/filtros) sin gastar
-// créditos ni exponer la API key.
+// Diagnóstico de Lusha: chequeo de salud (status HTTP) sin gastar créditos ni
+// exponer la API key o datos de contactos.
 scraperRouter.get("/lusha/diagnose", async (req, res) => {
   const sector = typeof req.query.sector === "string" ? req.query.sector : undefined;
   const ciudad = typeof req.query.ciudad === "string" ? req.query.ciudad : undefined;
   res.json(await diagnoseLusha({ sector, ciudad }));
-});
-
-// Variante POST: permite enviar un cuerpo Lusha a medida en `rawBody` para
-// depurar el esquema de filtros sin redesplegar.
-scraperRouter.post("/lusha/diagnose", async (req, res) => {
-  const { sector, ciudad, rawBody } = (req.body ?? {}) as {
-    sector?: string;
-    ciudad?: string;
-    rawBody?: Record<string, unknown>;
-  };
-  res.json(await diagnoseLusha({ sector, ciudad, rawBody }));
 });
 
 scraperRouter.post("/search", async (req, res) => {
