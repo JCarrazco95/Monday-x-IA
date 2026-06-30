@@ -57,9 +57,19 @@ export async function ingestAircallCall(
   const itemName = `Llamada — ${contacto ?? numero ?? `Aircall ${callId}`}`;
 
   if (!transcript) {
-    const motivo = !aircallEnabled
-      ? "Aircall no está configurado (AIRCALL_API_ID/TOKEN) y no se proporcionó transcripción."
-      : `No se pudo obtener transcripción de la llamada ${callId}. Activa Aircall AI o DEEPGRAM_API_KEY, o pega la transcripción manualmente.`;
+    const idNumerico = /^\d+$/.test(String(callId));
+    let motivo: string;
+    if (!aircallEnabled && !opts.transcriptOverride) {
+      motivo = "Aircall no está configurado (AIRCALL_API_ID/TOKEN) y no se proporcionó transcripción.";
+    } else if (!detail) {
+      motivo =
+        `No encontré una llamada con el ID "${callId}" en Aircall.` +
+        (idNumerico
+          ? " Verifica que el ID y las credenciales correspondan a la misma cuenta de Aircall."
+          : " Los IDs de Aircall son numéricos; este parece de otro proveedor (p. ej. un Call SID de Twilio).");
+    } else {
+      motivo = `Encontré la llamada ${callId}, pero sin transcripción disponible. Activa Aircall AI o DEEPGRAM_API_KEY, o pega la transcripción manualmente.`;
+    }
     logActivity({
       agentId: "call_intelligence",
       type: "warning",
