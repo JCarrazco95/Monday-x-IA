@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
+import { ingestAircallCall } from "../lib/aircallIngest.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -141,6 +142,26 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
       fecha: isoUtc(row.timestamp),
       call
     });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/calls/aircall/:callId -> trae la llamada de Aircall por su ID
+//   (grabación + transcripción) y la analiza bajo demanda. Opcional en el body:
+//   { transcript } para pegar la transcripción a mano, { telefono } para forzar
+//   el número. Devuelve el itemId para abrir el análisis en Call Intelligence.
+callsRouter.post("/aircall/:callId", async (req, res) => {
+  const callId = req.params.callId?.trim();
+  if (!callId) return res.status(400).json({ error: "Se requiere el ID de la llamada." });
+  const { transcript, telefono } = (req.body ?? {}) as { transcript?: string; telefono?: string };
+  try {
+    const out = await ingestAircallCall(callId, {
+      transcriptOverride: typeof transcript === "string" && transcript.trim() ? transcript.trim() : null,
+      numeroHint: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
+    });
+    // Si no se pudo analizar (sin transcripción/credenciales), 422 con el motivo.
+    res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

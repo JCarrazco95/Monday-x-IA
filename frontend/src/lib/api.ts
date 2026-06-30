@@ -120,6 +120,13 @@ export const api = {
   getAnalyzedCalls: (phone?: string) => request<AnalyzedCallsResponse>(`/calls/analyzed${phone ? `?phone=${encodeURIComponent(phone)}` : ""}`),
   getAnalyzedCall: (itemId: string) => request<AnalyzedCallDetail>(`/calls/analyzed/${encodeURIComponent(itemId)}`),
 
+  // Trae una llamada de Aircall por su ID (grabación + transcripción) y la analiza.
+  ingestAircallCall: (callId: string, opts: { transcript?: string; telefono?: string } = {}) =>
+    request<{ ok: boolean; analizada: boolean; itemId?: string; itemName?: string; motivo?: string }>(
+      `/calls/aircall/${encodeURIComponent(callId)}`,
+      { method: "POST", body: JSON.stringify(opts) }
+    ),
+
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),

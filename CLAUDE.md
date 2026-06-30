@@ -68,7 +68,9 @@ Monorepo en `maxirent-monday/`:
 ## 5. Aircall (llamadas reales)
 - `lib/aircall.ts`: `listCallsByPhone`, `getAircallCall`, `getAircallTranscript`.
 - `lib/transcription.ts`: `transcribeRecording` (Deepgram, fallback si no hay Aircall AI).
-- Webhook `/api/webhooks/aircall` → trae llamada + transcripción → `call_recorded` → 4 pasadas → aparece en board y, por teléfono, en el Item View del lead.
+- `lib/aircallIngest.ts`: **servicio compartido `ingestAircallCall(callId, opts?)`** — trae la llamada (grabación+metadatos) + transcripción (override > Aircall AI > Deepgram) y dispara `call_recorded`. Defensivo: sin transcripción/credenciales devuelve `{ analizada:false, motivo }`. Lo usan el webhook y la ruta bajo demanda.
+- Webhook `/api/webhooks/aircall` → usa `ingestAircallCall` → `call_recorded` → análisis → aparece en board y, por teléfono, en el Item View del lead.
+- **Bajo demanda por ID**: `POST /api/calls/aircall/:callId` (body opcional `{ transcript, telefono }`) trae y analiza una llamada concreta; responde `itemId` (`aircall-<id>`). Frontend: panel "Traer llamada de Aircall por ID" en `CallIntelligenceList.tsx` (abre el análisis al terminar).
 
 ## 6. Integración Monday — DECISIONES tomadas
 - En la vista embebida mostramos SOLO **Análisis IA + Call Intelligence**.

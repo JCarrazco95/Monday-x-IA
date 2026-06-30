@@ -3,8 +3,7 @@ import crypto from "node:crypto";
 import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
 import { getMondayItem } from "../lib/monday.js";
 import { logActivity } from "../lib/activityLog.js";
-import { getAircallCall, getAircallTranscript } from "../lib/aircall.js";
-import { transcribeRecording } from "../lib/transcription.js";
+import { ingestAircallCall } from "../lib/aircallIngest.js";
 
 // ===========================================================================
 //  Webhook NATIVO de Monday.com.
@@ -144,37 +143,18 @@ webhooksRouter.post("/aircall", async (req, res) => {
   }
 
   try {
-    const detail = await getAircallCall(callId);
-    const numero = detail?.numero ?? data.raw_digits ?? null;
-    const contacto =
-      detail?.contacto ??
+    const contactoHint =
       data.contact?.name ??
       ([data.contact?.first_name, data.contact?.last_name].filter(Boolean).join(" ") || null);
 
-    let transcript: string | null = await getAircallTranscript(callId);
-    if (!transcript) transcript = await transcribeRecording(detail?.recordingUrl);
-
-    if (!transcript) {
-      logActivity({
-        agentId: "call_intelligence",
-        type: "warning",
-        title: "Llamada Aircall sin transcripcion",
-        detail: `No se pudo obtener transcripcion (id ${callId}). Activa Aircall AI o DEEPGRAM_API_KEY.`,
-        reference: `#aircall-${callId} · ${contacto ?? numero ?? "Llamada"}`
-      });
-      return res.status(200).json({ ok: true, transcript: false });
-    }
-
-    const itemId = `aircall-${callId}`;
-    const itemName = `Llamada — ${contacto ?? numero ?? `Aircall ${callId}`}`;
-
-    const result = await handleOrchestratorEvent({
-      eventType: "call_recorded",
-      item: { itemId, itemName },
-      payload: { transcript, telefono: numero, audioUrl: detail?.recordingUrl ?? undefined }
+    const out = await ingestAircallCall(callId, {
+      numeroHint: data.raw_digits ?? null,
+      contactoHint,
+      recordingHint: data.recording ?? null
     });
 
-    res.json({ ok: true, analizada: true, itemId, result });
+    // Sin transcripción: respondemos 200 (no reintentar) con el motivo.
+    res.status(200).json(out);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
