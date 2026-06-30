@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect } from "../types";
 
 const BASE = "/api";
 
@@ -132,5 +132,12 @@ export const api = {
 
   // Asistente comercial (Chat RAG sobre el histórico).
   askAssistant: (question: string) =>
-    request<AssistantResponse>("/assistant/chat", { method: "POST", body: JSON.stringify({ question }) })
+    request<AssistantResponse>("/assistant/chat", { method: "POST", body: JSON.stringify({ question }) }),
+
+  // Scraper / prospección de leads.
+  getScraperSources: () => request<{ sources: ScraperSource[] }>("/scraper/sources"),
+  searchProspects: (data: { source: string; sector: string; ciudad?: string; limite?: number }) =>
+    request<ScraperSearchResult>("/scraper/search", { method: "POST", body: JSON.stringify(data) }),
+  importProspects: (prospects: Prospect[]) =>
+    request<ScraperImportResult>("/scraper/import", { method: "POST", body: JSON.stringify({ prospects }) })
 };

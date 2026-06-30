@@ -409,3 +409,42 @@ export interface AnalyzedCallDetail {
   fecha: string | null;
   call: CallAnalysisData;
 }
+
+// ── Scraper / prospección de leads ──────────────────────────────────────────
+export interface ScraperSource {
+  id: string;
+  label: string;
+  enabled: boolean;
+  aviso?: string;
+}
+
+export interface Prospect {
+  nombre: string;
+  telefono?: string | null;
+  email?: string | null;
+  sitioWeb?: string | null;
+  direccion?: string | null;
+  categoria?: string | null;
+  fuente: string;
+  externalId?: string | null;
+}
+
+export interface ScoredProspect extends Prospect {
+  duplicado: boolean;
+}
+
+export interface ScraperSearchResult {
+  fuente: string;
+  demo: boolean;
+  total: number;
+  nuevos: number;
+  duplicados: number;
+  prospects: ScoredProspect[];
+}
+
+export interface ScraperImportResult {
+  importados: number;
+  omitidos: number;
+  itemIds: string[];
+  errores: { nombre: string; error: string }[];
+}

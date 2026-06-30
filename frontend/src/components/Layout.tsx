@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { LayoutDashboard, Bot, Sparkles, Phone, ListChecks, TrendingUp, GraduationCap, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Bot, Sparkles, Radar, Phone, ListChecks, TrendingUp, GraduationCap, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { useRole } from "../lib/useRole";
 import { Logo } from "./Logo";
@@ -11,6 +11,7 @@ const navItems: { to: string; label: string; icon: LucideIcon; end?: boolean; ad
   { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, adminOnly: false },
   { to: "/agents", label: "Agentes", icon: Bot, adminOnly: true },
   { to: "/leads", label: "Análisis IA", icon: Sparkles, adminOnly: false },
+  { to: "/prospeccion", label: "Prospección", icon: Radar, adminOnly: false },
   { to: "/call-intelligence", label: "Call Intelligence", icon: Phone, adminOnly: false },
   { to: "/seguimiento", label: "Seguimiento", icon: ListChecks, adminOnly: false },
   { to: "/pipeline", label: "Pipeline", icon: TrendingUp, adminOnly: false },

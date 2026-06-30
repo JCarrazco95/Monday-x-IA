@@ -11,6 +11,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default:
 const Agents = lazy(() => import('./pages/Agents').then((m) => ({ default: m.Agents })))
 const AgentDetail = lazy(() => import('./pages/AgentDetail').then((m) => ({ default: m.AgentDetail })))
 const Leads = lazy(() => import('./pages/Leads').then((m) => ({ default: m.Leads })))
+const LeadScraper = lazy(() => import('./pages/LeadScraper').then((m) => ({ default: m.LeadScraper })))
 const CallIntelligence = lazy(() => import('./pages/CallIntelligence').then((m) => ({ default: m.CallIntelligence })))
 const CallIntelligenceList = lazy(() => import('./pages/CallIntelligenceList').then((m) => ({ default: m.CallIntelligenceList })))
 const NextBestAction = lazy(() => import('./pages/NextBestAction').then((m) => ({ default: m.NextBestAction })))
@@ -42,6 +43,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="agents/:id" element={<RequireAdmin><AgentDetail /></RequireAdmin>} />
               {/* Pestañas visibles para vendedores y administradores */}
               <Route path="leads" element={<Leads />} />
+              <Route path="prospeccion" element={<LeadScraper />} />
               <Route path="call-intelligence" element={<CallIntelligenceList />} />
               <Route path="call-intelligence/:id" element={<CallIntelligence />} />
               <Route path="seguimiento" element={<NextBestAction />} />

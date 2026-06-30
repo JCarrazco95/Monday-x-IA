@@ -43,6 +43,7 @@ Monorepo en `maxirent-monday/`:
   5. Oportunidades (`oportunidades`: upsell/cross-sell — expansion_flota, renovacion_proxima, vehiculo_adicional, upgrade_unidad, servicio_adicional; con potencial y acción). El orquestador escribe `oportunidad_upsell`/`tipo_oportunidad` en Monday y se muestra en la pestaña Llamada de `CallAnalysisTabs`.
   - Cada pasada tiene su `mockFn` rico para modo demo. El agente debe estar **active** (ver seed).
 - **nextBestActionAgent.ts** — **determinista** (sin IA). Recorre `logs` y levanta alertas de seguimiento: compromisos sin seguimiento/vencidos, leads calientes/tibios enfriándose, llamadas con banderas rojas. Escribe las de alta prioridad a Monday (columna `requiere_atencion` + comentario) → automatizaciones nativas notifican. Rutas: `GET /api/nba` (preview, no escribe) y `POST /api/nba/run` (escribe). "Cron" interno opcional vía `NBA_CRON_HOURS`. Umbrales `NBA_HORAS_*`. Frontend: `pages/NextBestAction.tsx` (`/seguimiento`).
+- **leadScraperAgent.ts** — **prospección y alta masiva de leads** desde fuentes conectables (`lib/leadSources.ts`). `searchProspects` (preview, no escribe) consulta una fuente y marca duplicados; `importProspects` da de alta cada prospecto seleccionado reusando el flujo `lead_created` (enriquecimiento + scoring + Writer), igual que la landing. Dedupe a dos niveles (contra nombres en bitácora + dentro del lote; leadEnrichment también detecta duplicados en el board). Fuentes: **Google Places** (oficial, `GOOGLE_PLACES_API_KEY`), **Licitaciones gov** (Contrataciones Abiertas/CompraNet), **proveedor B2B tipo LinkedIn** (hueco para Apollo/Lusha vía API con cumplimiento — NO se scrapea LinkedIn directo: viola ToS+LFPDPPP — `B2B_PROVIDER_API_KEY`), **directorios web** (stub HTML, `DIRECTORY_SCRAPER_ENABLED`). Cada fuente cae a demo si falta credencial (`demo: true`). Rutas `routes/scraper.ts` (`GET /sources`, `POST /search`, `POST /import`); frontend `pages/LeadScraper.tsx` (`/prospeccion`).
 - **mondayWriterAgent.ts** — escribe en Monday (mock si no hay token).
 
 ## 4. Call Intelligence (lo más trabajado)
@@ -118,4 +119,4 @@ AI_PROVIDER=demo en backend/.env
 ## 11. Env vars (backend/.env — ver `.env.example`)
 `AI_PROVIDER`, `ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `MONDAY_API_TOKEN`, `MONDAY_BOARD_ID_LEADS`,
 `MONDAY_WEBHOOK_SECRET`, `MONDAY_COL_*`, `GOV_API_*`, `AIRCALL_API_ID/TOKEN`, `AIRCALL_WEBHOOK_TOKEN`,
-`DEEPGRAM_API_KEY`, `DATABASE_PATH`.
+`DEEPGRAM_API_KEY`, `DATABASE_PATH`, `GOOGLE_PLACES_API_KEY`, `B2B_PROVIDER_API_KEY`, `DIRECTORY_SCRAPER_ENABLED`.

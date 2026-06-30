@@ -13,6 +13,7 @@ import { coachingRouter } from "./routes/coaching.js";
 import { forecastRouter } from "./routes/forecast.js";
 import { assistantRouter } from "./routes/assistant.js";
 import { mondayRouter } from "./routes/monday.js";
+import { scraperRouter } from "./routes/scraper.js";
 import { isMockMode } from "./lib/claude.js";
 import { PROVIDER, providerLabel } from "./lib/provider.js";
 import { isMondayMockMode } from "./lib/monday.js";
@@ -49,6 +50,7 @@ app.use("/api/coaching", coachingRouter);
 app.use("/api/forecast", forecastRouter);
 app.use("/api/assistant", assistantRouter);
 app.use("/api/monday", mondayRouter);
+app.use("/api/scraper", scraperRouter);
 
 async function start() {
   // Inicializa la BD (SQLite local o Postgres si hay DATABASE_URL) y siembra
