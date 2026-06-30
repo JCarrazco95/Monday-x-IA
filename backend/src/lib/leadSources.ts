@@ -16,6 +16,8 @@
 //  realistas (no rompe el flujo) y marca `demo: true`.
 // ===========================================================================
 
+import { lushaEnabled, searchLushaProspects } from "./lusha.js";
+
 export interface Prospect {
   nombre: string;
   telefono?: string | null;
@@ -200,21 +202,20 @@ const governmentSource: LeadSource = {
   }
 };
 
-// ─── Fuente: proveedor B2B (Apollo/Lusha/Cognism…) — datos tipo LinkedIn ────
-//  HUECO PREPARADO. NO scrapeamos LinkedIn directamente (viola sus ToS y la
-//  LFPDPPP). Cuando MAXIRent contrate un proveedor con cumplimiento, se conecta
-//  su API aquí y se activa con B2B_PROVIDER_API_KEY. Mientras tanto: demo.
-const B2B_PROVIDER_KEY = process.env.B2B_PROVIDER_API_KEY;
-
-const b2bProviderSource: LeadSource = {
-  id: "b2b",
-  label: "Proveedor B2B (tipo LinkedIn)",
-  enabled: Boolean(B2B_PROVIDER_KEY),
+// ─── Fuente: Lusha — proveedor B2B con cumplimiento (datos tipo LinkedIn) ────
+//  NO es scraping de LinkedIn (eso viola sus ToS y la LFPDPPP). Lusha ya resolvió
+//  la base legal de los datos y los expone por API (flujo search → enrich).
+//  Se activa con LUSHA_API_KEY. Sin key, o si la API falla, cae a demo.
+const lushaSource: LeadSource = {
+  id: "lusha",
+  label: "Lusha (B2B tipo LinkedIn)",
+  enabled: lushaEnabled,
   aviso:
-    "Datos de contactos vía proveedor con cumplimiento (Apollo/Lusha/Cognism). NO se scrapea LinkedIn directamente.",
+    "Contactos vía Lusha (proveedor con cumplimiento). NO se scrapea LinkedIn directamente. El enriquecimiento consume créditos de tu plan Lusha.",
   async search(params) {
-    // TODO: integrar la API del proveedor contratado (ver lib/b2bProvider.ts).
-    return { prospects: demoProspects(params, "b2b"), demo: true };
+    const prospects = await searchLushaProspects(params);
+    if (prospects === null) return { prospects: demoProspects(params, "lusha"), demo: true };
+    return { prospects, demo: false };
   }
 };
 
@@ -237,7 +238,7 @@ const directorySource: LeadSource = {
 const SOURCES: LeadSource[] = [
   googlePlacesSource,
   governmentSource,
-  b2bProviderSource,
+  lushaSource,
   directorySource
 ];
 
