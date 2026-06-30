@@ -11,10 +11,11 @@
 //  un resultado explicando el motivo.
 // ===========================================================================
 
+import crypto from "node:crypto";
 import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
 import { logActivity } from "./activityLog.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
-import { transcribeRecording } from "./transcription.js";
+import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 
 export interface AircallIngestResult {
   ok: boolean;
@@ -87,4 +88,48 @@ export async function ingestAircallCall(
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: numero, contacto, result };
+}
+
+// ===========================================================================
+//  Ingesta desde una URL de grabación (independiente del proveedor).
+//
+//  Dada la URL del audio de la llamada (Twilio, Aircall, S3, etc.), la transcribe
+//  con Deepgram y dispara el análisis. Funciona con cualquier proveedor siempre
+//  que la URL sea accesible (pública o con token en la propia URL).
+// ===========================================================================
+export async function ingestCallFromUrl(opts: {
+  url: string;
+  telefono?: string | null;
+  contacto?: string | null;
+}): Promise<AircallIngestResult> {
+  const url = opts.url?.trim();
+  if (!url) return { ok: false, analizada: false, motivo: "Falta la URL de la grabación." };
+
+  // Id estable derivado de la URL para no duplicar análisis de la misma llamada.
+  const hash = crypto.createHash("md5").update(url).digest("hex").slice(0, 10);
+  const itemId = `url-${hash}`;
+  const itemName = `Llamada — ${opts.contacto ?? opts.telefono ?? "grabación"}`;
+
+  const transcript = await transcribeRecording(url);
+  if (!transcript) {
+    const motivo = !transcriptionEnabled
+      ? "Falta DEEPGRAM_API_KEY para transcribir desde una URL. Configúralo en Render o pega la transcripción manualmente."
+      : "No pude transcribir la grabación desde esa URL. Verifica que apunte al AUDIO (mp3/wav) y que sea accesible sin autenticación.";
+    logActivity({
+      agentId: "call_intelligence",
+      type: "warning",
+      title: "Grabación por URL sin transcripción",
+      detail: motivo,
+      reference: `#${itemId} · ${opts.contacto ?? opts.telefono ?? "Llamada"}`
+    });
+    return { ok: false, analizada: false, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, motivo };
+  }
+
+  const result = await handleOrchestratorEvent({
+    eventType: "call_recorded",
+    item: { itemId, itemName },
+    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url }
+  });
+
+  return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, result };
 }

@@ -66,8 +66,9 @@ export function CallIntelligenceList() {
   const [search, setSearch] = useState("");
   const [filterBanda, setFilterBanda] = useState<Banda | "">("");
 
-  // Traer llamada de Aircall por ID
+  // Traer llamada: por ID de Aircall o por URL de la grabación
   const [callId, setCallId] = useState("");
+  const [recUrl, setRecUrl] = useState("");
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -81,13 +82,11 @@ export function CallIntelligenceList() {
   };
   useEffect(load, []);
 
-  async function onIngest() {
-    const id = callId.trim();
-    if (!id) return;
+  async function runIngest(fn: () => Promise<{ analizada: boolean; itemId?: string; motivo?: string }>) {
     setIngesting(true);
     setIngestMsg(null);
     try {
-      const res = await api.ingestAircallCall(id);
+      const res = await fn();
       if (res.analizada && res.itemId) {
         navigate(`/call-intelligence/${res.itemId}`);
       } else {
@@ -99,6 +98,8 @@ export function CallIntelligenceList() {
       setIngesting(false);
     }
   }
+  const onIngestId = () => callId.trim() && runIngest(() => api.ingestAircallCall(callId.trim()));
+  const onIngestUrl = () => recUrl.trim() && runIngest(() => api.ingestCallFromUrl(recUrl.trim()));
 
   const calls = data?.calls ?? [];
   const filtered = useMemo(() => {
@@ -136,30 +137,56 @@ export function CallIntelligenceList() {
         </button>
       </div>
 
-      {/* Traer una llamada de Aircall por su ID y analizarla al momento */}
+      {/* Traer una llamada y analizarla: por ID de Aircall o por URL de la grabación */}
       <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
         <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-text">
-          <Phone size={16} className="text-accent" /> Traer llamada de Aircall por ID
+          <Phone size={16} className="text-accent" /> Analizar una llamada
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row">
+
+        {/* Opción 1: por ID de Aircall */}
+        <label className="text-xs font-medium text-text-muted">Por ID de Aircall</label>
+        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
           <input
             value={callId}
             onChange={(e) => setCallId(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && onIngest()}
-            placeholder="ID de la llamada en Aircall (ej. 1234567890)"
+            onKeyDown={(e) => e.key === "Enter" && onIngestId()}
+            placeholder="ID numérico de Aircall (ej. 1234567890)"
             className="h-10 flex-1 rounded-xl border border-border bg-bg px-4 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
           />
           <button
-            onClick={onIngest}
+            onClick={onIngestId}
             disabled={ingesting || !callId.trim()}
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-medium text-white disabled:opacity-50"
           >
             <RefreshCw size={15} className={ingesting ? "animate-spin" : ""} />
-            {ingesting ? "Trayendo y analizando…" : "Traer y analizar"}
+            Traer y analizar
           </button>
         </div>
+
+        {/* Opción 2: por URL de la grabación (cualquier proveedor) */}
+        <label className="mt-3 block text-xs font-medium text-text-muted">O por URL de la grabación (Twilio, Aircall, S3…)</label>
+        <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={recUrl}
+            onChange={(e) => setRecUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && onIngestUrl()}
+            placeholder="https://…/grabacion.mp3"
+            className="h-10 flex-1 rounded-xl border border-border bg-bg px-4 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+          <button
+            onClick={onIngestUrl}
+            disabled={ingesting || !recUrl.trim()}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-accent px-5 text-sm font-medium text-accent disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={ingesting ? "animate-spin" : ""} />
+            Transcribir y analizar
+          </button>
+        </div>
+
         <p className="mt-2 text-xs text-text-muted">
-          Trae la grabación y transcripción desde Aircall y corre el análisis (Sandler + Challenger). Al terminar, abre el resultado.
+          {ingesting
+            ? "Trayendo, transcribiendo y analizando… puede tardar unos segundos."
+            : "Por URL: el enlace debe apuntar al audio (mp3/wav) y ser accesible. Se transcribe con Deepgram y se corre el análisis (Sandler + Challenger)."}
         </p>
         {ingestMsg && (
           <div className={`mt-2 rounded-lg px-3 py-2 text-xs ${ingestMsg.ok ? "bg-success/10 text-success" : "bg-danger/10 text-danger"}`}>

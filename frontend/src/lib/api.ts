@@ -127,6 +127,13 @@ export const api = {
       { method: "POST", body: JSON.stringify(opts) }
     ),
 
+  // Transcribe (Deepgram) la grabación de una URL y la analiza. Cualquier proveedor.
+  ingestCallFromUrl: (url: string, opts: { telefono?: string; contacto?: string } = {}) =>
+    request<{ ok: boolean; analizada: boolean; itemId?: string; itemName?: string; motivo?: string }>(
+      `/calls/from-url`,
+      { method: "POST", body: JSON.stringify({ url, ...opts }) }
+    ),
+
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),

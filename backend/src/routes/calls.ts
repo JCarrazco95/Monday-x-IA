@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
-import { ingestAircallCall } from "../lib/aircallIngest.js";
+import { ingestAircallCall, ingestCallFromUrl } from "../lib/aircallIngest.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -161,6 +161,26 @@ callsRouter.post("/aircall/:callId", async (req, res) => {
       numeroHint: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
     });
     // Si no se pudo analizar (sin transcripción/credenciales), 422 con el motivo.
+    res.status(out.analizada ? 200 : 422).json(out);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/calls/from-url -> transcribe (Deepgram) la grabación de una URL y la
+//   analiza. Independiente del proveedor (Twilio, Aircall, S3…). Body:
+//   { url, telefono?, contacto? }.
+callsRouter.post("/from-url", async (req, res) => {
+  const { url, telefono, contacto } = (req.body ?? {}) as { url?: string; telefono?: string; contacto?: string };
+  if (typeof url !== "string" || !url.trim()) {
+    return res.status(400).json({ error: "Se requiere 'url' (enlace a la grabación de audio)." });
+  }
+  try {
+    const out = await ingestCallFromUrl({
+      url: url.trim(),
+      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
+      contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null
+    });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
