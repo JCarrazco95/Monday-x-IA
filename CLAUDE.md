@@ -72,7 +72,8 @@ Monorepo en `maxirent-monday/`:
 - Webhook `/api/webhooks/aircall` → usa `ingestAircallCall` → `call_recorded` → análisis → aparece en board y, por teléfono, en el Item View del lead.
 - **Bajo demanda por ID**: `POST /api/calls/aircall/:callId` (body opcional `{ transcript, telefono }`) trae y analiza una llamada concreta; responde `itemId` (`aircall-<id>`).
 - **Por URL de grabación (cualquier proveedor)**: `ingestCallFromUrl({ url, telefono?, contacto? })` + `POST /api/calls/from-url` — transcribe con Deepgram el audio de una URL (Twilio/Aircall/S3…) y analiza; `itemId` = `url-<hash>`. Requiere `DEEPGRAM_API_KEY` y que la URL apunte al audio accesible. Útil porque los IDs de Aircall son numéricos: un Call SID de Twilio (`CA…`) NO existe en Aircall.
-- Frontend: panel "Analizar una llamada" en `CallIntelligenceList.tsx` con dos vías (ID de Aircall · URL de grabación); abre el análisis al terminar.
+- **Transcripción ya existente (la más simple)**: `ingestCallFromTranscript({ transcript, prospecto?, telefono? })` + `POST /api/calls/analyze-transcript` — analiza un texto YA transcrito (Aircall/Twilio ya lo hicieron), sin re-transcribir ni credenciales; `itemId` = `call-<hash>`. Es la vía recomendada cuando el proveedor ya transcribió la llamada.
+- Frontend: panel "Analizar una llamada" en `CallIntelligenceList.tsx` con tres vías (pegar transcripción · ID de Aircall · URL de grabación); abre el análisis al terminar.
 
 ## 6. Integración Monday — DECISIONES tomadas
 - En la vista embebida mostramos SOLO **Análisis IA + Call Intelligence**.

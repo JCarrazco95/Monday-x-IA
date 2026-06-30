@@ -91,6 +91,37 @@ export async function ingestAircallCall(
 }
 
 // ===========================================================================
+//  Análisis directo de una transcripción YA EXISTENTE (la vía más simple).
+//
+//  Cuando el proveedor (Aircall, Twilio, etc.) ya transcribió la llamada, no
+//  tiene sentido re-transcribir: se pega/recibe el texto y se analiza tal cual.
+//  No requiere credenciales ni Deepgram.
+// ===========================================================================
+export async function ingestCallFromTranscript(opts: {
+  transcript: string;
+  prospecto?: string | null;
+  telefono?: string | null;
+}): Promise<AircallIngestResult> {
+  const transcript = opts.transcript?.trim();
+  if (!transcript) return { ok: false, analizada: false, motivo: "Falta la transcripción." };
+  if (transcript.length < 40) {
+    return { ok: false, analizada: false, motivo: "La transcripción es demasiado corta para analizar." };
+  }
+
+  const hash = crypto.createHash("md5").update(transcript).digest("hex").slice(0, 10);
+  const itemId = `call-${hash}`;
+  const itemName = `Llamada — ${opts.prospecto ?? opts.telefono ?? "transcripción"}`;
+
+  const result = await handleOrchestratorEvent({
+    eventType: "call_recorded",
+    item: { itemId, itemName },
+    payload: { transcript, telefono: opts.telefono ?? null }
+  });
+
+  return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.prospecto ?? null, result };
+}
+
+// ===========================================================================
 //  Ingesta desde una URL de grabación (independiente del proveedor).
 //
 //  Dada la URL del audio de la llamada (Twilio, Aircall, S3, etc.), la transcribe

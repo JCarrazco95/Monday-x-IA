@@ -134,6 +134,13 @@ export const api = {
       { method: "POST", body: JSON.stringify({ url, ...opts }) }
     ),
 
+  // Analiza una transcripción YA EXISTENTE (pegada), sin re-transcribir.
+  analyzeTranscript: (transcript: string, opts: { prospecto?: string; telefono?: string } = {}) =>
+    request<{ ok: boolean; analizada: boolean; itemId?: string; itemName?: string; motivo?: string }>(
+      `/calls/analyze-transcript`,
+      { method: "POST", body: JSON.stringify({ transcript, ...opts }) }
+    ),
+
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),

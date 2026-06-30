@@ -66,9 +66,11 @@ export function CallIntelligenceList() {
   const [search, setSearch] = useState("");
   const [filterBanda, setFilterBanda] = useState<Banda | "">("");
 
-  // Traer llamada: por ID de Aircall o por URL de la grabación
+  // Traer llamada: por ID de Aircall, por URL de la grabación, o pegar transcripción
   const [callId, setCallId] = useState("");
   const [recUrl, setRecUrl] = useState("");
+  const [transcript, setTranscript] = useState("");
+  const [prospecto, setProspecto] = useState("");
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -100,6 +102,8 @@ export function CallIntelligenceList() {
   }
   const onIngestId = () => callId.trim() && runIngest(() => api.ingestAircallCall(callId.trim()));
   const onIngestUrl = () => recUrl.trim() && runIngest(() => api.ingestCallFromUrl(recUrl.trim()));
+  const onIngestTranscript = () =>
+    transcript.trim() && runIngest(() => api.analyzeTranscript(transcript.trim(), { prospecto: prospecto.trim() || undefined }));
 
   const calls = data?.calls ?? [];
   const filtered = useMemo(() => {
@@ -143,8 +147,36 @@ export function CallIntelligenceList() {
           <Phone size={16} className="text-accent" /> Analizar una llamada
         </div>
 
+        {/* Opción destacada: pegar transcripción ya existente (no re-transcribe) */}
+        <label className="text-xs font-medium text-text-muted">Pegar transcripción (ya hecha por Aircall/Twilio — no se re-transcribe)</label>
+        <textarea
+          value={transcript}
+          onChange={(e) => setTranscript(e.target.value)}
+          rows={4}
+          placeholder={"Pega aquí la transcripción de la llamada, p. ej.:\nJuan Martinez: Hola, buenos días…\nRaul Alcaraz: Busco una mini truck o minivan…"}
+          className="mt-1 w-full rounded-xl border border-border bg-bg px-4 py-2 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            value={prospecto}
+            onChange={(e) => setProspecto(e.target.value)}
+            placeholder="Prospecto / cliente (opcional, ej. Raul Alcaraz)"
+            className="h-10 flex-1 rounded-xl border border-border bg-bg px-4 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+          <button
+            onClick={onIngestTranscript}
+            disabled={ingesting || transcript.trim().length < 40}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-accent px-5 text-sm font-medium text-white disabled:opacity-50"
+          >
+            <RefreshCw size={15} className={ingesting ? "animate-spin" : ""} />
+            Analizar transcripción
+          </button>
+        </div>
+
+        <div className="my-4 border-t border-border" />
+
         {/* Opción 1: por ID de Aircall */}
-        <label className="text-xs font-medium text-text-muted">Por ID de Aircall</label>
+        <label className="text-xs font-medium text-text-muted">Por ID de Aircall (trae su transcripción automáticamente)</label>
         <div className="mt-1 flex flex-col gap-2 sm:flex-row">
           <input
             value={callId}

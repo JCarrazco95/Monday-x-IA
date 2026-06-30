@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
-import { ingestAircallCall, ingestCallFromUrl } from "../lib/aircallIngest.js";
+import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript } from "../lib/aircallIngest.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -161,6 +161,28 @@ callsRouter.post("/aircall/:callId", async (req, res) => {
       numeroHint: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
     });
     // Si no se pudo analizar (sin transcripción/credenciales), 422 con el motivo.
+    res.status(out.analizada ? 200 : 422).json(out);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/calls/analyze-transcript -> analiza una transcripción YA EXISTENTE
+//   (pegada o traída de otro sistema), sin re-transcribir. Body:
+//   { transcript, prospecto?, telefono? }.
+callsRouter.post("/analyze-transcript", async (req, res) => {
+  const { transcript, prospecto, telefono } = (req.body ?? {}) as {
+    transcript?: string; prospecto?: string; telefono?: string;
+  };
+  if (typeof transcript !== "string" || !transcript.trim()) {
+    return res.status(400).json({ error: "Se requiere 'transcript' (texto de la conversación)." });
+  }
+  try {
+    const out = await ingestCallFromTranscript({
+      transcript,
+      prospecto: typeof prospecto === "string" && prospecto.trim() ? prospecto.trim() : null,
+      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
+    });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
