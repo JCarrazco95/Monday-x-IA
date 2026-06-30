@@ -214,29 +214,32 @@ export async function syncCallsBoard(): Promise<CallsSyncResult> {
 
   for (const it of items) {
     if (out.analizadas >= CALLS_SYNC_MAX) break;
-    const callId = it.callId;
     const link = it.link;
     const nombre = it.leadName ?? it.itemName;
+    // El ID NUMÉRICO de Aircall viene en el link (assets.aircall.io/calls/<id>/recording);
+    // la columna "Call ID" suele traer el SID de Twilio (CA…), que no sirve para la API.
+    const aircallId =
+      link?.match(/\/calls\/(\d+)/)?.[1] ?? (it.callId && /^\d+$/.test(it.callId) ? it.callId : null);
 
     // Ids candidatos con los que se guardaría el análisis (para deduplicar).
     const urlHash = link ? crypto.createHash("md5").update(link).digest("hex").slice(0, 10) : null;
-    const candidatos = [callId ? `aircall-${callId}` : null, urlHash ? `url-${urlHash}` : null].filter(Boolean) as string[];
+    const candidatos = [aircallId ? `aircall-${aircallId}` : null, urlHash ? `url-${urlHash}` : null].filter(Boolean) as string[];
     if (candidatos.some((c) => analyzed.has(c))) {
       out.yaAnalizadas++;
       out.detalle.push({ itemName: nombre, estado: "ya analizada" });
       continue;
     }
 
-    if (!callId && !link) {
+    if (!aircallId && !link) {
       out.sinFuente++;
-      out.detalle.push({ itemName: nombre, estado: "sin call id ni link" });
+      out.detalle.push({ itemName: nombre, estado: "sin grabación ni ID" });
       continue;
     }
 
     try {
-      // 1) Intento por call id (Aircall trae su propia transcripción, sin gastar).
-      let res = callId ? await ingestAircallCall(callId, { contactoHint: nombre }) : null;
-      // 2) Si no se logró y hay link a la grabación, intento por URL (Deepgram).
+      // 1) Por ID numérico de Aircall: trae su transcripción oficial (sin gastar Deepgram).
+      let res = aircallId ? await ingestAircallCall(aircallId, { contactoHint: nombre }) : null;
+      // 2) Si no se logró y hay link a la grabación, transcribe el audio (Deepgram).
       if ((!res || !res.analizada) && link) {
         res = await ingestCallFromUrl({ url: link, contacto: nombre });
       }
