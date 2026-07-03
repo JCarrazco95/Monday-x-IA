@@ -1,4 +1,7 @@
-import { structuredCompletion, MODEL_HEAVY } from "../lib/claude.js";
+import { structuredCompletion, MODEL_HEAVY, isMockMode } from "../lib/claude.js";
+import { logActivity } from "../lib/activityLog.js";
+import { db } from "../db/index.js";
+import { safeParseJson } from "../lib/references.js";
 import type {
   CallIntelligenceInput,
   CallIntelligenceOutput,
@@ -342,7 +345,9 @@ const UPSELL_SCHEMA: Record<string, unknown> = {
   required: ["hayOportunidad", "resumen", "senales"]
 };
 
-const banda = (s: number): "rojo" | "amarillo" | "verde" => (s >= 75 ? "verde" : s >= 50 ? "amarillo" : "rojo");
+// Exportado para pruebas: umbral de banda y catálogo de etapas Sandler.
+export const banda = (s: number): "rojo" | "amarillo" | "verde" => (s >= 75 ? "verde" : s >= 50 ? "amarillo" : "rojo");
+export { SANDLER_ETAPAS };
 
 type SandlerPass = Omit<CallIntelligenceOutput, "challenger" | "integrado"> & { sandler: SandlerAnalysis };
 
@@ -456,14 +461,56 @@ Genera el coaching del vendedor, el analisis profundo de la llamada y las oportu
   });
 }
 
+// Caché de análisis: si ya existe un análisis para este itemId en la bitácora,
+// se reutiliza en vez de volver a gastar 2 llamadas a la IA (webhooks/sync
+// repetidos de la misma llamada). Se puede desactivar con CALL_ANALYSIS_CACHE=false.
+const CALL_CACHE_ENABLED = process.env.CALL_ANALYSIS_CACHE !== "false";
+
+async function findCachedAnalysis(itemId: string): Promise<CallIntelligenceOutput | null> {
+  if (!CALL_CACHE_ENABLED) return null;
+  try {
+    const row = await db.queryOne<{ payload: string }>(
+      `SELECT payload FROM logs
+         WHERE agent_id = '${AGENT_ID}' AND payload IS NOT NULL AND reference LIKE ?
+         ORDER BY timestamp DESC, id DESC LIMIT 1`,
+      [`#${itemId} ·%`]
+    );
+    return row?.payload ? safeParseJson<CallIntelligenceOutput>(row.payload) : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function runCallIntelligenceAgent(
   input: CallIntelligenceInput
 ): Promise<CallIntelligenceOutput> {
+  // Reutiliza un análisis previo de esta misma llamada (ahorra 2 llamadas a la IA).
+  const cached = await findCachedAnalysis(input.itemId);
+  if (cached) return cached;
+
+  // Procedencia: en modo demo declarado es "demo"; si en modo live una pasada
+  // falla y caemos a heurísticas, se marca "fallback" para NO confundir un
+  // análisis degradado con uno real (queda además un warning en la bitácora).
+  let fuenteAnalisis: CallIntelligenceOutput["fuenteAnalisis"] = isMockMode ? "demo" : "ia";
+
+  const notarFallback = (etapa: string, err: unknown) => {
+    if (isMockMode) return; // en demo el fallback es lo esperado, no es degradación
+    fuenteAnalisis = "fallback";
+    logActivity({
+      agentId: AGENT_ID,
+      type: "warning",
+      title: "Análisis de llamada degradado (fallback a heurísticas)",
+      detail: `Falló la ${etapa} con IA; se usó el modo demo. ${err instanceof Error ? err.message : String(err)}`,
+      reference: `#${input.itemId} · ${input.itemName}`
+    });
+  };
+
   // Pasada 1: Sandler + Challenger + Integrado + basicos (1 llamada a la IA).
   let venta: VentaPass;
   try {
     venta = await runVenta(input);
-  } catch {
+  } catch (err) {
+    notarFallback("pasada de venta (Sandler/Challenger)", err);
     venta = mockVenta(input);
   }
 
@@ -471,7 +518,8 @@ export async function runCallIntelligenceAgent(
   let coachOps: CoachOpsResult;
   try {
     coachOps = await runCoachingOps(input, venta.sandler, venta.challenger);
-  } catch {
+  } catch (err) {
+    notarFallback("pasada de coaching/oportunidades", err);
     coachOps = mockCoachOps(input, venta.sandler, venta.challenger);
   }
 
@@ -483,7 +531,8 @@ export async function runCallIntelligenceAgent(
     integrado,
     vendedor: coachOps.vendedor,
     analisisProfundo: coachOps.analisisProfundo,
-    oportunidades: coachOps.oportunidades
+    oportunidades: coachOps.oportunidades,
+    fuenteAnalisis
   };
 }
 

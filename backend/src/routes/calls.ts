@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
 import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
 import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
+import { parseReference } from "../lib/references.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -22,11 +23,6 @@ function bandaFromScore(score: number): Banda {
 
 function sandlerScore(c: CallIntelligenceOutput): number {
   return c.probabilidadCierre === "alta" ? 85 : c.probabilidadCierre === "media" ? 60 : c.probabilidadCierre === "baja" ? 35 : 50;
-}
-
-function parseReference(reference: string): { itemId: string; itemName: string } {
-  const m = reference.match(/^#(\S+)\s*·\s*(.+)$/);
-  return { itemId: m?.[1] ?? reference, itemName: m?.[2] ?? reference };
 }
 
 function prospecto(itemName: string): string {

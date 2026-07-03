@@ -1,15 +1,22 @@
 # MAXIRent × Monday — Sistema de Agentes IA
 
 Sistema de agentes de IA (Claude) integrados con Monday.com para MAXIRent
-(renta de vehículos). Implementa las **Prioridades 1, 2 y 3** del plan:
+(renta de vehículos). Agentes:
 
 1. **Form Analysis Agent** — analiza respuestas de formularios de cotización.
 2. **Lead Enrichment Agent** — califica y enriquece leads al crearse.
-3. **Call Intelligence Agent** — analiza transcripciones de llamadas.
+3. **Call Intelligence Agent** — analiza transcripciones de llamadas (Sandler + Challenger).
+4. **Next Best Action Agent** — seguimiento determinista (compromisos, leads fríos, riesgos).
+5. **Lead Scraper Agent** — prospección y alta masiva de leads.
 
 Todo orquestado por un **Orchestrator Agent** y escrito de vuelta a Monday por
-el **Monday Writer Agent**. Incluye un **panel de control web** para ver la
-bitácora de actividad de cada agente y activarlos/pausarlos.
+el **Monday Writer Agent** (7 agentes en total). Incluye un **panel de control
+web** con Dashboard, Agentes, Call Intelligence, Coaching, Pipeline, Asistente
+(chat RAG), Prospección, Seguimiento y Bitácora.
+
+> 📚 Documentación completa y navegable en [`docs/`](docs/README.md): análisis
+> técnico, roadmap, arquitectura, referencia de API, despliegue, agentes, modelo
+> de datos, variables de entorno y las correcciones aplicadas.
 
 ---
 
@@ -77,11 +84,12 @@ El frontend hace proxy de `/api/*` hacia `http://localhost:4000`.
   botón para **activar/pausar**.
 - **Agentes → Detalle** — configuración completa, estadísticas y bitácora
   filtrada por ese agente.
-- **Call Intelligence** — análisis Sandler de una llamada: puntaje y banda,
-  etapa más débil, sentimiento, reproductor de la grabación de Aircall, resumen
-  con momento clave, desempeño por las 7 etapas (con detalle desplegable) y
-  acciones recomendadas para el vendedor. Hoy muestra datos demo; al conectar el
-  backend se reemplaza el `MOCK` de `frontend/src/pages/CallIntelligence.tsx`.
+- **Call Intelligence** — análisis Sandler + Challenger de una llamada: puntaje y
+  banda, etapa más débil, sentimiento, resumen con momento clave, desempeño por
+  las 7 etapas (con detalle desplegable) y acciones recomendadas para el vendedor.
+  La vista es **totalmente en vivo**: lee el análisis real desde el backend
+  (`GET /api/calls/analyzed/:itemId`); en modo demo el backend genera el análisis
+  con heurísticas. (El antiguo `MOCK` hardcodeado en el frontend ya no existe.)
 - **Bitácora** — registro histórico completo con filtros por agente, tipo de
   evento y búsqueda de texto. Exportable a JSON.
 - **Configuración** — agregar entradas manuales a la bitácora e información
@@ -113,9 +121,14 @@ Monday, payload completo y duración.
 
 ## API del backend
 
+> **Autenticación:** si `API_KEY` está configurada, todos los endpoints (salvo
+> `/api/health` y `/api/webhooks/*`) exigen el header `x-api-key`. Sin `API_KEY`
+> (dev/demo) la API queda abierta. Ver [Seguridad](#seguridad-y-operación).
+
 | Método | Ruta | Descripción |
 |--------|------|-------------|
-| GET | `/api/health` | Estado del sistema (modo live/demo de Claude y Monday) |
+| GET | `/api/health` | Estado del sistema (modo live/demo, BD, auth on/off) |
+| GET | `/api/usage` | Consumo acumulado de tokens de IA por modelo (telemetría de costo) |
 | GET | `/api/agents` | Lista de agentes con estadísticas |
 | GET | `/api/agents/:id` | Detalle de un agente + últimos 25 eventos |
 | PATCH | `/api/agents/:id` | Cambia `status` (`active`/`paused`) o `model` |
@@ -189,6 +202,37 @@ La guía completa de columnas, registro del disparador en Monday y notas de
 costo/seguridad está en **`call-intelligence/flujo-aircall-trigger.md`**.
 
 ---
+
+## Seguridad y operación
+
+El backend incluye controles activables por entorno (consistentes con el patrón
+demo/real del resto del sistema):
+
+- **Autenticación por API key** — define `API_KEY` en el backend para exigir el
+  header `x-api-key` en toda la API (menos `/health` y webhooks). El frontend la
+  envía vía `VITE_API_KEY` en build. Sin `API_KEY`, la API queda abierta (dev/demo)
+  y se imprime una advertencia al arrancar.
+- **CORS restringido** — `CORS_ORIGINS` (lista separada por comas) limita los
+  orígenes permitidos; sin ella se refleja el origen (dev).
+- **Rate limiting** — límites por IP: general (`RATE_LIMIT_API`, def. 1000/15min),
+  IA/mutaciones (`RATE_LIMIT_AI`, def. 100/5min) y webhooks (`RATE_LIMIT_WEBHOOK`,
+  def. 300/5min). Evita el abuso de costo de los endpoints que gastan tokens.
+- **PII enmascarada en la bitácora** — `GET /api/logs` y `/api/logs/export`
+  devuelven email/RFC/teléfono enmascarados. Los datos completos del lead solo se
+  ven en `/api/leads` (tras auth).
+- **Webhooks** — firma JWT de Monday y token de Aircall comparados en tiempo
+  constante. Cabeceras de seguridad vía `helmet`.
+- **Postgres SSL** — `DATABASE_CA_CERT` (PEM del CA) activa verificación estricta
+  del certificado; `DATABASE_SSL_STRICT=true` lo fuerza sin CA.
+- **Idempotencia** — el Monday Writer no duplica subitems/comentarios si el mismo
+  análisis se reprocesa (tabla `monday_writes`).
+- **Telemetría y ahorro de costo** — `GET /api/usage` reporta el consumo de tokens;
+  el system prompt se cachea (prompt caching de Anthropic) y las llamadas ya
+  analizadas se reutilizan (`CALL_ANALYSIS_CACHE`).
+
+Pruebas: `cd backend && npm test` (Vitest). Detalle en
+[`docs/01-analisis-tecnico.md`](docs/01-analisis-tecnico.md) y
+[`docs/09-variables-entorno.md`](docs/09-variables-entorno.md).
 
 ## Próximos pasos (no incluidos aún)
 

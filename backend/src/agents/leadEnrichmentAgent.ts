@@ -332,19 +332,27 @@ async function findDuplicate(
   input: LeadEnrichmentInput
 ): Promise<{ isDuplicate: boolean; ref: string | null }> {
   if (!input.email && !input.rfc) return { isDuplicate: false, ref: null };
+  // Se busca el patrón JSON EXACTO `"email":"<valor>"` / `"rfc":"<valor>"` en el
+  // payload, en vez del valor suelto: evita falsos positivos (p. ej. que el email
+  // aparezca dentro de otro campo o de una URL). El itemName se excluye para no
+  // marcarse a sí mismo. Nota: cuando exista una tabla `leads` indexada, esta
+  // búsqueda se hará por columna en vez de LIKE sobre el JSON (ver docs).
+  const emailPat = input.email ? `%${jsonField("email", input.email)}%` : " ";
+  const rfcPat = input.rfc ? `%${jsonField("rfc", input.rfc)}%` : " ";
   const row = await db.queryOne<{ reference: string }>(
-    `SELECT reference, payload FROM logs
+    `SELECT reference FROM logs
        WHERE agent_id = 'lead_enrichment'
-       AND reference IS NOT NULL AND reference != ?
+       AND reference IS NOT NULL AND reference NOT LIKE ?
        AND (payload LIKE ? OR payload LIKE ?)
        ORDER BY timestamp DESC LIMIT 1`,
-    [
-      input.itemName,
-      input.email ? `%${input.email}%` : "%__no_email__%",
-      input.rfc ? `%${input.rfc}%` : "%__no_rfc__%"
-    ]
+    [`%· ${input.itemName}`, emailPat, rfcPat]
   );
   return row ? { isDuplicate: true, ref: row.reference } : { isDuplicate: false, ref: null };
+}
+
+/** Fragmento JSON `"clave":"valor"` (con el valor escapado como en JSON.stringify). */
+function jsonField(key: string, value: string): string {
+  return `${JSON.stringify(key)}:${JSON.stringify(value)}`;
 }
 
 /**
@@ -353,7 +361,7 @@ async function findDuplicate(
  * - REGLA DURA: sin RFC ni razón social → score tope 35, riesgo alto, nota;
  * - deriva prioridad y riesgo del score final.
  */
-function finalizeScore(
+export function finalizeScore(
   r: Omit<LeadEnrichmentOutput, "duplicado" | "duplicadoRef">,
   input: LeadEnrichmentInput
 ): void {

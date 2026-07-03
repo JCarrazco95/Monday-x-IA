@@ -8,14 +8,23 @@ export interface MondayContext {
   theme?: "light" | "dark" | "black";
 }
 
-let _sdk: ReturnType<typeof import("monday-sdk-js")["default"]> | null = null;
+// Interfaz mínima de los métodos del SDK que realmente usamos. Se declara aquí
+// para desacoplarnos de los tipos rotos de `monday-sdk-js` (que mezclan el SDK de
+// cliente y el de servidor), en vez de castear con `any` en cada punto de uso.
+interface MondayClient {
+  get(type: string): Promise<{ data?: MondayContext }>;
+  api(query: string): Promise<unknown>;
+  execute(action: string, params?: unknown): Promise<unknown>;
+}
 
-async function getSdk() {
+let _sdk: MondayClient | null = null;
+
+async function getSdk(): Promise<MondayClient | null> {
   if (_sdk) return _sdk;
   try {
     const mod = await import("monday-sdk-js");
     const factory = mod.default ?? (mod as unknown as { default: typeof mod.default }).default;
-    _sdk = factory();
+    _sdk = factory() as unknown as MondayClient;
     return _sdk;
   } catch {
     return null;

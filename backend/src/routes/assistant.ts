@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { structuredCompletion, MODEL_HEAVY } from "../lib/claude.js";
+import { parseReference, safeParseJson } from "../lib/references.js";
 import type { LeadEnrichmentOutput, CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -28,15 +29,6 @@ interface Doc {
   itemName: string;
   texto: string;       // documento para recuperar y citar
   ts: string | null;
-}
-
-function parseReference(reference: string): { itemId: string; itemName: string } {
-  const m = reference.match(/^#(\S+)\s*·\s*(.+)$/);
-  return { itemId: m?.[1] ?? reference, itemName: m?.[2] ?? reference };
-}
-function safeParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try { return JSON.parse(raw) as T; } catch { return null; }
 }
 
 const STOP = new Set([
@@ -68,9 +60,9 @@ async function buildCorpus(): Promise<Doc[]> {
   for (const r of rows) {
     const cur = byRef.get(r.reference) ?? { lead: null, call: null, form: null, ts: null };
     cur.ts = r.timestamp;
-    if (r.agent_id === "lead_enrichment") cur.lead = safeParse<LeadEnrichmentOutput>(r.payload) ?? cur.lead;
-    else if (r.agent_id === "call_intelligence") cur.call = safeParse<CallIntelligenceOutput>(r.payload) ?? cur.call;
-    else if (r.agent_id === "form_analysis") cur.form = safeParse<Record<string, unknown>>(r.payload) ?? cur.form;
+    if (r.agent_id === "lead_enrichment") cur.lead = safeParseJson<LeadEnrichmentOutput>(r.payload) ?? cur.lead;
+    else if (r.agent_id === "call_intelligence") cur.call = safeParseJson<CallIntelligenceOutput>(r.payload) ?? cur.call;
+    else if (r.agent_id === "form_analysis") cur.form = safeParseJson<Record<string, unknown>>(r.payload) ?? cur.form;
     byRef.set(r.reference, cur);
   }
 

@@ -17,11 +17,26 @@ export async function createPostgresDriver(connectionString: string): Promise<Dr
     .default?.Pool ?? pg.Pool;
 
   const isLocal = /@(localhost|127\.0\.0\.1)/.test(connectionString);
-  const pool = new Pool({
-    connectionString,
-    // Los Postgres gestionados suelen requerir SSL con cadena no verificable.
-    ssl: isLocal ? undefined : { rejectUnauthorized: false }
-  });
+  // SSL:
+  //  - local: sin SSL.
+  //  - con DATABASE_CA_CERT (PEM del CA): verificación ESTRICTA del certificado
+  //    (recomendado en producción para evitar MITM sobre la conexión a la BD).
+  //  - sin CA: se acepta la cadena del proveedor gestionado (Render/Neon…), que
+  //    suele ser no verificable; se puede forzar estricto con DATABASE_SSL_STRICT=true.
+  const caCert = process.env.DATABASE_CA_CERT?.trim();
+  const strict = process.env.DATABASE_SSL_STRICT === "true";
+  const ssl = isLocal
+    ? undefined
+    : caCert
+      ? { ca: caCert, rejectUnauthorized: true }
+      : { rejectUnauthorized: strict };
+  if (!isLocal && !caCert && !strict) {
+    console.warn(
+      "⚠️  Postgres sin DATABASE_CA_CERT: la conexión no verifica el certificado. " +
+        "Define DATABASE_CA_CERT (PEM del CA) para verificación estricta en producción."
+    );
+  }
+  const pool = new Pool({ connectionString, ssl });
 
   return {
     kind: "postgres",

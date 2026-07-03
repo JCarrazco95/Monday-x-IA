@@ -27,3 +27,6 @@ Thumbs.db
 
 # Claude Code (config local del usuario)
 .claude/settings.local.json
+
+# Archivos temporales de Word
+~$*.docx

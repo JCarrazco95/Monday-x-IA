@@ -84,7 +84,8 @@ Monorepo en `maxirent-monday/`:
 - Rol admin/vendedor: del SDK de Monday (`me { is_admin }`); override en dev con `?role=admin|sales`.
 
 ## 7. Estado actual
-- ✅ Backend y frontend compilan limpio (filtrando errores pre-existentes de `monday-sdk-js` / `src/lib/mondaySDK.ts`, ver §10).
+- ✅ **Seguridad/robustez endurecidas** (ver `docs/11-correcciones.md`): auth por API key (`API_KEY` → header `x-api-key`; frontend `VITE_API_KEY`), CORS restringido (`CORS_ORIGINS`) + helmet, rate limiting (`lib/rateLimit.ts`), PII enmascarada en la bitácora (`lib/security.ts`), webhooks con comparación timing-safe, Postgres con CA opcional, idempotencia del Writer (tabla `monday_writes`), telemetría de tokens (`GET /api/usage`), prompt caching + caché de análisis de llamada, y pruebas Vitest (`npm test`). El parseo de `reference` vive en `lib/references.ts` (antes duplicado). `lead_scraper` ya está sembrado en `agents`.
+- ✅ Backend y frontend compilan limpio; `mondaySDK.ts` y `Pipeline.tsx` sin errores de tipo propios (quedan solo los `.ts` internos de `monday-sdk-js`, ver §10).
 - ✅ Call Intelligence completo (4 pasadas, 5 secciones, historial por lead, board=todo / item=por teléfono).
 - ✅ Aircall ingesta + transcripción (plumbing; requiere credenciales reales para probar en vivo).
 - ✅ Deploy listo: `backend/Dockerfile`, `frontend/Dockerfile`+`nginx.conf.template`, `render.yaml`, `docs/DEPLOY-RENDER.md`.
@@ -128,3 +129,5 @@ AI_PROVIDER=demo en backend/.env
 `MONDAY_WEBHOOK_SECRET`, `MONDAY_COL_*`, `GOV_API_*`, `AIRCALL_API_ID/TOKEN`, `AIRCALL_WEBHOOK_TOKEN`,
 `DEEPGRAM_API_KEY`, `DATABASE_PATH`, `GOOGLE_PLACES_API_KEY`, `LUSHA_API_KEY`, `DIRECTORY_SCRAPER_ENABLED`,
 `MONDAY_BOARD_ID_CALLS` (+ `MONDAY_COL_CALL_ID/LINK/LEAD`, `CALLS_SYNC_MAX`), `MONDAY_GROUP_PROSPECCION`.
+- **Seguridad/operación (nuevas):** `API_KEY` (auth; frontend `VITE_API_KEY`), `CORS_ORIGINS`,
+  `RATE_LIMIT_API/AI/WEBHOOK`, `CALL_ANALYSIS_CACHE`, `DATABASE_CA_CERT`, `DATABASE_SSL_STRICT`.

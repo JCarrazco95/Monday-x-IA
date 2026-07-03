@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
+import { parseReference, safeParseJson } from "../lib/references.js";
 import type { LeadEnrichmentOutput, CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -39,20 +40,6 @@ interface Snapshot {
   lastTs: string | null;
 }
 
-function parseReference(reference: string): { itemId: string; itemName: string } {
-  const m = reference.match(/^#(\S+)\s*·\s*(.+)$/);
-  return { itemId: m?.[1] ?? reference, itemName: m?.[2] ?? reference };
-}
-
-function safeParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 async function loadSnapshots(): Promise<Snapshot[]> {
   const rows = await db.query<LogRow>(
     `SELECT reference, agent_id, payload, timestamp
@@ -70,9 +57,9 @@ async function loadSnapshots(): Promise<Snapshot[]> {
       byRef.set(r.reference, s);
     }
     s.lastTs = r.timestamp;
-    if (r.agent_id === "lead_enrichment") s.lead = safeParse<LeadEnrichmentOutput>(r.payload) ?? s.lead;
-    else if (r.agent_id === "form_analysis") s.form = safeParse<Record<string, unknown>>(r.payload) ?? s.form;
-    else if (r.agent_id === "call_intelligence") s.call = safeParse<CallIntelligenceOutput>(r.payload) ?? s.call;
+    if (r.agent_id === "lead_enrichment") s.lead = safeParseJson<LeadEnrichmentOutput>(r.payload) ?? s.lead;
+    else if (r.agent_id === "form_analysis") s.form = safeParseJson<Record<string, unknown>>(r.payload) ?? s.form;
+    else if (r.agent_id === "call_intelligence") s.call = safeParseJson<CallIntelligenceOutput>(r.payload) ?? s.call;
   }
   return [...byRef.values()];
 }

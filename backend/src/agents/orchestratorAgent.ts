@@ -1,5 +1,6 @@
 import { db } from "../db/index.js";
 import { logActivity } from "../lib/activityLog.js";
+import { formatReference } from "../lib/references.js";
 import { runFormAnalysisAgent, AGENT_ID as FORM_AGENT } from "./formAnalysisAgent.js";
 import { runLeadEnrichmentAgent, AGENT_ID as LEAD_AGENT } from "./leadEnrichmentAgent.js";
 import { runCallIntelligenceAgent, AGENT_ID as CALL_AGENT } from "./callIntelligenceAgent.js";
@@ -39,7 +40,7 @@ export async function handleOrchestratorEvent(event: OrchestratorEvent) {
     type: "info",
     title: `Evento recibido: ${event.eventType}`,
     detail: `Item: ${event.item.itemName} (#${event.item.itemId})`,
-    reference: `#${event.item.itemId} · ${event.item.itemName}`,
+    reference: formatReference(event.item.itemId, event.item.itemName),
     payload: event
   });
 
@@ -48,7 +49,7 @@ export async function handleOrchestratorEvent(event: OrchestratorEvent) {
       agentId: AGENT_ID,
       type: "warning",
       title: "Orquestador pausado — evento ignorado",
-      reference: `#${event.item.itemId} · ${event.item.itemName}`
+      reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { skipped: true, reason: "orchestrator_paused" };
   }
@@ -78,7 +79,7 @@ export async function handleOrchestratorEvent(event: OrchestratorEvent) {
       type: "success",
       title: isMockNote("Resultados escritos en Monday"),
       detail: `Columnas: ${writeResult.columnsUpdated.join(", ") || "ninguna"} · Subitems creados: ${writeResult.subitemsCreated} · Comentario: ${writeResult.commentPosted ? "sí" : "no"}`,
-      reference: `#${event.item.itemId} · ${event.item.itemName}`,
+      reference: formatReference(event.item.itemId, event.item.itemName),
       payload: writeInput,
       durationMs: Date.now() - writeStart
     });
@@ -87,7 +88,7 @@ export async function handleOrchestratorEvent(event: OrchestratorEvent) {
       agentId: WRITER_AGENT,
       type: "warning",
       title: "Monday Writer pausado — cambios no aplicados",
-      reference: `#${event.item.itemId} · ${event.item.itemName}`,
+      reference: formatReference(event.item.itemId, event.item.itemName),
       payload: writeInput
     });
   }
@@ -96,7 +97,7 @@ export async function handleOrchestratorEvent(event: OrchestratorEvent) {
     agentId: AGENT_ID,
     type: "success",
     title: `Evento procesado: ${event.eventType}`,
-    reference: `#${event.item.itemId} · ${event.item.itemName}`,
+    reference: formatReference(event.item.itemId, event.item.itemName),
     durationMs: Date.now() - start
   });
 
@@ -121,7 +122,7 @@ async function processFormSubmitted(event: OrchestratorEvent): Promise<MondayWri
       agentId: FORM_AGENT,
       type: "warning",
       title: "Agente pausado — formulario no analizado",
-      reference: `#${event.item.itemId} · ${event.item.itemName}`
+      reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { itemId: input.itemId, itemName: input.itemName };
   }
@@ -134,7 +135,7 @@ async function processFormSubmitted(event: OrchestratorEvent): Promise<MondayWri
     type: "success",
     title: "Formulario analizado",
     detail: result.resumen,
-    reference: `#${event.item.itemId} · ${event.item.itemName}`,
+    reference: formatReference(event.item.itemId, event.item.itemName),
     payload: result,
     durationMs: Date.now() - start
   });
@@ -172,7 +173,7 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
       agentId: LEAD_AGENT,
       type: "warning",
       title: "Agente pausado — lead no calificado",
-      reference: `#${event.item.itemId} · ${event.item.itemName}`
+      reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { itemId: input.itemId, itemName: input.itemName };
   }
@@ -185,7 +186,7 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
     type: result.duplicado ? "warning" : "success",
     title: result.duplicado ? "Lead duplicado detectado" : "Lead calificado",
     detail: result.resumen + (result.duplicado ? ` · Duplicado de ${result.duplicadoRef}` : ""),
-    reference: `#${event.item.itemId} · ${event.item.itemName}`,
+    reference: formatReference(event.item.itemId, event.item.itemName),
     payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono },
     durationMs: Date.now() - start
   });
@@ -255,7 +256,7 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
       agentId: CALL_AGENT,
       type: "warning",
       title: "Agente pausado — llamada no analizada",
-      reference: `#${event.item.itemId} · ${event.item.itemName}`
+      reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { itemId: input.itemId, itemName: input.itemName };
   }
@@ -268,7 +269,7 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
     type: "success",
     title: "Llamada analizada",
     detail: result.resumen,
-    reference: `#${event.item.itemId} · ${event.item.itemName}`,
+    reference: formatReference(event.item.itemId, event.item.itemName),
     payload: result,
     durationMs: Date.now() - start
   });

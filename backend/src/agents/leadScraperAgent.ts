@@ -16,6 +16,7 @@
 
 import { db } from "../db/index.js";
 import { createMondayItem } from "../lib/monday.js";
+import { itemNameOf } from "../lib/references.js";
 import { logActivity } from "../lib/activityLog.js";
 import { handleOrchestratorEvent } from "./orchestratorAgent.js";
 import { getLeadSource, type Prospect, type SearchParams } from "../lib/leadSources.js";
@@ -51,9 +52,7 @@ async function existingLeadNames(): Promise<Set<string>> {
     );
     const set = new Set<string>();
     for (const r of rows) {
-      // reference: "#<itemId> · <itemName>"
-      const m = r.reference?.match(/^#\S+\s*·\s*(.+)$/);
-      if (m?.[1]) set.add(normalize(m[1]));
+      if (r.reference) set.add(normalize(itemNameOf(r.reference)));
     }
     return set;
   } catch {

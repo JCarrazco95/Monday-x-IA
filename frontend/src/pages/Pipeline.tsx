@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid
 } from "recharts";
 import { TrendingUp, RefreshCw, Info, DollarSign } from "lucide-react";
 import { api } from "../lib/api";
@@ -112,7 +112,7 @@ export function Pipeline() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
                   <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#64748b" }} />
                   <YAxis tickFormatter={moneyShort} tick={{ fontSize: 11, fill: "#64748b" }} width={48} />
-                  <Tooltip formatter={(v: number) => money(v, moneda)} />
+                  <Tooltip formatter={(v) => money(Number(v) || 0, moneda)} />
                   <Bar dataKey="ponderado" name="Esperado" radius={[4, 4, 0, 0]} fill="#1462b4" />
                 </BarChart>
               </ResponsiveContainer>
