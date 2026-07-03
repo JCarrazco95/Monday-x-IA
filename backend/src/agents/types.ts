@@ -238,6 +238,14 @@ export interface CallIntelligenceOutput {
   vendedor?: SellerAnalysis;
   analisisProfundo?: DeepCallAnalysis;
   oportunidades?: UpsellAnalysis;
+  /**
+   * Procedencia del análisis:
+   *  - "ia":       generado por el proveedor de IA real.
+   *  - "demo":     modo demo declarado (sin credenciales) → heurísticas.
+   *  - "fallback": se INTENTÓ la IA pero falló (timeout/error) y se cayó a
+   *                heurísticas. Distingue un resultado degradado de uno real.
+   */
+  fuenteAnalisis?: "ia" | "demo" | "fallback";
 }
 
 // ---------- Monday Writer Agent ----------

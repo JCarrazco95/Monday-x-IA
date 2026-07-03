@@ -1,5 +1,6 @@
 import { db } from "../db/index.js";
 import { logActivity } from "../lib/activityLog.js";
+import { parseReference, safeParseJson } from "../lib/references.js";
 import { runMondayWriterAgent } from "./mondayWriterAgent.js";
 import type {
   NextBestAction,
@@ -49,20 +50,6 @@ interface ItemSnapshot {
   lastActivityTs: string | null; // última actividad real (excluye al propio NBA)
 }
 
-function parseReference(reference: string): { itemId: string; itemName: string } {
-  const m = reference.match(/^#(\S+)\s*·\s*(.+)$/);
-  return { itemId: m?.[1] ?? reference, itemName: m?.[2] ?? reference };
-}
-
-function safeParse<T>(raw: string | null): T | null {
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
-  }
-}
-
 function hoursBetween(fromIso: string | null, now: Date): number {
   if (!fromIso) return Infinity;
   const t = Date.parse(fromIso.includes("T") ? fromIso : fromIso.replace(" ", "T") + "Z");
@@ -81,7 +68,7 @@ const MESES: Record<string, number> = {
  * Devuelve null si no hay una fecha CONCRETA (p.ej. "el viernes", "próxima semana"),
  * en cuyo caso el compromiso se trata como "sin fecha clara".
  */
-function parseFechaCompromiso(texto: string | undefined | null, now: Date): Date | null {
+export function parseFechaCompromiso(texto: string | undefined | null, now: Date): Date | null {
   if (!texto) return null;
   const t = texto.toLowerCase().trim();
 
@@ -146,10 +133,10 @@ async function loadSnapshots(): Promise<ItemSnapshot[]> {
       byRef.set(r.reference, snap);
     }
     if (r.agent_id === "lead_enrichment") {
-      const p = safeParse<LeadEnrichmentOutput>(r.payload);
+      const p = safeParseJson<LeadEnrichmentOutput>(r.payload);
       if (p) snap.lead = p; // el orden ASC garantiza que el último gana
     } else if (r.agent_id === "call_intelligence") {
-      const p = safeParse<CallIntelligenceOutput>(r.payload);
+      const p = safeParseJson<CallIntelligenceOutput>(r.payload);
       if (p) {
         snap.call = p;
         snap.callTs = r.timestamp;

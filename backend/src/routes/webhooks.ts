@@ -4,6 +4,7 @@ import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
 import { getMondayItem } from "../lib/monday.js";
 import { logActivity } from "../lib/activityLog.js";
 import { ingestAircallCall } from "../lib/aircallIngest.js";
+import { safeCompare } from "../lib/security.js";
 
 // ===========================================================================
 //  Webhook NATIVO de Monday.com.
@@ -41,8 +42,7 @@ function verifyMondaySignature(authHeader?: string): boolean {
   if (parts.length !== 3) return false;
   const [h, p, sig] = parts;
   const expected = crypto.createHmac("sha256", SECRET as string).update(`${h}.${p}`).digest("base64url");
-  if (sig.length !== expected.length) return false;
-  return crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+  return safeCompare(sig, expected);
 }
 
 type Col = { id: string; title: string; text: string };
@@ -130,7 +130,8 @@ const AIRCALL_WEBHOOK_TOKEN = process.env.AIRCALL_WEBHOOK_TOKEN;
 webhooksRouter.post("/aircall", async (req, res) => {
   const body = (req.body ?? {}) as AircallWebhookBody;
 
-  if (AIRCALL_WEBHOOK_TOKEN && body.token && body.token !== AIRCALL_WEBHOOK_TOKEN) {
+  // Si hay token configurado, se exige y se compara en tiempo constante.
+  if (AIRCALL_WEBHOOK_TOKEN && !safeCompare(body.token, AIRCALL_WEBHOOK_TOKEN)) {
     return res.status(401).json({ error: "Token de webhook Aircall invalido." });
   }
 

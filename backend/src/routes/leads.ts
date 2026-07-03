@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
+import { parseReference } from "../lib/references.js";
 
 export const leadsRouter = Router();
 
@@ -16,11 +17,6 @@ const SPECIALIST_AGENTS = ["lead_enrichment", "form_analysis", "call_intelligenc
 interface RefRow {
   reference: string;
   last_ts: string;
-}
-
-function parseReference(reference: string): { itemId: string; itemName: string } {
-  const m = reference.match(/^#(\S+)\s*·\s*(.+)$/);
-  return { itemId: m?.[1] ?? reference, itemName: m?.[2] ?? reference };
 }
 
 async function latestPayload<T = Record<string, unknown>>(

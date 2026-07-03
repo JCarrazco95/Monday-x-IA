@@ -80,6 +80,18 @@ const agents = [
     version: "0.1.0"
   },
   {
+    id: "lead_scraper",
+    name: "Lead Scraper Agent",
+    role: "Prospección · Alta masiva de leads",
+    description:
+      "Prospección y alta masiva de leads desde fuentes conectables (Google Places, licitaciones de gobierno, Lusha, directorios web). Busca prospectos (preview), marca duplicados y da de alta los seleccionados reusando el flujo lead_created (enriquecimiento + scoring + Writer).",
+    priority: 5,
+    status: "active",
+    model: "deterministic",
+    tools: JSON.stringify(["search_prospects", "dedupe_leads", "import_prospects"]),
+    version: "0.1.0"
+  },
+  {
     id: "monday_writer",
     name: "Monday Writer Agent",
     role: "Soporte · Escritura en Monday",

@@ -1,12 +1,43 @@
+import crypto from "node:crypto";
 import {
   createMondaySubitem,
   postMondayComment,
   updateMondayColumn,
   isMondayMockMode
 } from "../lib/monday.js";
+import { db } from "../db/index.js";
 import type { MondayWriteInput, MondayWriteOutput } from "./types.js";
 
 export const AGENT_ID = "monday_writer";
+
+/**
+ * Idempotencia de subitems/comentarios: firma de la escritura (item + subitems +
+ * comentario). Si ya se aplicó una idéntica, no se repite (evita duplicar
+ * subitems/comentarios cuando el mismo análisis se reprocesa). Las COLUMNAS no
+ * entran en la firma porque `updateMondayColumn` sobrescribe (ya es idempotente).
+ */
+function writeSignature(input: MondayWriteInput): string {
+  const payload = JSON.stringify({
+    itemId: input.itemId,
+    subitems: input.subitems ?? [],
+    comment: input.comment ?? ""
+  });
+  return crypto.createHash("sha256").update(payload).digest("hex");
+}
+
+/** ¿Ya se aplicó esta escritura antes? Registra la firma si es nueva. */
+async function claimWrite(signature: string, itemId: string): Promise<boolean> {
+  const existing = await db.queryOne<{ id: number }>(
+    "SELECT id FROM monday_writes WHERE signature = ?",
+    [signature]
+  );
+  if (existing) return false; // ya aplicada → no repetir subitems/comentario
+  await db.run(
+    "INSERT INTO monday_writes (signature, item_id, created_at) VALUES (?, ?, ?)",
+    [signature, itemId, new Date().toISOString()]
+  );
+  return true;
+}
 
 const BOARD_ID = process.env.MONDAY_BOARD_ID_LEADS ?? "";
 
@@ -81,7 +112,16 @@ export async function runMondayWriterAgent(input: MondayWriteInput): Promise<Mon
     }
   }
 
-  if (input.subitems) {
+  // Idempotencia: subitems y comentario solo se crean si esta escritura exacta
+  // no se aplicó antes. Las columnas ya se escribieron arriba (son idempotentes).
+  const hasBodyWrites = Boolean(input.subitems?.length) || Boolean(input.comment);
+  const firstTime = hasBodyWrites ? await claimWrite(writeSignature(input), input.itemId) : true;
+
+  if (!firstTime) {
+    console.warn(`[mondayWriter] escritura duplicada omitida (idempotencia) para item ${input.itemId}.`);
+  }
+
+  if (firstTime && input.subitems) {
     for (const sub of input.subitems) {
       try {
         await createMondaySubitem({ parentItemId: input.itemId, itemName: sub.name, columnValues: sub.columnValues });
@@ -92,7 +132,7 @@ export async function runMondayWriterAgent(input: MondayWriteInput): Promise<Mon
     }
   }
 
-  if (input.comment) {
+  if (firstTime && input.comment) {
     try {
       await postMondayComment({ itemId: input.itemId, body: input.comment });
       commentPosted = true;

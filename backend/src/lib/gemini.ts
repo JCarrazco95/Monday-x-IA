@@ -1,6 +1,18 @@
 import { GoogleGenAI } from "@google/genai";
 import { geminiKey, MODEL_DEFAULT } from "./provider.js";
+import { trackUsage } from "./usage.js";
+import { withRetry } from "./retry.js";
 import type { WebResearchResult } from "./claude.js";
+
+/** Normaliza el usageMetadata de Gemini al formato común de telemetría. */
+function trackGeminiUsage(model: string, response: unknown): void {
+  const meta = (response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } })
+    .usageMetadata;
+  trackUsage(model, {
+    input_tokens: meta?.promptTokenCount ?? 0,
+    output_tokens: meta?.candidatesTokenCount ?? 0
+  });
+}
 
 // ===========================================================================
 //  Adaptador de Google Gemini (tier gratuito para pruebas).
@@ -60,7 +72,7 @@ export async function geminiStructured<T>(opts: {
 Devuelve EXCLUSIVAMENTE un objeto JSON válido (sin markdown ni texto adicional) que cumpla este JSON Schema:
 ${JSON.stringify(opts.inputSchema)}`;
 
-  const response = await ai.models.generateContent({
+  const response = await withRetry(() => ai.models.generateContent({
     model: geminiModel(opts.model),
     contents: opts.prompt,
     config: {
@@ -72,8 +84,9 @@ ${JSON.stringify(opts.inputSchema)}`;
       // JSON (evita que la respuesta se trunque) y reduce la latencia.
       thinkingConfig: { thinkingBudget: 0 }
     }
-  });
+  }), "gemini structured");
 
+  trackGeminiUsage(geminiModel(opts.model), response);
   const text = response.text ?? "";
   if (!text) throw new Error("Gemini devolvió una respuesta vacía.");
   return parseJsonLoose<T>(text);
@@ -94,7 +107,7 @@ export async function geminiResearch(opts: {
   let response;
   let usedWeb = true;
   try {
-    response = await ai.models.generateContent({
+    response = await withRetry(() => ai.models.generateContent({
       model,
       contents: opts.prompt,
       config: {
@@ -102,17 +115,18 @@ export async function geminiResearch(opts: {
         tools: [{ googleSearch: {} }],
         maxOutputTokens: MAX_OUTPUT_TOKENS
       }
-    });
+    }), "gemini research");
   } catch {
     // La búsqueda web no está disponible → conocimiento del modelo.
     usedWeb = false;
-    response = await ai.models.generateContent({
+    response = await withRetry(() => ai.models.generateContent({
       model,
       contents: opts.prompt,
       config: { systemInstruction: opts.system, maxOutputTokens: MAX_OUTPUT_TOKENS }
-    });
+    }), "gemini research (sin web)");
   }
 
+  trackGeminiUsage(model, response);
   const text = response.text ?? "";
 
   // Extrae fuentes del grounding metadata.

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { logActivity, type LogType } from "../lib/activityLog.js";
+import { redactLogRow } from "../lib/security.js";
 
 export const logsRouter = Router();
 
@@ -28,7 +29,7 @@ logsRouter.get("/", async (req, res) => {
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const lim = Math.min(Number(limit) || 200, 1000);
 
-  const rows = await db.query(
+  const rows = await db.query<{ payload?: string | null }>(
     `SELECT logs.*, agents.name as agent_name
        FROM logs
        JOIN agents ON agents.id = logs.agent_id
@@ -38,7 +39,9 @@ logsRouter.get("/", async (req, res) => {
     params
   );
 
-  res.json(rows);
+  // La bitácora se expone con la PII enmascarada (email/RFC/teléfono). Las vistas
+  // que sí necesitan el dato del lead usan /api/leads.
+  res.json(rows.map(redactLogRow));
 });
 
 // POST /api/logs - crear entrada manual (desde el panel) o desde un agente
@@ -68,14 +71,14 @@ logsRouter.post("/", async (req, res) => {
   res.status(201).json(row);
 });
 
-// GET /api/logs/export - exporta toda la bitácora como JSON
+// GET /api/logs/export - exporta toda la bitácora como JSON (PII enmascarada)
 logsRouter.get("/export", async (_req, res) => {
-  const rows = await db.query(
+  const rows = await db.query<{ payload?: string | null }>(
     `SELECT logs.*, agents.name as agent_name
        FROM logs JOIN agents ON agents.id = logs.agent_id
        ORDER BY logs.timestamp ASC`
   );
 
   res.setHeader("Content-Disposition", "attachment; filename=maxirent-bitacora.json");
-  res.json(rows);
+  res.json(rows.map(redactLogRow));
 });

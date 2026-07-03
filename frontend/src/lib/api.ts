@@ -2,6 +2,10 @@ import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, Orch
 
 const BASE = "/api";
 
+// API key opcional para el backend protegido. Se inyecta en build con
+// VITE_API_KEY; si no está, no se envía nada (modo demo/local con auth off).
+const API_KEY = import.meta.env.VITE_API_KEY as string | undefined;
+
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Reintenta ante 502/503/504: en el plan free de Render el backend "duerme" y
@@ -19,8 +23,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     let res: Response;
     try {
       res = await fetch(`${BASE}${path}`, {
-        headers: { "Content-Type": "application/json" },
-        ...init
+        ...init,
+        headers: {
+          "Content-Type": "application/json",
+          ...(API_KEY ? { "x-api-key": API_KEY } : {}),
+          ...init?.headers
+        }
       });
     } catch (err) {
       // Error de red (backend aún despertando): reintenta si es GET.

@@ -1,6 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { PROVIDER, isMockMode, MODEL_DEFAULT, MODEL_HEAVY } from "./provider.js";
 import { geminiStructured, geminiResearch } from "./gemini.js";
+import { trackUsage } from "./usage.js";
+import { withRetry } from "./retry.js";
 
 // ===========================================================================
 //  Router de IA.
@@ -54,10 +56,18 @@ export async function structuredCompletion<T>(opts: {
   // PROVIDER === "claude"
   if (!anthropic) return opts.mockFn();
 
-  const response = await anthropic.messages.create({
-    model: opts.model ?? MODEL_DEFAULT,
+  const model = opts.model ?? MODEL_DEFAULT;
+  const response = await withRetry(() => anthropic.messages.create({
+    model,
     max_tokens: 2048,
-    system: opts.system,
+    // Prompt caching: el system prompt de los agentes es grande y ESTÁTICO
+    // (Sandler+Challenger+Integrado, etc.), así que se cachea. En llamadas
+    // sucesivas el prefijo cacheado se lee (cache_read) en vez de re-facturarse,
+    // reduciendo el costo de tokens de entrada de forma notable. El `cache_control`
+    // es GA en la API; el cast cubre los tipos antiguos del SDK 0.32.1.
+    system: [
+      { type: "text", text: opts.system, cache_control: { type: "ephemeral" } }
+    ] as unknown as Anthropic.MessageCreateParamsNonStreaming["system"],
     messages: [{ role: "user", content: opts.prompt }],
     tools: [
       {
@@ -67,7 +77,8 @@ export async function structuredCompletion<T>(opts: {
       }
     ],
     tool_choice: { type: "tool", name: opts.toolName }
-  });
+  }), `claude structuredCompletion (${opts.toolName})`);
+  trackUsage(model, response.usage);
 
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
@@ -115,7 +126,9 @@ export async function webResearch(opts: {
   let response;
   let usedWeb = true;
   try {
-    response = await anthropic.messages.create({
+    // Los errores transitorios (429/5xx/timeout) se reintentan; si aun así falla
+    // (o la herramienta no está disponible), cae al conocimiento del modelo.
+    response = await withRetry(() => anthropic.messages.create({
       ...baseParams,
       tools: [
         {
@@ -124,12 +137,13 @@ export async function webResearch(opts: {
           max_uses: opts.maxSearches ?? 5
         } as unknown as Anthropic.Tool
       ]
-    });
+    }), "claude webResearch");
   } catch {
     // La herramienta de búsqueda web no está disponible → conocimiento del modelo
     usedWeb = false;
-    response = await anthropic.messages.create(baseParams);
+    response = await withRetry(() => anthropic.messages.create(baseParams), "claude webResearch (sin web)");
   }
+  trackUsage(baseParams.model, response.usage);
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")

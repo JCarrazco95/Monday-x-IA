@@ -51,10 +51,21 @@ CREATE TABLE IF NOT EXISTS company_intel (
   updated_at   TEXT NOT NULL
 );
 
+-- Registro de escrituras a Monday para IDEMPOTENCIA: guarda la firma de cada
+-- escritura (subitems + comentario) ya aplicada, para no duplicarla si el mismo
+-- análisis se reprocesa (reintento de webhook, re-sync del board, etc.).
+CREATE TABLE IF NOT EXISTS monday_writes (
+  id          ${autoId},
+  signature   TEXT NOT NULL UNIQUE,
+  item_id     TEXT NOT NULL,
+  created_at  TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_logs_agent ON logs(agent_id);
 CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_logs_reference ON logs(reference);
 CREATE INDEX IF NOT EXISTS idx_company_intel_key ON company_intel(key);
+CREATE INDEX IF NOT EXISTS idx_monday_writes_signature ON monday_writes(signature);
 `;
 }
 

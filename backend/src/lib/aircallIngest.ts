@@ -17,6 +17,7 @@ import { logActivity } from "./activityLog.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
+import { itemIdOf } from "./references.js";
 import { db } from "../db/index.js";
 
 export interface AircallIngestResult {
@@ -198,8 +199,7 @@ async function analyzedCallItemIds(): Promise<Set<string>> {
       []
     );
     for (const r of rows) {
-      const m = r.reference?.match(/^#(\S+)\s*·/);
-      if (m?.[1]) set.add(m[1]);
+      if (r.reference) set.add(itemIdOf(r.reference));
     }
   } catch { /* noop */ }
   return set;
