@@ -179,9 +179,15 @@ callsRouter.get("/board", async (_req, res) => {
 });
 
 // POST /api/calls/sync-board -> lee el tablero de Aircall y analiza lo nuevo.
-callsRouter.post("/sync-board", async (_req, res) => {
+//   Body opcional: { max } (cuántas analizar como máximo, para pruebas) y
+//   { since } (ISO; solo llamadas iniciadas en/después de esa fecha).
+callsRouter.post("/sync-board", async (req, res) => {
+  const { max, since } = (req.body ?? {}) as { max?: number; since?: string };
   try {
-    res.json(await syncCallsBoard());
+    res.json(await syncCallsBoard({
+      max: typeof max === "number" && max > 0 ? max : undefined,
+      sinceISO: typeof since === "string" && since.trim() ? since.trim() : undefined
+    }));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

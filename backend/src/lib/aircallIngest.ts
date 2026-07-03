@@ -185,6 +185,9 @@ export interface CallsSyncResult {
 }
 
 const CALLS_SYNC_MAX = Number(process.env.CALLS_SYNC_MAX ?? 25);
+// "De aquí en adelante": solo se analizan llamadas iniciadas en/después de esta
+// fecha ISO. Configúralo (p. ej. 2026-07-03) para ignorar el histórico.
+const CALLS_SYNC_SINCE = process.env.CALLS_SYNC_SINCE;
 
 /** itemIds de llamadas ya analizadas (desde la bitácora) para no repetir. */
 async function analyzedCallItemIds(): Promise<Set<string>> {
@@ -202,18 +205,23 @@ async function analyzedCallItemIds(): Promise<Set<string>> {
   return set;
 }
 
-export async function syncCallsBoard(): Promise<CallsSyncResult> {
+export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } = {}): Promise<CallsSyncResult> {
   const out: CallsSyncResult = { leidas: 0, analizadas: 0, yaAnalizadas: 0, sinFuente: 0, errores: [], detalle: [] };
   if (!callsBoardConfigured) {
     throw new Error("Falta MONDAY_BOARD_ID_CALLS (tablero de llamadas de Aircall).");
   }
 
-  const items = await getCallsBoardItems();
+  const max = Math.max(1, opts.max ?? CALLS_SYNC_MAX);
+  const sinceISO = opts.sinceISO ?? CALLS_SYNC_SINCE;
+
+  let items = await getCallsBoardItems(); // ya vienen más recientes primero
+  // "De aquí en adelante": ignora llamadas anteriores al corte de fecha.
+  if (sinceISO) items = items.filter((it) => it.startedAt && it.startedAt >= sinceISO);
   out.leidas = items.length;
   const analyzed = await analyzedCallItemIds();
 
   for (const it of items) {
-    if (out.analizadas >= CALLS_SYNC_MAX) break;
+    if (out.analizadas >= max) break;
     const link = it.link;
     const nombre = it.leadName ?? it.itemName;
     // El ID NUMÉRICO de Aircall viene en el link (assets.aircall.io/calls/<id>/recording);

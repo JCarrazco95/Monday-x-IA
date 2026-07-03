@@ -123,6 +123,7 @@ const CALLS_BOARD_ID = process.env.MONDAY_BOARD_ID_CALLS ?? "18398458590";
 const CALLS_COL_ID = process.env.MONDAY_COL_CALL_ID ?? "text_mm07x5tn";
 const CALLS_COL_LINK = process.env.MONDAY_COL_CALL_LINK ?? "link_mm07s8jf";
 const CALLS_COL_LEAD = process.env.MONDAY_COL_CALL_LEAD ?? "board_relation_mm1whczc";
+const CALLS_COL_DATE = process.env.MONDAY_COL_CALL_DATE ?? "date_mm07gzt1"; // "Started At"
 
 export interface CallBoardItem {
   itemId: string;
@@ -131,6 +132,7 @@ export interface CallBoardItem {
   link: string | null;
   leadId: string | null;
   leadName: string | null;
+  startedAt: string | null; // ISO (para ordenar/filtrar por fecha)
 }
 
 export const callsBoardConfigured = Boolean(CALLS_BOARD_ID);
@@ -152,39 +154,49 @@ export async function getCallsBoardItems(limit = 200): Promise<CallBoardItem[]> 
               value
               ... on BoardRelationValue { linked_item_ids display_value }
               ... on LinkValue { url }
+              ... on DateValue { date time }
             }
           }
         }
       }
     }
   `;
-  type CV = { id: string; type?: string; text?: string; value?: string; url?: string; linked_item_ids?: string[]; display_value?: string };
+  type CV = { id: string; type?: string; text?: string; value?: string; url?: string; linked_item_ids?: string[]; display_value?: string; date?: string; time?: string };
   const data = await mondayRequest<{ boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; column_values?: CV[] }> } }> }>(
     query,
-    { ids: [CALLS_BOARD_ID], cols: [CALLS_COL_ID, CALLS_COL_LINK, CALLS_COL_LEAD], limit }
+    { ids: [CALLS_BOARD_ID], cols: [CALLS_COL_ID, CALLS_COL_LINK, CALLS_COL_LEAD, CALLS_COL_DATE], limit }
   );
   const items = data?.boards?.[0]?.items_page?.items ?? [];
-  return items.map((it) => {
+  const mapped: CallBoardItem[] = items.map((it) => {
     const cvs = it.column_values ?? [];
     const byId = (id: string) => cvs.find((c) => c.id === id);
     const callCv = byId(CALLS_COL_ID);
     const linkCv = byId(CALLS_COL_LINK);
     const leadCv = byId(CALLS_COL_LEAD);
+    const dateCv = byId(CALLS_COL_DATE);
     // El link puede venir como url (LinkValue) o dentro del JSON `value`.
     let link: string | null = linkCv?.url ?? null;
     if (!link && linkCv?.value) {
       try { link = (JSON.parse(linkCv.value) as { url?: string }).url ?? null; } catch { /* noop */ }
     }
     if (!link && linkCv?.text) link = linkCv.text.split(" - ")[0] || null;
+    // Fecha ISO desde DateValue (date + time) o el texto de la columna.
+    let startedAt: string | null = null;
+    if (dateCv?.date) startedAt = dateCv.time ? `${dateCv.date}T${dateCv.time}Z` : `${dateCv.date}T00:00:00Z`;
+    else if (dateCv?.text) startedAt = dateCv.text;
     return {
       itemId: it.id,
       itemName: it.name,
       callId: callCv?.text?.trim() || null,
       link,
       leadId: leadCv?.linked_item_ids?.[0] ?? null,
-      leadName: leadCv?.display_value?.trim() || null
+      leadName: leadCv?.display_value?.trim() || null,
+      startedAt
     };
   });
+  // Más recientes primero (los sin fecha, al final).
+  mapped.sort((a, b) => (b.startedAt ?? "").localeCompare(a.startedAt ?? ""));
+  return mapped;
 }
 
 export async function updateMondayColumn(opts: {

@@ -56,6 +56,13 @@ export async function runMondayWriterAgent(input: MondayWriteInput): Promise<Mon
 
   const skipped: string[] = [];
 
+  // Guarda de seguridad: si el itemId NO es un id real de Monday (numérico) —p.ej.
+  // análisis de llamadas con id "aircall-…", "url-…", "call-…"— NO intentamos
+  // escribir en Monday. El análisis se guarda solo en nuestra bitácora.
+  if (!/^\d+$/.test(String(input.itemId))) {
+    return { written: false, columnsUpdated: [], subitemsCreated: 0, commentPosted: false };
+  }
+
   if (input.columnUpdates) {
     for (const [logicalKey, value] of Object.entries(input.columnUpdates)) {
       const columnId = resolveColumnId(logicalKey);
