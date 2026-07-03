@@ -24,6 +24,8 @@ import { initDb, dbKind, db } from "./db/index.js";
 import { seed } from "./db/seed.js";
 import { runNextBestActionAgent } from "./agents/nextBestActionAgent.js";
 import { usageSummary } from "./lib/usage.js";
+import { syncCallsBoard } from "./lib/aircallIngest.js";
+import { callsBoardConfigured } from "./lib/monday.js";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -104,7 +106,29 @@ async function start() {
     console.log(`   Auth:    ${authEnabled ? "ON (API key requerida)" : "OFF (abierta)"}`);
     warnIfAuthDisabled();
     scheduleNextBestAction();
+    scheduleCallsSync();
   });
+}
+
+// "Cron" interno para sincronizar el tablero de llamadas de Aircall: si
+// CALLS_SYNC_CRON_HOURS está definido (p. ej. 1 = cada hora, 0.5 = 30 min),
+// corre syncCallsBoard() automáticamente. Respeta CALLS_SYNC_SINCE (solo lo
+// nuevo) y CALLS_SYNC_MAX (tope por corrida). Idempotente: no re-analiza.
+function scheduleCallsSync() {
+  const hours = Number(process.env.CALLS_SYNC_CRON_HOURS);
+  if (!hours || hours <= 0 || !callsBoardConfigured) return;
+  const intervalMs = hours * 3_600_000;
+  const tick = async () => {
+    try {
+      const r = await syncCallsBoard();
+      if (r.analizadas > 0) console.log(`   Calls sync: ${r.analizadas} llamada(s) nueva(s) analizada(s).`);
+    } catch (err) {
+      console.error("   Calls sync error:", err instanceof Error ? err.message : err);
+    }
+  };
+  setTimeout(tick, 30_000); // primera corrida ~30s tras arrancar
+  setInterval(tick, intervalMs).unref();
+  console.log(`   Calls sync cron: cada ${hours}h\n`);
 }
 
 // "Cron" interno opcional para el Next Best Action: si NBA_CRON_HOURS está
