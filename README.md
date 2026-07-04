@@ -209,9 +209,11 @@ El backend incluye controles activables por entorno (consistentes con el patrón
 demo/real del resto del sistema):
 
 - **Autenticación por API key** — define `API_KEY` en el backend para exigir el
-  header `x-api-key` en toda la API (menos `/health` y webhooks). El frontend la
-  envía vía `VITE_API_KEY` en build. Sin `API_KEY`, la API queda abierta (dev/demo)
-  y se imprime una advertencia al arrancar.
+  header `x-api-key` en toda la API (menos `/health` y webhooks). En el servicio
+  del frontend se define la MISMA clave (`API_KEY` o `VITE_API_KEY`): Nginx la
+  inyecta server-side en el proxy `/api`, así nunca queda en el JS público y se
+  rota sin rebuild. Sin `API_KEY`, la API queda abierta (dev/demo) y se imprime
+  una advertencia al arrancar.
 - **CORS restringido** — `CORS_ORIGINS` (lista separada por comas) limita los
   orígenes permitidos; sin ella se refleja el origen (dev).
 - **Rate limiting** — límites por IP: general (`RATE_LIMIT_API`, def. 1000/15min),

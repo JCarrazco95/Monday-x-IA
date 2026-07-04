@@ -46,7 +46,8 @@ de que la rama que vas a desplegar tenga el último commit (`git push`).
 | `CALLS_SYNC_SINCE` | fecha de arranque (ej. `2026-07-15`) | Ignora el histórico viejo |
 
 - [ ] En el **frontend**: `BACKEND_URL` = URL pública del backend, y
-      `VITE_API_KEY` = el mismo valor que `API_KEY` (se inyecta en el build).
+      `API_KEY` = el mismo valor que en el backend (Nginx la inyecta server-side
+      en el proxy `/api`; no queda en el JS público y se rota sin rebuild).
 - [ ] Verificar: `curl https://<backend>/api/health` → `auth:"on"`, `db:"postgres"`,
       `mondayMode:"live"`, `aiProvider:"claude"`.
 - [ ] Verificar que sin key la API rechaza: `curl -s -o /dev/null -w "%{http_code}" https://<backend>/api/agents` → `401`.

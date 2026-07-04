@@ -61,6 +61,11 @@ services:
       # p. ej. https://maxirent-backend.onrender.com  (sin barra final).
       - key: BACKEND_URL
         sync: false
+      # La MISMA clave que API_KEY del backend. Nginx la inyecta server-side
+      # como header x-api-key en el proxy /api (runtime; también acepta el
+      # nombre VITE_API_KEY si ya lo tenias configurado).
+      - key: API_KEY
+        sync: false
 
 # ===========================================================================
 #  Postgres gestionado (durable, con respaldos). El backend lo usa vía

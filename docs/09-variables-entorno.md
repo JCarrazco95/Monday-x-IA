@@ -15,7 +15,7 @@ en modo demo** (sin keys, el sistema usa heurísticas y mocks).
 ### Seguridad / operación
 | Variable | Propósito | ¿Obligatoria? |
 |----------|-----------|----------------|
-| `API_KEY` | Si se define, toda la API (menos `/health` y webhooks) exige el header `x-api-key`. Sin ella, la API queda abierta (dev/demo) | Obligatoria (prod) |
+| `API_KEY` | Si se define, toda la API (menos `/health` y webhooks) exige el header `x-api-key`. Sin ella, la API queda abierta (dev/demo). **En el servicio del frontend se define la MISMA clave**: Nginx la inyecta server-side en el proxy `/api` (runtime, no queda en el bundle JS; también acepta el nombre `VITE_API_KEY`) | Obligatoria (prod) |
 | `CORS_ORIGINS` | Lista de orígenes permitidos separados por comas. Sin ella se refleja el origen (dev) | Recomendada (prod) |
 | `RATE_LIMIT_API` | Límite general de peticiones por IP / 15 min (def. 1000) | Opcional |
 | `RATE_LIMIT_AI` | Límite de endpoints de IA/mutación por IP / 5 min (def. 100) | Opcional |

@@ -5,10 +5,13 @@ server {
   index index.html;
 
   # Proxy de API al backend (mismo origen para el navegador -> sin CORS).
+  # La API key se inyecta AQUI (server-side) en vez de incrustarla en el bundle
+  # de JS: la clave nunca llega al navegador y se puede rotar sin rebuild.
   location /api/ {
     proxy_pass ${BACKEND_URL};
     proxy_http_version 1.1;
     proxy_ssl_server_name on;
+    proxy_set_header x-api-key "${API_KEY}";
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
   }
