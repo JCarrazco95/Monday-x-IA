@@ -78,7 +78,11 @@ function monthKey(ts: string): string {
 // GET /api/coaching  → métricas de coaching del equipo.
 coachingRouter.get("/", async (_req, res) => {
   try {
-    const calls = await latestCalls();
+    const todas = await latestCalls();
+    // Coaching mide calidad de VENTA: los buzones/llamadas no evaluables
+    // (score 0) se excluyen de todas las métricas para no hundir promedios.
+    const calls = todas.filter((c) => (c.call.sandler?.puntajeFinal ?? 0) > 0);
+    const noEvaluables = todas.length - calls.length;
 
     const sandlerScores = calls.map((c) => c.call.sandler?.puntajeFinal).filter((n): n is number => typeof n === "number");
     const challengerScores = calls.map((c) => c.call.challenger?.score).filter((n): n is number => typeof n === "number");
@@ -153,6 +157,7 @@ coachingRouter.get("/", async (_req, res) => {
     res.json({
       stats: {
         totalLlamadas: calls.length,
+        noEvaluables,
         sandlerProm,
         challengerProm: avg(challengerScores),
         globalProm: avg(globalScores),

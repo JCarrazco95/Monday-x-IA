@@ -99,16 +99,21 @@ callsRouter.get("/analyzed", async (req, res) => {
       .filter((x): x is NonNullable<typeof x> => x !== null);
     if (phone.length >= 7) items = items.filter((i) => normPhone(i.telefono) === phone);
     const avg = (arr: number[]) => (arr.length ? Math.round(arr.reduce((s, n) => s + n, 0) / arr.length) : 0);
-    const challengerScores = items.map((i) => i.challengerScore).filter((n): n is number => n !== null);
-    const globalScores = items.map((i) => i.globalScore).filter((n): n is number => n !== null);
+    // "No evaluables": buzones de voz, audio sin conversación, transcripción
+    // inservible → la IA devuelve score 0. Se LISTAN (para visibilidad) pero se
+    // EXCLUYEN de promedios y semáforos, que miden calidad de venta real.
+    const evaluables = items.filter((i) => i.sandlerScore > 0);
+    const challengerScores = evaluables.map((i) => i.challengerScore).filter((n): n is number => n !== null);
+    const globalScores = evaluables.map((i) => i.globalScore).filter((n): n is number => n !== null);
     res.json({
       stats: {
         total: items.length,
-        sandlerPromedio: avg(items.map((i) => i.sandlerScore)),
+        noEvaluables: items.length - evaluables.length,
+        sandlerPromedio: avg(evaluables.map((i) => i.sandlerScore)),
         challengerPromedio: avg(challengerScores),
         globalPromedio: avg(globalScores),
-        verdes: items.filter((i) => (i.globalBanda ?? i.challengerBanda) === "verde").length,
-        rojas: items.filter((i) => (i.globalBanda ?? i.challengerBanda) === "rojo").length
+        verdes: evaluables.filter((i) => (i.globalBanda ?? i.challengerBanda) === "verde").length,
+        rojas: evaluables.filter((i) => (i.globalBanda ?? i.challengerBanda) === "rojo").length
       },
       calls: items
     });

@@ -493,21 +493,25 @@ export async function runCallIntelligenceAgent(
   const cached = await findCachedAnalysis(input.itemId);
   if (cached) return cached;
 
-  // Procedencia: en modo demo declarado es "demo"; si en modo live una pasada
-  // falla y caemos a heurísticas, se marca "fallback" para NO confundir un
-  // análisis degradado con uno real (queda además un warning en la bitácora).
-  let fuenteAnalisis: CallIntelligenceOutput["fuenteAnalisis"] = isMockMode ? "demo" : "ia";
+  // Procedencia: "demo" en modo demo declarado, "ia" con proveedor real.
+  //
+  // REGLA (modo live): si la IA falla tras los reintentos, el análisis FALLA —
+  // NO se guardan heurísticas. Un resultado heurístico mezclado con datos
+  // reales contamina el board/coaching/pipeline y hay que purgarlo después;
+  // es mejor que la llamada quede pendiente y el próximo sync la reintente.
+  // Las heurísticas (mocks) solo se usan en modo demo declarado.
+  const fuenteAnalisis: CallIntelligenceOutput["fuenteAnalisis"] = isMockMode ? "demo" : "ia";
 
-  const notarFallback = (etapa: string, err: unknown) => {
-    if (isMockMode) return; // en demo el fallback es lo esperado, no es degradación
-    fuenteAnalisis = "fallback";
+  const fallar = (etapa: string, err: unknown): never => {
+    const msg = err instanceof Error ? err.message : String(err);
     logActivity({
       agentId: AGENT_ID,
-      type: "warning",
-      title: "Análisis de llamada degradado (fallback a heurísticas)",
-      detail: `Falló la ${etapa} con IA; se usó el modo demo. ${err instanceof Error ? err.message : String(err)}`,
+      type: "error",
+      title: "Análisis de llamada NO completado (IA no disponible)",
+      detail: `Falló la ${etapa} tras los reintentos. La llamada queda pendiente para el próximo sync. ${msg.slice(0, 300)}`,
       reference: `#${input.itemId} · ${input.itemName}`
     });
+    throw new Error(`IA no disponible (${etapa}): ${msg.slice(0, 200)}`);
   };
 
   // Pasada 1: Sandler + Challenger + Integrado + basicos (1 llamada a la IA).
@@ -515,7 +519,7 @@ export async function runCallIntelligenceAgent(
   try {
     venta = await runVenta(input);
   } catch (err) {
-    notarFallback("pasada de venta (Sandler/Challenger)", err);
+    if (!isMockMode) fallar("pasada de venta (Sandler/Challenger)", err);
     venta = mockVenta(input);
   }
 
@@ -524,7 +528,7 @@ export async function runCallIntelligenceAgent(
   try {
     coachOps = await runCoachingOps(input, venta.sandler, venta.challenger);
   } catch (err) {
-    notarFallback("pasada de coaching/oportunidades", err);
+    if (!isMockMode) fallar("pasada de coaching/oportunidades", err);
     coachOps = mockCoachOps(input, venta.sandler, venta.challenger);
   }
 
