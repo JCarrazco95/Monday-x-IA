@@ -87,7 +87,13 @@ export async function ingestAircallCall(
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: numero, audioUrl: recordingUrl ?? undefined }
+    payload: {
+      transcript,
+      telefono: numero,
+      audioUrl: recordingUrl ?? undefined,
+      // Identidad del vendedor (Aircall user.name): habilita coaching por vendedor.
+      vendedor: detail?.agente ?? null
+    }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: numero, contacto, result };

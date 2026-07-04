@@ -536,6 +536,7 @@ export async function runCallIntelligenceAgent(
   return {
     ...sandlerBasics,
     telefono: input.telefono ?? null,
+    vendedorNombre: input.vendedor ?? null,
     challenger,
     integrado,
     vendedor: coachOps.vendedor,

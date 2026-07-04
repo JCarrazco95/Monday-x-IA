@@ -139,6 +139,44 @@ coachingRouter.get("/", async (_req, res) => {
       ])
     );
 
+    // Desglose POR VENDEDOR (Aircall user.name propagado como vendedorNombre).
+    // Las llamadas sin identidad se agrupan en "Sin identificar" — irán
+    // desapareciendo conforme entren análisis nuevos con el dato.
+    const porVendedorAgg = new Map<string, { sandler: number[]; challenger: number[]; global: number[]; etapas: Map<number, { nombre: string; puntajes: number[] }> }>();
+    for (const { call } of calls) {
+      const key = call.vendedorNombre?.trim() || "Sin identificar";
+      const cur = porVendedorAgg.get(key) ?? {
+        sandler: [] as number[],
+        challenger: [] as number[],
+        global: [] as number[],
+        etapas: new Map<number, { nombre: string; puntajes: number[] }>()
+      };
+      if (typeof call.sandler?.puntajeFinal === "number") cur.sandler.push(call.sandler.puntajeFinal);
+      if (typeof call.challenger?.score === "number") cur.challenger.push(call.challenger.score);
+      if (typeof call.integrado?.scoreGlobal === "number") cur.global.push(call.integrado.scoreGlobal);
+      for (const e of call.sandler?.etapas ?? []) {
+        if (e.estado === "no_aplica") continue;
+        const et = cur.etapas.get(e.id) ?? { nombre: e.nombre, puntajes: [] };
+        et.puntajes.push(e.puntaje);
+        cur.etapas.set(e.id, et);
+      }
+      porVendedorAgg.set(key, cur);
+    }
+    const porVendedor = [...porVendedorAgg.entries()]
+      .map(([vendedor, v]) => {
+        const etapas = [...v.etapas.entries()].map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }));
+        const debil = etapas.length ? etapas.reduce((min, e) => (e.promedio < min.promedio ? e : min)) : null;
+        return {
+          vendedor,
+          llamadas: v.sandler.length,
+          sandlerProm: avg(v.sandler),
+          challengerProm: avg(v.challenger),
+          globalProm: avg(v.global),
+          etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null
+        };
+      })
+      .sort((a, b) => b.globalProm - a.globalProm || b.llamadas - a.llamadas);
+
     // Tendencia mensual del score global.
     const trendAgg = new Map<string, number[]>();
     for (const { call, ts } of calls) {
@@ -166,6 +204,7 @@ coachingRouter.get("/", async (_req, res) => {
       },
       etapasSandler,
       etapaMasDebil,
+      porVendedor,
       perfilesVendedor,
       habilidades,
       banderasRojas,

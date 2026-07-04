@@ -104,12 +104,12 @@ Cada una indica **valor de negocio**, **complejidad** (baja/media/alta) y **qué
 código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligence
 (Sandler + Challenger + coaching) y la bitácora ya existentes.
 
-> **Prerrequisito transversal (alta prioridad):** hoy **no se captura la identidad
-> del vendedor por llamada**. `coaching.ts` lo dice explícitamente (`groupKey`,
-> línea 15) y `callsRouter.toListItem` deja `vendedor: null` (`calls.ts:82`). Casi
-> todas las features de abajo pasan de "nivel equipo" a "por vendedor" en cuanto se
-> agregue `vendedorId` al payload de la llamada (columna de Aircall/Monday ya
-> contemplada en el `.env`: `COL_VENDEDOR`). **Esta es la palanca #1.**
+> **Prerrequisito transversal — ✅ HECHO:** la identidad del vendedor por llamada
+> ya se captura: Aircall `user.name` → `payload.vendedor` → `vendedorNombre` en el
+> análisis (`callIntelligenceAgent`). La lista de Call Intelligence muestra el
+> vendedor y `/api/coaching` devuelve `porVendedor` (promedios + etapa más débil
+> por persona), visible en la pestaña Coaching. Las llamadas anteriores a este
+> cambio aparecen como "Sin identificar". Con esto C.2–C.7 quedan desbloqueadas.
 
 ### C.1 Coaching automatizado post-llamada (accionable, no solo puntaje)
 - **Valor:** alto — cada vendedor recibe mejoras concretas con frases listas para

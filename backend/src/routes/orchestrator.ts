@@ -61,10 +61,12 @@ orchestratorRouter.post("/simulate/:scenario", async (req, res) => {
         "Vendedor: Hola Juan. Cliente: Mira, lo estuve pensando y sigo dudando por el precio, ademas mi jefe no esta convencido. Vendedor: Entiendo. Cliente: No se si avanzar. Vendedor: Te marco la proxima semana. Cliente: Va."
       ];
       const transcript = TRANSCRIPTS[Math.floor(Math.random() * TRANSCRIPTS.length)];
+      // Vendedores de ejemplo para poblar el desglose por vendedor del Coaching.
+      const VENDEDORES = ["Nadia López", "Carlos Ruiz"];
       return {
         eventType: "call_recorded" as const,
         item: { itemId: String(4000 + Math.floor(Math.random() * 999999)), itemName: "Llamada - Juan Garcia" },
-        payload: { transcript, telefono: "8112345678" }
+        payload: { transcript, telefono: "8112345678", vendedor: VENDEDORES[Math.floor(Math.random() * VENDEDORES.length)] }
       };
     })()
   };

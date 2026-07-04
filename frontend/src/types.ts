@@ -171,6 +171,7 @@ export interface NextBestActionReport {
 export interface CoachingReport {
   stats: {
     totalLlamadas: number;
+    noEvaluables?: number;
     sandlerProm: number;
     challengerProm: number;
     globalProm: number;
@@ -179,6 +180,14 @@ export interface CoachingReport {
   };
   etapasSandler: { id: number; nombre: string; peso: number; promedio: number; muestras: number }[];
   etapaMasDebil: { id: number; nombre: string; peso: number; promedio: number } | null;
+  porVendedor?: {
+    vendedor: string;
+    llamadas: number;
+    sandlerProm: number;
+    challengerProm: number;
+    globalProm: number;
+    etapaMasDebil: { nombre: string; promedio: number } | null;
+  }[];
   perfilesVendedor: { perfil: string; count: number; pct: number }[];
   habilidades: { nombre: string; promedio: number }[];
   banderasRojas: { texto: string; count: number }[];

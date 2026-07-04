@@ -75,7 +75,7 @@ function toListItem(row: AnalyzedRow) {
     itemId,
     idLlamada: `#${itemId}`,
     prospecto: prospecto(itemName),
-    vendedor: null as string | null,
+    vendedor: call.vendedorNombre ?? null,
     fecha: isoUtc(row.timestamp),
     sentimiento: call.sentimiento ?? null,
     sandlerScore: sScore,

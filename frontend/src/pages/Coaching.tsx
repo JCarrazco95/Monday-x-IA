@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, LineChart, Line
 } from "recharts";
-import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning } from "lucide-react";
+import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users } from "lucide-react";
 import { api } from "../lib/api";
 import type { CoachingReport } from "../types";
 
@@ -138,6 +138,39 @@ export function Coaching() {
                 Foco de coaching del equipo: la etapa Sandler más débil es{" "}
                 <strong>{data.etapaMasDebil.nombre}</strong> (promedio {data.etapaMasDebil.promedio}/100). Entrenar aquí mueve la aguja.
               </span>
+            </div>
+          )}
+
+          {(data.porVendedor ?? []).length > 0 && (
+            <div className="mb-4">
+              <Panel title="Desempeño por vendedor" icon={<Users size={15} className="text-accent" />}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs text-text-muted">
+                        <th className="px-3 py-2 font-medium">Vendedor</th>
+                        <th className="px-3 py-2 text-right font-medium">Llamadas</th>
+                        <th className="px-3 py-2 text-right font-medium">Sandler</th>
+                        <th className="px-3 py-2 text-right font-medium">Challenger</th>
+                        <th className="px-3 py-2 text-right font-medium">Global</th>
+                        <th className="px-3 py-2 font-medium">Etapa a entrenar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(data.porVendedor ?? []).map((v) => (
+                        <tr key={v.vendedor} className="border-b border-border/60 last:border-0">
+                          <td className="px-3 py-2 font-medium text-text">{v.vendedor}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-text-muted">{v.llamadas}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.sandlerProm) }}>{v.sandlerProm}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.challengerProm) }}>{v.challengerProm}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.globalProm) }}>{v.globalProm}</td>
+                          <td className="px-3 py-2 text-text-muted">{v.etapaMasDebil ? `${v.etapaMasDebil.nombre} (${v.etapaMasDebil.promedio})` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
             </div>
           )}
 
