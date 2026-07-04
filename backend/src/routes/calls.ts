@@ -179,20 +179,53 @@ callsRouter.get("/board", async (_req, res) => {
   }
 });
 
-// POST /api/calls/sync-board -> lee el tablero de Aircall y analiza lo nuevo.
-//   Body opcional: { max } (cuántas analizar como máximo, para pruebas) y
-//   { since } (ISO; solo llamadas iniciadas en/después de esa fecha).
-callsRouter.post("/sync-board", async (req, res) => {
+// ---------------------------------------------------------------------------
+// Sincronización del tablero de Aircall — ASÍNCRONA.
+//
+// Analizar llamadas toma minutos (transcripción + 2 pasadas de IA + reintentos
+// por cuota); los proxies HTTP (Render/Nginx) cortan a los ~60-100s. Por eso el
+// POST ya no espera: arranca el trabajo en segundo plano y responde 202; el
+// avance/resultado se consulta en GET /api/calls/sync-status. (El cron interno
+// CALLS_SYNC_CRON_HOURS usa el mismo mecanismo sin HTTP.)
+// ---------------------------------------------------------------------------
+interface SyncState {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: Awaited<ReturnType<typeof syncCallsBoard>> | null;
+  error: string | null;
+}
+const syncState: SyncState = { running: false, startedAt: null, finishedAt: null, result: null, error: null };
+
+// POST /api/calls/sync-board -> inicia la sincronización (202) o 409 si ya corre.
+//   Body opcional: { max } (tope de llamadas a analizar) y { since } (ISO).
+callsRouter.post("/sync-board", (req, res) => {
   const { max, since } = (req.body ?? {}) as { max?: number; since?: string };
-  try {
-    res.json(await syncCallsBoard({
-      max: typeof max === "number" && max > 0 ? max : undefined,
-      sinceISO: typeof since === "string" && since.trim() ? since.trim() : undefined
-    }));
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  if (syncState.running) {
+    return res.status(409).json({ running: true, startedAt: syncState.startedAt, error: "Ya hay una sincronización en curso." });
   }
+  syncState.running = true;
+  syncState.startedAt = new Date().toISOString();
+  syncState.finishedAt = null;
+  syncState.result = null;
+  syncState.error = null;
+
+  void syncCallsBoard({
+    max: typeof max === "number" && max > 0 ? max : undefined,
+    sinceISO: typeof since === "string" && since.trim() ? since.trim() : undefined
+  })
+    .then((r) => { syncState.result = r; })
+    .catch((err) => { syncState.error = err instanceof Error ? err.message : String(err); })
+    .finally(() => {
+      syncState.running = false;
+      syncState.finishedAt = new Date().toISOString();
+    });
+
+  res.status(202).json({ started: true, startedAt: syncState.startedAt, status: "GET /api/calls/sync-status" });
 });
+
+// GET /api/calls/sync-status -> estado/resultado de la última sincronización.
+callsRouter.get("/sync-status", (_req, res) => res.json(syncState));
 
 // POST /api/calls/analyze-transcript -> analiza una transcripción YA EXISTENTE
 //   (pegada o traída de otro sistema), sin re-transcribir. Body:

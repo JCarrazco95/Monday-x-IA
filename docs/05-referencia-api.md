@@ -27,6 +27,16 @@ Estado del sistema y modo activo.
 `claudeMode`: `live|mock` · `aiProvider`: `claude|gemini|demo` · `mondayMode`:
 `live|mock` · `db`: `sqlite|postgres` · `auth`: `on|off`.
 
+### `POST /api/calls/sync-board` (asíncrono)
+Inicia la sincronización del tablero de Aircall en segundo plano y responde
+`202 {started, startedAt}` (o `409` si ya hay una en curso). Body opcional
+`{max, since}`. El análisis toma minutos y los proxies HTTP cortan a ~60-100s,
+por eso no se espera en el request.
+
+### `GET /api/calls/sync-status`
+Estado/resultado de la última sincronización:
+`{running, startedAt, finishedAt, result:{leidas, analizadas, yaAnalizadas, sinFuente, errores[]}, error}`.
+
 ### `GET /api/admin/demo-data`
 Preview (no borra): cuántos análisis generados por heurísticas (demo/fallback) y
 simulaciones hay en la bitácora, por agente y con muestra de referencias.

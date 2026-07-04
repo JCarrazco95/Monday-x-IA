@@ -154,11 +154,15 @@ export const api = {
     request<{ configured: boolean; total: number; items: { itemId: string; itemName: string; callId: string | null; link: string | null; leadName: string | null }[] }>(
       `/calls/board`
     ),
+  // La sincronización es ASÍNCRONA: el POST responde 202 y el avance se
+  // consulta con getSyncStatus (los proxies cortan peticiones largas).
   syncCallsBoard: () =>
-    request<{ leidas: number; analizadas: number; yaAnalizadas: number; sinFuente: number; errores: { itemName: string; motivo: string }[] }>(
-      `/calls/sync-board`,
-      { method: "POST" }
-    ),
+    request<{ started: boolean; startedAt: string }>(`/calls/sync-board`, { method: "POST" }),
+  getSyncStatus: () =>
+    request<{
+      running: boolean; startedAt: string | null; finishedAt: string | null; error: string | null;
+      result: { leidas: number; analizadas: number; yaAnalizadas: number; sinFuente: number; errores: { itemName: string; motivo: string }[] } | null;
+    }>(`/calls/sync-status`),
 
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
