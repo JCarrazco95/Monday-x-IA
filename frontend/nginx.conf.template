@@ -14,6 +14,10 @@ server {
     proxy_set_header x-api-key "${API_KEY}";
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    # El asistente/análisis pueden tardar >60s (reintentos de IA): dar margen.
+    proxy_connect_timeout 10s;
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
   }
 
   # SPA fallback (React Router).

@@ -65,6 +65,7 @@ export async function geminiStructured<T>(opts: {
   prompt: string;
   inputSchema: Record<string, unknown>;
   model?: string;
+  retryOpts?: { retries?: number; baseDelayMs?: number; floor429Ms?: number };
 }): Promise<T> {
   const ai = getAi();
   const systemInstruction = `${opts.system}
@@ -84,7 +85,7 @@ ${JSON.stringify(opts.inputSchema)}`;
       // JSON (evita que la respuesta se trunque) y reduce la latencia.
       thinkingConfig: { thinkingBudget: 0 }
     }
-  }), "gemini structured");
+  }), "gemini structured", opts.retryOpts);
 
   trackGeminiUsage(geminiModel(opts.model), response);
   const text = response.text ?? "";
