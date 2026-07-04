@@ -475,7 +475,12 @@ async function findCachedAnalysis(itemId: string): Promise<CallIntelligenceOutpu
          ORDER BY timestamp DESC, id DESC LIMIT 1`,
       [`#${itemId} ·%`]
     );
-    return row?.payload ? safeParseJson<CallIntelligenceOutput>(row.payload) : null;
+    const cached = row?.payload ? safeParseJson<CallIntelligenceOutput>(row.payload) : null;
+    // Solo se reutilizan análisis hechos con IA REAL. Un análisis "fallback"
+    // (la IA falló y se usaron heurísticas) o "demo" debe re-analizarse cuando
+    // el proveedor vuelva a estar disponible, no quedarse pegado para siempre.
+    if (cached && cached.fuenteAnalisis === "ia") return cached;
+    return null;
   } catch {
     return null;
   }

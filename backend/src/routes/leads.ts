@@ -150,11 +150,20 @@ function summaryFromAnalysis(a: Analysis) {
 }
 
 async function allReferences(): Promise<RefRow[]> {
+  // Un LEAD es una referencia con análisis de lead o de formulario. Las
+  // referencias que SOLO tienen análisis de llamada (aircall-*, call-*, url-*)
+  // son llamadas — viven en Call Intelligence, no en la lista de leads; antes
+  // aparecían aquí como "leads" sin score y contaminaban la vista y los KPIs.
   return db.query<RefRow>(
     `SELECT reference, MAX(timestamp) as last_ts
        FROM logs
        WHERE agent_id IN ('lead_enrichment','form_analysis','call_intelligence')
          AND reference IS NOT NULL
+         AND reference IN (
+           SELECT DISTINCT reference FROM logs
+            WHERE agent_id IN ('lead_enrichment','form_analysis')
+              AND reference IS NOT NULL AND payload IS NOT NULL
+         )
        GROUP BY reference
        ORDER BY last_ts DESC`
   );

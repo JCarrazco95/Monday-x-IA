@@ -27,6 +27,16 @@ Estado del sistema y modo activo.
 `claudeMode`: `live|mock` · `aiProvider`: `claude|gemini|demo` · `mondayMode`:
 `live|mock` · `db`: `sqlite|postgres` · `auth`: `on|off`.
 
+### `GET /api/admin/demo-data`
+Preview (no borra): cuántos análisis generados por heurísticas (demo/fallback) y
+simulaciones hay en la bitácora, por agente y con muestra de referencias.
+
+### `POST /api/admin/purge-demo`
+Borra esos registros para poder re-analizar con IA real. Requiere
+`{"confirm": true}` en el body (400 sin él). `{"sims": false}` conserva las
+simulaciones y borra solo demo/fallback. También libera las firmas de
+idempotencia (`monday_writes`) de los items afectados.
+
 ### `GET /api/usage`
 Telemetría de consumo de IA (tokens) acumulada desde el arranque, por modelo +
 totales. Sirve para monitorear el costo.
