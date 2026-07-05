@@ -142,18 +142,27 @@ coachingRouter.get("/", async (_req, res) => {
     // Desglose POR VENDEDOR (Aircall user.name propagado como vendedorNombre).
     // Las llamadas sin identidad se agrupan en "Sin identificar" — irán
     // desapareciendo conforme entren análisis nuevos con el dato.
-    const porVendedorAgg = new Map<string, { sandler: number[]; challenger: number[]; global: number[]; etapas: Map<number, { nombre: string; puntajes: number[] }> }>();
-    for (const { call } of calls) {
+    const porVendedorAgg = new Map<string, { sandler: number[]; challenger: number[]; global: number[]; etapas: Map<number, { nombre: string; puntajes: number[] }>; meses: Map<string, number[]> }>();
+    for (const { call, ts } of calls) {
       const key = call.vendedorNombre?.trim() || "Sin identificar";
       const cur = porVendedorAgg.get(key) ?? {
         sandler: [] as number[],
         challenger: [] as number[],
         global: [] as number[],
-        etapas: new Map<number, { nombre: string; puntajes: number[] }>()
+        etapas: new Map<number, { nombre: string; puntajes: number[] }>(),
+        meses: new Map<string, number[]>()
       };
       if (typeof call.sandler?.puntajeFinal === "number") cur.sandler.push(call.sandler.puntajeFinal);
       if (typeof call.challenger?.score === "number") cur.challenger.push(call.challenger.score);
       if (typeof call.integrado?.scoreGlobal === "number") cur.global.push(call.integrado.scoreGlobal);
+      // C.2: tendencia mensual POR vendedor (score global; cae a Sandler si falta).
+      const g = call.integrado?.scoreGlobal ?? call.sandler?.puntajeFinal;
+      if (typeof g === "number") {
+        const mk = monthKey(ts);
+        const arr = cur.meses.get(mk) ?? [];
+        arr.push(g);
+        cur.meses.set(mk, arr);
+      }
       for (const e of call.sandler?.etapas ?? []) {
         if (e.estado === "no_aplica") continue;
         const et = cur.etapas.get(e.id) ?? { nombre: e.nombre, puntajes: [] };
@@ -172,7 +181,10 @@ coachingRouter.get("/", async (_req, res) => {
           sandlerProm: avg(v.sandler),
           challengerProm: avg(v.challenger),
           globalProm: avg(v.global),
-          etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null
+          etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null,
+          tendencia: [...v.meses.entries()]
+            .map(([periodo, scores]) => ({ periodo, globalProm: avg(scores), count: scores.length }))
+            .sort((a, b) => a.periodo.localeCompare(b.periodo))
         };
       })
       .sort((a, b) => b.globalProm - a.globalProm || b.llamadas - a.llamadas);

@@ -21,6 +21,7 @@ en modo demo** (sin keys, el sistema usa heurísticas y mocks).
 | `RATE_LIMIT_AI` | Límite de endpoints de IA/mutación por IP / 5 min (def. 100) | Opcional |
 | `RATE_LIMIT_WEBHOOK` | Límite de webhooks por IP / 5 min (def. 300) | Opcional |
 | `CALL_ANALYSIS_CACHE` | `false` desactiva la reutilización del análisis de una llamada ya analizada (por defecto activo, ahorra tokens) | Opcional |
+| `MONDAY_READ_ONLY` | `true` = candado de solo lectura hacia Monday: las lecturas funcionan pero ninguna escritura (columnas, comentarios, subitems, items) se ejecuta; solo se loguea. `/api/health` reporta `mondayMode: live-readonly` | Opcional |
 | `AI_MAX_RETRIES` | Reintentos ante errores transitorios de la IA — 429/5xx/timeout (def. 2; `0` desactiva) | Opcional |
 | `AI_RETRY_BASE_MS` | Espera base del backoff exponencial entre reintentos (def. 1000 ms) | Opcional |
 

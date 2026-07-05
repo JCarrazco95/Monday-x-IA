@@ -70,6 +70,8 @@ export function Coaching() {
   const [data, setData] = useState<CoachingReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // C.2: tendencia por vendedor ("" = todo el equipo).
+  const [trendVendedor, setTrendVendedor] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,7 +92,11 @@ export function Coaching() {
   }));
   const habilidades = (data?.habilidades ?? []).map((h) => ({ habilidad: h.nombre.replace(/\s*\/.*/, ""), valor: h.promedio }));
   const perfiles = (data?.perfilesVendedor ?? []).map((p) => ({ name: PERFIL_LABEL[p.perfil] ?? p.perfil, value: p.count }));
-  const tendencia = (data?.tendencia ?? []).map((t) => ({ periodo: t.periodo, score: t.globalProm }));
+  // Serie de tendencia: equipo completo o el vendedor seleccionado (C.2).
+  const trendSource = trendVendedor
+    ? (data?.porVendedor ?? []).find((v) => v.vendedor === trendVendedor)?.tendencia ?? []
+    : data?.tendencia ?? [];
+  const tendencia = trendSource.map((t) => ({ periodo: t.periodo, score: t.globalProm }));
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -225,6 +231,18 @@ export function Coaching() {
             </Panel>
 
             <Panel title="Tendencia del score global (mensual)">
+              {(data.porVendedor ?? []).length > 0 && (
+                <select
+                  value={trendVendedor}
+                  onChange={(e) => setTrendVendedor(e.target.value)}
+                  className="mb-2 h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">Todo el equipo</option>
+                  {(data.porVendedor ?? []).map((v) => (
+                    <option key={v.vendedor} value={v.vendedor}>{v.vendedor}</option>
+                  ))}
+                </select>
+              )}
               {tendencia.length > 1 ? (
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={tendencia} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>

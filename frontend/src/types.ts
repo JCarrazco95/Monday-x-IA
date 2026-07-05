@@ -187,6 +187,7 @@ export interface CoachingReport {
     challengerProm: number;
     globalProm: number;
     etapaMasDebil: { nombre: string; promedio: number } | null;
+    tendencia?: { periodo: string; globalProm: number; count: number }[];
   }[];
   perfilesVendedor: { perfil: string; count: number; pct: number }[];
   habilidades: { nombre: string; promedio: number }[];

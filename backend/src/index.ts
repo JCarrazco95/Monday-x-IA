@@ -20,7 +20,7 @@ import { scraperRouter } from "./routes/scraper.js";
 import { adminRouter } from "./routes/admin.js";
 import { isMockMode } from "./lib/claude.js";
 import { PROVIDER, providerLabel } from "./lib/provider.js";
-import { isMondayMockMode } from "./lib/monday.js";
+import { isMondayMockMode, isMondayReadOnly } from "./lib/monday.js";
 import { initDb, dbKind, db } from "./db/index.js";
 import { seed } from "./db/seed.js";
 import { runNextBestActionAgent } from "./agents/nextBestActionAgent.js";
@@ -61,7 +61,7 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     claudeMode: isMockMode ? "mock" : "live",
     aiProvider: PROVIDER,
-    mondayMode: isMondayMockMode ? "mock" : "live",
+    mondayMode: isMondayMockMode ? "mock" : isMondayReadOnly ? "live-readonly" : "live",
     db: dbKind(),
     auth: authEnabled ? "on" : "off",
     timestamp: new Date().toISOString()
@@ -103,7 +103,7 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`\n🚀 MAXIRent backend escuchando en http://localhost:${PORT}`);
     console.log(`   IA:      ${providerLabel()}`);
-    console.log(`   Monday:  ${isMondayMockMode ? "MOCK (sin MONDAY_API_TOKEN)" : "LIVE"}`);
+    console.log(`   Monday:  ${isMondayMockMode ? "MOCK (sin MONDAY_API_TOKEN)" : isMondayReadOnly ? "LIVE · SOLO LECTURA (MONDAY_READ_ONLY)" : "LIVE"}`);
     console.log(`   BD:      ${dbKind()}`);
     console.log(`   Auth:    ${authEnabled ? "ON (API key requerida)" : "OFF (abierta)"}`);
     warnIfAuthDisabled();
