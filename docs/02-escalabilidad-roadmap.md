@@ -111,15 +111,13 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
 > por persona), visible en la pestaña Coaching. Las llamadas anteriores a este
 > cambio aparecen como "Sin identificar". Con esto C.2–C.7 quedan desbloqueadas.
 
-### C.1 Coaching automatizado post-llamada (accionable, no solo puntaje)
-- **Valor:** alto — cada vendedor recibe mejoras concretas con frases listas para
-  usar tras cada llamada.
-- **Complejidad:** **baja.** Ya está casi todo: `callIntelligenceAgent` produce
-  `vendedor.mejoras` con `area/accion/ejemploFrase/prioridad` y
-  `sandler.recomendaciones`. Falta empujarlo al vendedor (comentario en Monday con
-  @mención, email o notificación) en vez de solo mostrarlo en el panel.
-- **Reutiliza:** `SellerAnalysis`/`SellerImprovement` (`types.ts:174`),
-  `mondayWriterAgent`, `postMondayComment`.
+### C.1 Coaching automatizado post-llamada — ✅ HECHO
+- Tras analizar cada llamada del tablero de Aircall, se publica un **update de
+  coaching en el item de Monday** (`lib/coachingComment.ts` + `syncCallsBoard`):
+  score y banda, etapa a trabajar de ESA llamada, top 3 mejoras priorizadas con
+  frase lista para usar y objetivo de la próxima llamada. Idempotente (no se
+  duplica al re-sincronizar) y omite buzones/no evaluables. Las automatizaciones
+  nativas de Monday pueden notificar al vendedor sobre ese update.
 
 ### C.2 Tendencias de desempeño por vendedor en el tiempo
 - **Valor:** alto — ver si un vendedor mejora, dónde se estanca.
@@ -142,13 +140,11 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
   débil recurrente" del mismo vendedor (requiere C.2) y notificación push/Slack.
 - **Reutiliza:** NBA completo, `analisisProfundo.banderasRojas`, cron `NBA_CRON_HOURS`.
 
-### C.5 Biblioteca de "mejores llamadas" para entrenar nuevos vendedores
-- **Valor:** alto — onboarding acelerado con ejemplos reales.
-- **Complejidad:** **baja.** Filtrar por `integrado.scoreGlobal >= 75` /
-  `banda verde` (datos ya calculados) y marcar `citasDestacadas` /
-  `momentos positivos` como material didáctico.
-- **Reutiliza:** `getAnalyzedCalls` con filtro por banda; `CallAnalysisTabs` para
-  ver el desglose; `analisisProfundo.momentos`/`citasDestacadas`.
+### C.5 Biblioteca de "mejores llamadas" — ✅ HECHO
+- `GET /api/calls/biblioteca?min=75`: llamadas con score global ≥ min con su
+  material didáctico (momento clave, fortalezas, citas destacadas, momentos
+  positivos), ordenadas por score. En la UI: botón **"⭐ Mejores llamadas"** en
+  Call Intelligence (junto a los filtros por vendedor/fecha/banda/texto nuevos).
 
 ### C.6 Integración con calendario/CRM para seguir las acciones recomendadas
 - **Valor:** alto — que las `accionSugerida`/compromisos se conviertan en tareas

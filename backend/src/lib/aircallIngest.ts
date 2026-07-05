@@ -13,7 +13,10 @@
 
 import crypto from "node:crypto";
 import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
+import { runMondayWriterAgent } from "../agents/mondayWriterAgent.js";
+import { buildCoachingComment } from "./coachingComment.js";
 import { logActivity } from "./activityLog.js";
+import type { CallIntelligenceOutput } from "../agents/types.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
@@ -196,6 +199,38 @@ const CALLS_SYNC_MAX = Number(process.env.CALLS_SYNC_MAX ?? 25);
 // fecha ISO. Configúralo (p. ej. 2026-07-03) para ignorar el histórico.
 const CALLS_SYNC_SINCE = process.env.CALLS_SYNC_SINCE;
 
+/** Último análisis guardado para un itemId (desde la bitácora). */
+async function latestAnalysis(itemId: string): Promise<CallIntelligenceOutput | null> {
+  try {
+    const row = await db.queryOne<{ payload: string }>(
+      `SELECT payload FROM logs
+         WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference LIKE ?
+         ORDER BY timestamp DESC, id DESC LIMIT 1`,
+      [`#${itemId} ·%`]
+    );
+    return row?.payload ? (JSON.parse(row.payload) as CallIntelligenceOutput) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * C.1 — Publica el coaching accionable como update en el ITEM DE MONDAY de la
+ * llamada (tablero de Aircall), para que el vendedor lo reciba donde trabaja.
+ * Idempotente (via monday_writes). Nunca rompe el sync si falla.
+ */
+async function postCoachingToBoardItem(boardItemId: string, analysisItemId: string, itemName: string): Promise<void> {
+  try {
+    const call = await latestAnalysis(analysisItemId);
+    if (!call) return;
+    const comment = buildCoachingComment(call);
+    if (!comment) return; // buzón / sin material accionable
+    await runMondayWriterAgent({ itemId: boardItemId, itemName, comment });
+  } catch (err) {
+    console.error("[coaching] no se pudo publicar el coaching en Monday:", err instanceof Error ? err.message : err);
+  }
+}
+
 /** itemIds de llamadas ya analizadas (desde la bitácora) para no repetir. */
 async function analyzedCallItemIds(): Promise<Set<string>> {
   const set = new Set<string>();
@@ -259,7 +294,12 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
       }
       if (res?.analizada) {
         out.analizadas++;
-        if (res.itemId) analyzed.add(res.itemId);
+        if (res.itemId) {
+          analyzed.add(res.itemId);
+          // C.1: coaching accionable como comentario en el item de Monday de la
+          // llamada (it.itemId es el id REAL del board, apto para escribir).
+          await postCoachingToBoardItem(it.itemId, res.itemId, nombre);
+        }
         out.detalle.push({ itemName: nombre, estado: "analizada" });
       } else {
         out.errores.push({ itemName: nombre, motivo: res?.motivo ?? "No se pudo obtener la transcripción." });

@@ -91,13 +91,42 @@ function toListItem(row: AnalyzedRow) {
 }
 
 // GET /api/calls/analyzed -> lista de llamadas analizadas (Sandler + Challenger).
+//   Filtros opcionales: ?phone= &vendedor= &banda=(rojo|amarillo|verde)
+//   &desde=YYYY-MM-DD &hasta=YYYY-MM-DD &q=texto &minGlobal=NN
 callsRouter.get("/analyzed", async (req, res) => {
   try {
-    const phone = normPhone(req.query.phone as string | undefined);
+    const Q = req.query as Record<string, string | undefined>;
+    const phone = normPhone(Q.phone);
     let items = (await listAnalyzedRows())
       .map(toListItem)
       .filter((x): x is NonNullable<typeof x> => x !== null);
     if (phone.length >= 7) items = items.filter((i) => normPhone(i.telefono) === phone);
+
+    // --- Filtros de búsqueda ---
+    const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+    if (Q.vendedor?.trim()) {
+      const v = norm(Q.vendedor.trim());
+      items = items.filter((i) => i.vendedor && norm(i.vendedor).includes(v));
+    }
+    if (Q.banda && ["rojo", "amarillo", "verde"].includes(Q.banda)) {
+      items = items.filter((i) => (i.globalBanda ?? i.sandlerBanda) === Q.banda);
+    }
+    // Fechas: comparación por prefijo ISO (la fecha viene en ISO UTC).
+    if (Q.desde?.trim()) items = items.filter((i) => (i.fecha ?? "") >= Q.desde!.trim());
+    if (Q.hasta?.trim()) items = items.filter((i) => (i.fecha ?? "") <= Q.hasta!.trim() + "T23:59:59Z");
+    if (Q.q?.trim()) {
+      const q = norm(Q.q.trim());
+      items = items.filter((i) =>
+        norm(i.prospecto).includes(q) ||
+        norm(i.resumen ?? "").includes(q) ||
+        norm(i.vendedor ?? "").includes(q) ||
+        i.idLlamada.toLowerCase().includes(q)
+      );
+    }
+    const minGlobal = Number(Q.minGlobal);
+    if (Number.isFinite(minGlobal) && minGlobal > 0) {
+      items = items.filter((i) => (i.globalScore ?? i.sandlerScore) >= minGlobal);
+    }
     const avg = (arr: number[]) => (arr.length ? Math.round(arr.reduce((s, n) => s + n, 0) / arr.length) : 0);
     // "No evaluables": buzones de voz, audio sin conversación, transcripción
     // inservible → la IA devuelve score 0. Se LISTAN (para visibilidad) pero se
@@ -117,6 +146,43 @@ callsRouter.get("/analyzed", async (req, res) => {
       },
       calls: items
     });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// GET /api/calls/biblioteca -> C.5: "mejores llamadas" para entrenamiento.
+//   Llamadas con score global >= min (def. 75) + su material didáctico
+//   (momento clave, citas destacadas, momentos positivos, fortalezas).
+callsRouter.get("/biblioteca", async (req, res) => {
+  try {
+    const min = Number(req.query.min) || 75;
+    const rows = await listAnalyzedRows();
+    const mejores = [];
+    for (const row of rows) {
+      const { itemId, itemName } = parseReference(row.reference);
+      let call: CallIntelligenceOutput;
+      try { call = JSON.parse(row.payload) as CallIntelligenceOutput; } catch { continue; }
+      const score = call.integrado?.scoreGlobal ?? call.sandler?.puntajeFinal ?? 0;
+      if (score < min) continue;
+      mejores.push({
+        itemId,
+        prospecto: prospecto(itemName),
+        vendedor: call.vendedorNombre ?? null,
+        fecha: isoUtc(row.timestamp),
+        globalScore: Math.round(score),
+        sandlerScore: Math.round(call.sandler?.puntajeFinal ?? 0),
+        challengerScore: Math.round(call.challenger?.score ?? 0),
+        resumen: call.integrado?.resumenEjecutivo ?? call.resumen ?? null,
+        // Material didáctico para entrenar nuevos vendedores:
+        momentoClave: call.sandler?.momentoClave ?? null,
+        fortalezas: call.sandler?.fortalezas ?? [],
+        citasDestacadas: call.analisisProfundo?.citasDestacadas ?? [],
+        momentosPositivos: (call.analisisProfundo?.momentos ?? []).filter((m) => m.tipo === "positivo")
+      });
+    }
+    mejores.sort((a, b) => b.globalScore - a.globalScore);
+    res.json({ min, total: mejores.length, llamadas: mejores });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

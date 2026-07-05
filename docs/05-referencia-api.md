@@ -27,6 +27,17 @@ Estado del sistema y modo activo.
 `claudeMode`: `live|mock` · `aiProvider`: `claude|gemini|demo` · `mondayMode`:
 `live|mock` · `db`: `sqlite|postgres` · `auth`: `on|off`.
 
+### `GET /api/calls/analyzed` — filtros
+Además de `?phone=`, acepta: `vendedor=` (contiene, sin acentos), `banda=rojo|amarillo|verde`
+(sobre la banda global), `desde=YYYY-MM-DD`, `hasta=YYYY-MM-DD`, `q=` (texto sobre
+prospecto/resumen/vendedor/id) y `minGlobal=NN`. Los `stats` se calculan sobre el
+conjunto filtrado.
+
+### `GET /api/calls/biblioteca?min=75`
+C.5 — "Mejores llamadas" para entrenamiento: llamadas con score global ≥ `min`
+(def. 75) con material didáctico (momento clave, fortalezas, citas destacadas,
+momentos positivos), ordenadas por score descendente.
+
 ### `POST /api/calls/sync-board` (asíncrono)
 Inicia la sincronización del tablero de Aircall en segundo plano y responde
 `202 {started, startedAt}` (o `409` si ya hay una en curso). Body opcional
