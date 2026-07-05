@@ -48,6 +48,12 @@ por eso no se espera en el request.
 Estado/resultado de la última sincronización:
 `{running, startedAt, finishedAt, result:{leidas, analizadas, yaAnalizadas, sinFuente, errores[]}, error}`.
 
+### `GET /api/reports/executive?dias=7`
+C.7 — Reporte ejecutivo del período (1-90 días, def. 7): KPIs de llamadas,
+desglose por vendedor, etapa débil, objeciones, leads nuevos/calientes, upsells
+y alertas de alta prioridad. Devuelve datos estructurados + `markdown` listo
+para enviar. Determinista (no consume IA) y no escribe en Monday.
+
 ### `GET /api/admin/demo-data`
 Preview (no borra): cuántos análisis generados por heurísticas (demo/fallback) y
 simulaciones hay en la bitácora, por agente y con muestra de referencias.

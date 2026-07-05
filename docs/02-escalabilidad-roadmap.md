@@ -119,12 +119,9 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
   duplica al re-sincronizar) y omite buzones/no evaluables. Las automatizaciones
   nativas de Monday pueden notificar al vendedor sobre ese update.
 
-### C.2 Tendencias de desempeño por vendedor en el tiempo
-- **Valor:** alto — ver si un vendedor mejora, dónde se estanca.
-- **Complejidad:** **media** (tras el prerrequisito de `vendedorId`).
-- **Reutiliza:** `coaching.ts` ya calcula tendencia mensual **a nivel equipo**
-  (`tendencia`, línea 148) y radar de habilidades; solo hay que agrupar por
-  `vendedorId` en vez de global. `Coaching.tsx` para la UI.
+### C.2 Tendencias de desempeño por vendedor — ✅ HECHO
+- `/api/coaching` → `porVendedor[].tendencia` (score global mensual por persona).
+  En la UI, el panel "Tendencia del score global" tiene selector Equipo/vendedor.
 
 ### C.3 Rankings / gamificación por las 7 etapas Sandler
 - **Valor:** medio-alto — competencia sana, adopción.
@@ -155,13 +152,14 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
   (`parseFechaCompromiso`). Falta sincronizar esos subitems/acciones al calendario
   del vendedor y cerrar el loop cuando se completan.
 
-### C.7 Reportes ejecutivos automáticos (semanal/mensual)
-- **Valor:** alto para gerencia.
-- **Complejidad:** **media.**
-- **Reutiliza:** `coaching.ts`, `forecast.ts` y el **chat RAG** (`assistant.ts`) ya
-  agregan casi todo; falta un job programado (extender el "cron" interno de
-  `index.ts:73`, `NBA_CRON_HOURS`) que genere un resumen con el LLM y lo envíe por
-  email/Slack, más export a PDF/`.docx` (hay skills de documentos disponibles).
+### C.7 Reportes ejecutivos — ✅ HECHO (v1 bajo demanda)
+- `GET /api/reports/executive?dias=7|14|30`: KPIs de llamadas y calidad, desglose
+  por vendedor, etapa débil del equipo, objeciones recurrentes, leads nuevos/
+  calientes, upsells detectados y alertas de alta prioridad, en JSON + `markdown`
+  listo para enviar. Determinista (sin costo de IA). En la UI: botón "Reporte
+  ejecutivo" en Coaching con selector de período y Copiar.
+- **Pendiente v2:** envío automático (cron + email/Slack) cuando haya
+  credenciales de correo, y export a PDF/.docx.
 
 ### Priorización sugerida (impacto/esfuerzo)
 

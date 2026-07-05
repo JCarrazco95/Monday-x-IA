@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, LineChart, Line
 } from "recharts";
-import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users } from "lucide-react";
+import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check } from "lucide-react";
 import { api } from "../lib/api";
 import type { CoachingReport } from "../types";
 
@@ -72,6 +72,31 @@ export function Coaching() {
   const [error, setError] = useState<string | null>(null);
   // C.2: tendencia por vendedor ("" = todo el equipo).
   const [trendVendedor, setTrendVendedor] = useState("");
+  // C.7: reporte ejecutivo bajo demanda.
+  const [reporte, setReporte] = useState<string | null>(null);
+  const [reporteDias, setReporteDias] = useState(7);
+  const [generando, setGenerando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  const generarReporte = async () => {
+    setGenerando(true);
+    try {
+      const r = await api.getExecutiveReport(reporteDias);
+      setReporte(r.markdown);
+      setCopiado(false);
+    } catch (err) {
+      setReporte(`Error al generar el reporte: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  const copiarReporte = async () => {
+    if (!reporte) return;
+    await navigator.clipboard.writeText(reporte);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -109,14 +134,52 @@ export function Coaching() {
             De analizar llamadas a mejorar al equipo: dónde se cae la venta y qué entrenar.
           </p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-50"
-        >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Actualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={reporteDias}
+            onChange={(e) => setReporteDias(Number(e.target.value))}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-sm text-text-muted focus:outline-none"
+          >
+            <option value={7}>Últimos 7 días</option>
+            <option value={14}>Últimos 14 días</option>
+            <option value={30}>Últimos 30 días</option>
+          </select>
+          <button
+            onClick={generarReporte}
+            disabled={generando}
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
+          >
+            <FileText size={15} className={generando ? "animate-pulse" : ""} /> Reporte ejecutivo
+          </button>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-50"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Actualizar
+          </button>
+        </div>
       </div>
+
+      {reporte && (
+        <div className="mb-4 rounded-xl border border-accent/25 bg-surface p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+              <FileText size={15} className="text-accent" /> Reporte ejecutivo (listo para enviar)
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copiarReporte}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:text-text"
+              >
+                {copiado ? <Check size={13} className="text-success" /> : <Copy size={13} />} {copiado ? "Copiado" : "Copiar"}
+              </button>
+              <button onClick={() => setReporte(null)} className="text-xs text-text-muted hover:text-text">Cerrar</button>
+            </div>
+          </div>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-bg p-3 text-xs leading-relaxed text-text">{reporte}</pre>
+        </div>
+      )}
 
       {error && <div className="mb-4 rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
