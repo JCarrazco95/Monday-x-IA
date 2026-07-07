@@ -490,8 +490,10 @@ export async function runCallIntelligenceAgent(
   input: CallIntelligenceInput
 ): Promise<CallIntelligenceOutput> {
   // Reutiliza un análisis previo de esta misma llamada (ahorra 2 llamadas a la IA).
+  // Si el análisis viejo no traía la identidad del vendedor y ahora la tenemos,
+  // se completa sin re-analizar.
   const cached = await findCachedAnalysis(input.itemId);
-  if (cached) return cached;
+  if (cached) return { ...cached, ejecutivo: cached.ejecutivo ?? input.ejecutivo ?? null };
 
   // Procedencia: "demo" en modo demo declarado, "ia" con proveedor real.
   //
@@ -536,6 +538,7 @@ export async function runCallIntelligenceAgent(
   return {
     ...sandlerBasics,
     telefono: input.telefono ?? null,
+    ejecutivo: input.ejecutivo ?? null,
     challenger,
     integrado,
     vendedor: coachOps.vendedor,

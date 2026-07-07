@@ -265,9 +265,10 @@ export function CallIntelligenceList() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-        <div className="grid grid-cols-[1fr_1.5fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] gap-2 border-b border-border px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        <div className="grid grid-cols-[1fr_1.4fr_1.1fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] gap-2 border-b border-border px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
           <div>ID Llamada</div>
           <div>Prospecto</div>
+          <div>Vendedor</div>
           <div>Fecha</div>
           <div>Sandler</div>
           <div>Challenger</div>
@@ -297,10 +298,11 @@ export function CallIntelligenceList() {
             <button
               key={c.itemId}
               onClick={() => navigate(`/call-intelligence/${c.itemId}`)}
-              className="grid w-full grid-cols-[1fr_1.5fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
+              className="grid w-full grid-cols-[1fr_1.4fr_1.1fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
             >
               <div className="font-mono text-xs text-accent">{c.idLlamada}</div>
               <div className="truncate font-medium">{c.prospecto}</div>
+              <div className="truncate text-xs text-text-muted">{c.vendedor ?? "—"}</div>
               <div className="text-xs text-text-muted">{fmt(c.fecha)}</div>
               <ScoreBar score={c.sandlerScore} banda={c.sandlerBanda} />
               <ScoreBar score={c.challengerScore} banda={c.challengerBanda} />

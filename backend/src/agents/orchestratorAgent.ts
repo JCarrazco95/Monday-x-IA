@@ -248,7 +248,8 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
     itemName: event.item.itemName,
     transcript: (event.payload.transcript as string) ?? "",
     audioUrl: event.payload.audioUrl as string | undefined,
-    telefono: (event.payload.telefono as string | undefined) ?? null
+    telefono: (event.payload.telefono as string | undefined) ?? null,
+    ejecutivo: (event.payload.ejecutivo as string | undefined) ?? null
   };
 
   if ((await getAgentStatus(CALL_AGENT)) !== "active") {

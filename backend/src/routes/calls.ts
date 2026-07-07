@@ -75,7 +75,7 @@ function toListItem(row: AnalyzedRow) {
     itemId,
     idLlamada: `#${itemId}`,
     prospecto: prospecto(itemName),
-    vendedor: null as string | null,
+    vendedor: call.ejecutivo ?? null,
     fecha: isoUtc(row.timestamp),
     sentimiento: call.sentimiento ?? null,
     sandlerScore: sScore,
@@ -156,11 +156,14 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
 callsRouter.post("/aircall/:callId", async (req, res) => {
   const callId = req.params.callId?.trim();
   if (!callId) return res.status(400).json({ error: "Se requiere el ID de la llamada." });
-  const { transcript, telefono } = (req.body ?? {}) as { transcript?: string; telefono?: string };
+  const { transcript, telefono, ejecutivo } = (req.body ?? {}) as {
+    transcript?: string; telefono?: string; ejecutivo?: string;
+  };
   try {
     const out = await ingestAircallCall(callId, {
       transcriptOverride: typeof transcript === "string" && transcript.trim() ? transcript.trim() : null,
-      numeroHint: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
+      numeroHint: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
+      ejecutivoHint: typeof ejecutivo === "string" && ejecutivo.trim() ? ejecutivo.trim() : null
     });
     // Si no se pudo analizar (sin transcripción/credenciales), 422 con el motivo.
     res.status(out.analizada ? 200 : 422).json(out);
@@ -231,8 +234,8 @@ callsRouter.get("/sync-status", (_req, res) => res.json(syncState));
 //   (pegada o traída de otro sistema), sin re-transcribir. Body:
 //   { transcript, prospecto?, telefono? }.
 callsRouter.post("/analyze-transcript", async (req, res) => {
-  const { transcript, prospecto, telefono } = (req.body ?? {}) as {
-    transcript?: string; prospecto?: string; telefono?: string;
+  const { transcript, prospecto, telefono, ejecutivo } = (req.body ?? {}) as {
+    transcript?: string; prospecto?: string; telefono?: string; ejecutivo?: string;
   };
   if (typeof transcript !== "string" || !transcript.trim()) {
     return res.status(400).json({ error: "Se requiere 'transcript' (texto de la conversación)." });
@@ -241,7 +244,8 @@ callsRouter.post("/analyze-transcript", async (req, res) => {
     const out = await ingestCallFromTranscript({
       transcript,
       prospecto: typeof prospecto === "string" && prospecto.trim() ? prospecto.trim() : null,
-      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
+      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
+      ejecutivo: typeof ejecutivo === "string" && ejecutivo.trim() ? ejecutivo.trim() : null
     });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
@@ -253,7 +257,9 @@ callsRouter.post("/analyze-transcript", async (req, res) => {
 //   analiza. Independiente del proveedor (Twilio, Aircall, S3…). Body:
 //   { url, telefono?, contacto? }.
 callsRouter.post("/from-url", async (req, res) => {
-  const { url, telefono, contacto } = (req.body ?? {}) as { url?: string; telefono?: string; contacto?: string };
+  const { url, telefono, contacto, ejecutivo } = (req.body ?? {}) as {
+    url?: string; telefono?: string; contacto?: string; ejecutivo?: string;
+  };
   if (typeof url !== "string" || !url.trim()) {
     return res.status(400).json({ error: "Se requiere 'url' (enlace a la grabación de audio)." });
   }
@@ -261,7 +267,8 @@ callsRouter.post("/from-url", async (req, res) => {
     const out = await ingestCallFromUrl({
       url: url.trim(),
       telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
-      contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null
+      contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null,
+      ejecutivo: typeof ejecutivo === "string" && ejecutivo.trim() ? ejecutivo.trim() : null
     });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {

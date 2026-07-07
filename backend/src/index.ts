@@ -20,7 +20,7 @@ import { scraperRouter } from "./routes/scraper.js";
 import { adminRouter } from "./routes/admin.js";
 import { isMockMode } from "./lib/claude.js";
 import { PROVIDER, providerLabel } from "./lib/provider.js";
-import { isMondayMockMode } from "./lib/monday.js";
+import { isMondayMockMode, isMondayReadOnly } from "./lib/monday.js";
 import { initDb, dbKind, db } from "./db/index.js";
 import { seed } from "./db/seed.js";
 import { runNextBestActionAgent } from "./agents/nextBestActionAgent.js";
@@ -61,7 +61,7 @@ app.get("/api/health", (_req, res) => {
     status: "ok",
     claudeMode: isMockMode ? "mock" : "live",
     aiProvider: PROVIDER,
-    mondayMode: isMondayMockMode ? "mock" : "live",
+    mondayMode: isMondayMockMode ? "mock" : isMondayReadOnly ? "live-readonly" : "live",
     db: dbKind(),
     auth: authEnabled ? "on" : "off",
     timestamp: new Date().toISOString()

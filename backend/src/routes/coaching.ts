@@ -10,9 +10,11 @@ import type { CallIntelligenceOutput } from "../agents/types.js";
 //  Global, la etapa Sandler más débil, distribución de perfiles del vendedor,
 //  radar de habilidades, banderas rojas y objeciones recurrentes, y tendencia.
 //
-//  NOTA: hoy no se captura la identidad del vendedor por llamada, así que el
-//  desglose es a nivel EQUIPO. Cuando el payload incluya `vendedor`, agrupar por
-//  esa clave es trivial (ver `groupKey`).
+//  Identidad del vendedor: cada análisis guarda `ejecutivo` (el user de Aircall
+//  o el capturado a mano). Filtros por query: `?vendedor=<nombre>` acota todas
+//  las métricas a ese vendedor; `?dias=<n>` acota al periodo reciente. Sin
+//  filtros = equipo completo. Además se devuelve `vendedores` (los nombres
+//  disponibles) y `ranking` (comparativa por vendedor) para la vista de gerente.
 // ===========================================================================
 
 export const coachingRouter = Router();
@@ -75,14 +77,53 @@ function monthKey(ts: string): string {
   return (ts || "").slice(0, 7);
 }
 
-// GET /api/coaching  → métricas de coaching del equipo.
-coachingRouter.get("/", async (_req, res) => {
+// GET /api/coaching[?vendedor=&dias=]  → métricas de coaching (equipo o por vendedor).
+coachingRouter.get("/", async (req, res) => {
   try {
-    const todas = await latestCalls();
+    const vendedorFiltro = typeof req.query.vendedor === "string" && req.query.vendedor.trim()
+      ? req.query.vendedor.trim()
+      : null;
+    const dias = Number(req.query.dias);
+    const desde = Number.isFinite(dias) && dias > 0
+      ? new Date(Date.now() - dias * 24 * 3_600_000).toISOString().slice(0, 10)
+      : null;
+
+    let todas = await latestCalls();
+    if (desde) todas = todas.filter((c) => (c.ts ?? "") >= desde);
+
     // Coaching mide calidad de VENTA: los buzones/llamadas no evaluables
     // (score 0) se excluyen de todas las métricas para no hundir promedios.
-    const calls = todas.filter((c) => (c.call.sandler?.puntajeFinal ?? 0) > 0);
-    const noEvaluables = todas.length - calls.length;
+    const evaluables = todas.filter((c) => (c.call.sandler?.puntajeFinal ?? 0) > 0);
+
+    // Vendedores disponibles en el periodo (para el selector del frontend) y
+    // ranking comparativo, SIEMPRE sobre el total evaluable (sin filtro de vendedor).
+    const porVendedor = new Map<string, { call: CallIntelligenceOutput; ts: string }[]>();
+    for (const c of evaluables) {
+      const key = c.call.ejecutivo?.trim() || "Sin identificar";
+      const arr = porVendedor.get(key) ?? [];
+      arr.push(c);
+      porVendedor.set(key, arr);
+    }
+    const vendedores = [...porVendedor.keys()].filter((v) => v !== "Sin identificar").sort();
+    const ranking = [...porVendedor.entries()]
+      .map(([vendedor, cs]) => {
+        const globales = cs.map((c) => c.call.integrado?.scoreGlobal).filter((n): n is number => typeof n === "number");
+        return {
+          vendedor,
+          llamadas: cs.length,
+          sandlerProm: avg(cs.map((c) => c.call.sandler?.puntajeFinal).filter((n): n is number => typeof n === "number")),
+          challengerProm: avg(cs.map((c) => c.call.challenger?.score).filter((n): n is number => typeof n === "number")),
+          globalProm: avg(globales),
+          verdes: globales.filter((s) => bandaFromScore(s) === "verde").length,
+          rojas: globales.filter((s) => bandaFromScore(s) === "rojo").length
+        };
+      })
+      .sort((a, b) => b.globalProm - a.globalProm);
+
+    const calls = vendedorFiltro
+      ? evaluables.filter((c) => (c.call.ejecutivo?.trim() || "Sin identificar") === vendedorFiltro)
+      : evaluables;
+    const noEvaluables = todas.length - evaluables.length;
 
     const sandlerScores = calls.map((c) => c.call.sandler?.puntajeFinal).filter((n): n is number => typeof n === "number");
     const challengerScores = calls.map((c) => c.call.challenger?.score).filter((n): n is number => typeof n === "number");
@@ -155,6 +196,9 @@ coachingRouter.get("/", async (_req, res) => {
 
     const sandlerProm = avg(sandlerScores);
     res.json({
+      filtro: { vendedor: vendedorFiltro, dias: desde ? dias : null },
+      vendedores,
+      ranking,
       stats: {
         totalLlamadas: calls.length,
         noEvaluables,

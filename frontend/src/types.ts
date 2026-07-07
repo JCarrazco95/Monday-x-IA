@@ -168,9 +168,25 @@ export interface NextBestActionReport {
 }
 
 // ── Coaching del equipo (agregación) ──
+export interface CoachingRanking {
+  vendedor: string;
+  llamadas: number;
+  sandlerProm: number;
+  challengerProm: number;
+  globalProm: number;
+  verdes: number;
+  rojas: number;
+}
+
 export interface CoachingReport {
+  filtro: { vendedor: string | null; dias: number | null };
+  /** Vendedores con llamadas evaluables en el periodo (para el selector). */
+  vendedores: string[];
+  /** Comparativa por vendedor (incluye "Sin identificar" si aplica). */
+  ranking: CoachingRanking[];
   stats: {
     totalLlamadas: number;
+    noEvaluables: number;
     sandlerProm: number;
     challengerProm: number;
     globalProm: number;
@@ -191,22 +207,27 @@ export interface CoachingReport {
 export interface ForecastOpportunity {
   itemId: string;
   itemName: string;
-  etapa: "Calificado" | "Cotización" | "Negociación" | "Cierre probable";
+  empresa: string | null;
+  ejecutivo: string | null;
+  etapa: string;
   prioridad: "caliente" | "tibia" | "fria" | null;
   probabilidad: number;            // 0-100
-  probabilidadFuente: "llamada" | "lead" | "default";
+  probabilidadFuente: "llamada" | "lead" | "default" | "etapa";
   valorEstimado: number;
   valorPonderado: number;
+  sinMonto: boolean;
   mesCierreKey: string;
   mesCierre: string;
 }
 
 export interface ForecastReport {
+  /** "monday" = datos reales del board de Oportunidades; "estimado" = heurística demo. */
+  fuente: "monday" | "estimado";
   supuestos: {
-    ticketBase: number;
+    ticketBase?: number;
     moneda: string;
     nota: string;
-    probabilidades: { llamada: Record<string, number>; lead: Record<string, number> };
+    probabilidades: Record<string, Record<string, number>>;
   };
   stats: {
     totalOportunidades: number;
@@ -214,9 +235,14 @@ export interface ForecastReport {
     valorPonderado: number;
     ticketPromedio: number;
     probPromedio: number;
+    sinMonto: number;
+    ganadoMes: number | null;
+    ganadoAnio: number | null;
   };
   funnel: { etapa: string; count: number; valor: number; valorPonderado: number }[];
-  porMes: { mes: string; valorPonderado: number; valorBruto: number; count: number }[];
+  porMes: { mes: string; valorPonderado: number; valorBruto: number; count: number; objetivo: number | null }[];
+  porEjecutivo: { ejecutivo: string; count: number; valor: number; valorPonderado: number }[];
+  objetivos: { disponible: boolean; motivo: string | null };
   topOportunidades: ForecastOpportunity[];
 }
 

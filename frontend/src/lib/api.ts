@@ -168,8 +168,14 @@ export const api = {
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),
 
-  // Coaching del equipo (agregación sobre llamadas analizadas).
-  getCoaching: () => request<CoachingReport>("/coaching"),
+  // Coaching (equipo o por vendedor; opcionalmente acotado a los últimos N días).
+  getCoaching: (opts: { vendedor?: string | null; dias?: number | null } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.vendedor) params.set("vendedor", opts.vendedor);
+    if (opts.dias) params.set("dias", String(opts.dias));
+    const qs = params.toString();
+    return request<CoachingReport>(`/coaching${qs ? `?${qs}` : ""}`);
+  },
 
   // Forecast / pipeline ponderado por probabilidad.
   getForecast: () => request<ForecastReport>("/forecast"),

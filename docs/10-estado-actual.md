@@ -74,12 +74,20 @@ registra y las páginas del panel cargan.
   `.gitignore`.
 - Checklist de salida a producción: [12 · Checklist de deploy](12-checklist-deploy.md).
 
+**✅ También corregidos (Fase 3):**
+
+- **Identidad del vendedor por llamada**: el `user.name` de Aircall (o el
+  `ejecutivo` del body en las rutas de ingesta) se propaga hasta el análisis
+  (`CallIntelligenceOutput.ejecutivo`). Coaching acepta `?vendedor=&dias=`,
+  devuelve `vendedores` + `ranking`, y el frontend tiene selector de
+  vendedor/periodo y comparativa clicable.
+- **Pipeline con datos reales de Monday**: `GET /api/forecast` lee el board de
+  Oportunidades (solo lectura) — ver [05](05-referencia-api.md).
+
 **Pendiente:**
 
 - Quitar la mención a Apollo en la propuesta comercial (`.docx`).
-- **Fase 3 — identidad del vendedor por llamada** (propagar `user.name` de Aircall
-  hasta el análisis y agrupar Coaching por vendedor): desbloquea coaching por
-  vendedor, rankings y biblioteca de mejores llamadas.
+- Biblioteca de mejores llamadas por vendedor (desbloqueada por la Fase 3).
 - **Escalabilidad** (volumen 10×–100× o multi-cliente): cola de trabajos + tablas
   de dominio + multi-tenant + validación de sesión de Monday por usuario — ver
   [02](02-escalabilidad-roadmap.md).

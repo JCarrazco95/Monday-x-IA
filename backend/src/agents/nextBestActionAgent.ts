@@ -97,13 +97,17 @@ export function parseFechaCompromiso(texto: string | undefined | null, now: Date
 
 // ---- Carga de estado desde la bitácora ----
 async function loadSnapshots(): Promise<ItemSnapshot[]> {
-  // Última actividad real por referencia (excluye los logs que deja el propio NBA).
+  // Última actividad REAL por referencia = último análisis de un agente de
+  // negocio (nueva llamada, formulario o re-enriquecimiento del lead). Los logs
+  // de plomería (orchestrator/writer/NBA) se excluyen: siempre acompañan al
+  // análisis unos segundos después y hacían que "la llamada es la última
+  // actividad" nunca se cumpliera.
   const activity = await db.query<{ reference: string; last_ts: string }>(
     `SELECT reference, MAX(timestamp) as last_ts
        FROM logs
-      WHERE reference IS NOT NULL AND agent_id != ?
-      GROUP BY reference`,
-    [AGENT_ID]
+      WHERE reference IS NOT NULL
+        AND agent_id IN ('lead_enrichment','form_analysis','call_intelligence')
+      GROUP BY reference`
   );
   const lastActivity = new Map(activity.map((a) => [a.reference, a.last_ts]));
 

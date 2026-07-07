@@ -206,21 +206,37 @@ Ejecuta y **escribe** las alertas de alta prioridad en Monday (columna
 
 ## Coaching
 
-### `GET /api/coaching`
-Agregación a **nivel equipo** sobre las llamadas analizadas: promedios
-Sandler/Challenger/Global, etapa Sandler más débil, distribución de perfiles
-Challenger, radar de habilidades, banderas rojas / objeciones / áreas de mejora
-recurrentes, y tendencia mensual.
+### `GET /api/coaching[?vendedor=&dias=]`
+Agregación sobre las llamadas analizadas: promedios Sandler/Challenger/Global,
+etapa Sandler más débil, distribución de perfiles Challenger, radar de
+habilidades, banderas rojas / objeciones / áreas de mejora recurrentes, y
+tendencia mensual.
+
+- Sin filtros = **equipo completo**. `?vendedor=<nombre>` acota todas las
+  métricas a ese vendedor (identidad tomada del user de Aircall en cada
+  llamada, campo `ejecutivo` del análisis). `?dias=<n>` acota a los últimos n días.
+- La respuesta incluye siempre `filtro`, `vendedores` (nombres disponibles en el
+  periodo) y `ranking` (comparativa por vendedor: llamadas, promedios, verdes/rojas).
 
 ---
 
 ## Forecast
 
 ### `GET /api/forecast`
-Pipeline ponderado por probabilidad + funnel + proyección mensual. Incluye
-`supuestos` transparentes (ticket base, moneda, probabilidades). El valor
-estimado se deriva de `FORECAST_TICKET_BASE × factor(score)` — sustituir por
-monto real cuando exista.
+Pipeline ponderado por probabilidad + funnel + proyección mensual. La respuesta
+declara su origen en `fuente`:
+
+- **`monday`** (con `MONDAY_API_TOKEN` + `MONDAY_BOARD_ID_OPORTUNIDADES`): lee el
+  board real de Oportunidades (solo lectura, paginado) — montos, etapas, fechas de
+  cierre, ejecutivo. Único supuesto: probabilidad de cierre por etapa
+  (`FORECAST_PROB_ETAPAS`). Incluye `porEjecutivo`, `stats.ganadoMes/ganadoAnio`
+  (por fecha real de cierre) y `objetivos` (board de Objetivos, mejor esfuerzo —
+  requiere permisos de visualización del board). Si Monday falla responde **502**
+  (nunca sustituye datos reales por estimaciones sin avisar).
+- **`estimado`** (sin token, demo): heurística previa desde la bitácora —
+  `FORECAST_TICKET_BASE × factor(score)`, probabilidad por llamada/prioridad.
+
+Siempre incluye `supuestos` transparentes (moneda, nota, probabilidades).
 
 ---
 

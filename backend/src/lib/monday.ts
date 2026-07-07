@@ -4,6 +4,15 @@ const MONDAY_API_TOKEN = process.env.MONDAY_API_TOKEN;
 export const isMondayMockMode = !MONDAY_API_TOKEN;
 
 /**
+ * Modo SOLO LECTURA: con MONDAY_READ_ONLY=true las queries de lectura funcionan
+ * normal (forecast, sync de llamadas, columnas), pero CUALQUIER mutation se
+ * simula (igual que el modo mock) y jamás llega a Monday. Es el seguro para
+ * operar con token real sobre boards de producción sin riesgo de escritura,
+ * hasta que se decida activar las escrituras (columna mapeada + read-only off).
+ */
+export const isMondayReadOnly = (process.env.MONDAY_READ_ONLY ?? "").toLowerCase() === "true";
+
+/**
  * Cliente mínimo para la API GraphQL de Monday.com.
  * En modo mock (sin token configurado) simplemente registra la llamada
  * y devuelve un resultado simulado, para poder probar el flujo completo
@@ -13,9 +22,11 @@ export async function mondayRequest<T = unknown>(
   query: string,
   variables: Record<string, unknown> = {}
 ): Promise<T> {
-  if (isMondayMockMode) {
+  const esMutation = query.trimStart().startsWith("mutation");
+  if (isMondayMockMode || (isMondayReadOnly && esMutation)) {
     return {
       mock: true,
+      readOnly: isMondayReadOnly && esMutation,
       query: query.trim().slice(0, 120),
       variables
     } as unknown as T;

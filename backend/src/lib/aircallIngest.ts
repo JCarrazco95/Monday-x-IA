@@ -41,6 +41,8 @@ export async function ingestAircallCall(
     recordingHint?: string | null;
     /** Transcripción ya provista (p. ej. pegada a mano); evita ir a Aircall. */
     transcriptOverride?: string | null;
+    /** Vendedor si ya se conoce (si no, se toma del user de Aircall). */
+    ejecutivoHint?: string | null;
   } = {}
 ): Promise<AircallIngestResult> {
   if (!callId) return { ok: false, analizada: false, motivo: "Falta el ID de la llamada." };
@@ -51,6 +53,7 @@ export async function ingestAircallCall(
   const numero = detail?.numero ?? opts.numeroHint ?? null;
   const contacto = detail?.contacto ?? opts.contactoHint ?? null;
   const recordingUrl = detail?.recordingUrl ?? opts.recordingHint ?? null;
+  const ejecutivo = detail?.agente ?? opts.ejecutivoHint ?? null;
 
   // Transcripción: override > Aircall AI > Deepgram sobre la grabación.
   let transcript: string | null = opts.transcriptOverride ?? null;
@@ -87,7 +90,7 @@ export async function ingestAircallCall(
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: numero, audioUrl: recordingUrl ?? undefined }
+    payload: { transcript, telefono: numero, audioUrl: recordingUrl ?? undefined, ejecutivo }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: numero, contacto, result };
@@ -104,6 +107,7 @@ export async function ingestCallFromTranscript(opts: {
   transcript: string;
   prospecto?: string | null;
   telefono?: string | null;
+  ejecutivo?: string | null;
 }): Promise<AircallIngestResult> {
   const transcript = opts.transcript?.trim();
   if (!transcript) return { ok: false, analizada: false, motivo: "Falta la transcripción." };
@@ -118,7 +122,7 @@ export async function ingestCallFromTranscript(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null }
+    payload: { transcript, telefono: opts.telefono ?? null, ejecutivo: opts.ejecutivo ?? null }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.prospecto ?? null, result };
@@ -135,6 +139,7 @@ export async function ingestCallFromUrl(opts: {
   url: string;
   telefono?: string | null;
   contacto?: string | null;
+  ejecutivo?: string | null;
 }): Promise<AircallIngestResult> {
   const url = opts.url?.trim();
   if (!url) return { ok: false, analizada: false, motivo: "Falta la URL de la grabación." };
@@ -162,7 +167,7 @@ export async function ingestCallFromUrl(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url }
+    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url, ejecutivo: opts.ejecutivo ?? null }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, result };
