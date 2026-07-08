@@ -32,11 +32,25 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
-      # Monday (con el token, los agentes ESCRIBEN en el tablero).
+      # Monday. El token se pega en el dashboard de Render (es secreto).
       - key: MONDAY_API_TOKEN
         sync: false
+      # ⚠️ Board de ESCRITURA = board de PRUEBA (workspace AI Hub). El board real
+      # "Leads Maxirent" (8311006929) es SOLO LECTURA y NUNCA se escribe.
       - key: MONDAY_BOARD_ID_LEADS
-        sync: false
+        value: "18419649847"
+      # Forecast con datos reales (solo lectura de estos boards de producción).
+      - key: MONDAY_BOARD_ID_OPORTUNIDADES
+        value: "8311006777"
+      - key: MONDAY_BOARD_ID_OBJETIVOS
+        value: "8311006715"
+      # false = las escrituras van al board de prueba mapeado abajo. Poner true
+      # para congelar TODA escritura a Monday (candado global).
+      - key: MONDAY_READ_ONLY
+        value: "false"
+      # Columnas de salida en el board de prueba (solo estas se escriben).
+      - key: MONDAY_COLUMN_MAP
+        value: '{"score_lead":"numeric_mm4r7m81","prioridad":"text_mm4rjxkq","riesgo":"text_mm4rbjec","perfil_empresa":"long_text_mm4rshpz","accion_recomendada":"long_text_mm4rf0rb","sentimiento_llamada":"text_mm4rfcb5","probabilidad_cierre":"text_mm4r39gs","oportunidad_upsell":"text_mm4razmd","tipo_oportunidad":"text_mm4ry458","requiere_atencion":"color_mm4rqvnw"}'
       - key: MONDAY_WEBHOOK_SECRET
         sync: false
       # Aircall (opcional, llamadas reales + transcripcion).
