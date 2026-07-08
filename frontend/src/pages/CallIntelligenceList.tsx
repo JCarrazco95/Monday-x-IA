@@ -65,6 +65,10 @@ export function CallIntelligenceList() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [filterBanda, setFilterBanda] = useState<Banda | "">("");
+  const [filterVendedor, setFilterVendedor] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [soloMejores, setSoloMejores] = useState(false); // C.5: biblioteca de mejores llamadas
 
   // Traer llamada: por ID de Aircall, por URL de la grabación, o pegar transcripción
   const [callId, setCallId] = useState("");
@@ -106,18 +110,32 @@ export function CallIntelligenceList() {
     transcript.trim() && runIngest(() => api.analyzeTranscript(transcript.trim(), { prospecto: prospecto.trim() || undefined }));
 
   const calls = data?.calls ?? [];
+
+  // Vendedores únicos presentes en el historial (para el filtro).
+  const vendedores = useMemo(
+    () => [...new Set(calls.map((c) => c.vendedor).filter((v): v is string => Boolean(v)))].sort(),
+    [calls]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return calls.filter((c) => {
-      if (filterBanda && c.challengerBanda !== filterBanda) return false;
+      if (filterBanda && (c.globalBanda ?? c.challengerBanda) !== filterBanda) return false;
+      if (filterVendedor && c.vendedor !== filterVendedor) return false;
+      // Fechas: la fecha viene en ISO UTC; comparar por prefijo YYYY-MM-DD.
+      if (fechaDesde && (c.fecha ?? "") < fechaDesde) return false;
+      if (fechaHasta && (c.fecha ?? "") > fechaHasta + "T23:59:59Z") return false;
+      // "Mejores llamadas" (C.5): score global >= 75 (material de entrenamiento).
+      if (soloMejores && (c.globalScore ?? c.sandlerScore) < 75) return false;
       if (!q) return true;
       return (
         c.idLlamada.toLowerCase().includes(q) ||
         c.prospecto.toLowerCase().includes(q) ||
+        (c.vendedor ?? "").toLowerCase().includes(q) ||
         (c.perfilVendedor ?? "").toLowerCase().includes(q)
       );
     });
-  }, [calls, search, filterBanda]);
+  }, [calls, search, filterBanda, filterVendedor, fechaDesde, fechaHasta, soloMejores]);
 
   const s = data?.stats;
 
@@ -245,27 +263,79 @@ export function CallIntelligenceList() {
         />
       </div>
 
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por ID, prospecto o perfil…"
-          className="h-10 flex-1 rounded-xl border border-border bg-surface px-4 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
-        />
-        <select
-          value={filterBanda}
-          onChange={(e) => setFilterBanda(e.target.value as Banda | "")}
-          className="h-10 rounded-xl border border-border bg-surface px-3 text-sm text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
-        >
-          <option value="">Todas las bandas</option>
-          <option value="verde">Verde (≥75)</option>
-          <option value="amarillo">Amarillo (50-74)</option>
-          <option value="rojo">Rojo (&lt;50)</option>
-        </select>
+      <div className="mb-3 flex flex-col gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por ID, prospecto, vendedor o perfil…"
+            className="h-10 flex-1 rounded-xl border border-border bg-surface px-4 text-sm placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+          />
+          <select
+            value={filterVendedor}
+            onChange={(e) => setFilterVendedor(e.target.value)}
+            className="h-10 rounded-xl border border-border bg-surface px-3 text-sm text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <option value="">Todos los vendedores</option>
+            {vendedores.map((v) => (
+              <option key={v} value={v}>{v}</option>
+            ))}
+          </select>
+          <select
+            value={filterBanda}
+            onChange={(e) => setFilterBanda(e.target.value as Banda | "")}
+            className="h-10 rounded-xl border border-border bg-surface px-3 text-sm text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+          >
+            <option value="">Todas las bandas</option>
+            <option value="verde">Verde (≥75)</option>
+            <option value="amarillo">Amarillo (50-74)</option>
+            <option value="rojo">Rojo (&lt;50)</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            Desde
+            <input
+              type="date"
+              value={fechaDesde}
+              onChange={(e) => setFechaDesde(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-surface px-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </label>
+          <label className="flex items-center gap-2 text-xs text-text-muted">
+            Hasta
+            <input
+              type="date"
+              value={fechaHasta}
+              onChange={(e) => setFechaHasta(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-surface px-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </label>
+          <button
+            onClick={() => setSoloMejores((v) => !v)}
+            className={`h-9 rounded-lg px-3 text-sm font-medium transition-colors ${
+              soloMejores
+                ? "bg-success/15 text-success ring-1 ring-success/30"
+                : "border border-border bg-surface text-text-muted hover:text-text"
+            }`}
+            title="Biblioteca de mejores llamadas (score global ≥ 75): material real para entrenar vendedores"
+          >
+            ⭐ Mejores llamadas
+          </button>
+          {(filterVendedor || fechaDesde || fechaHasta || filterBanda || soloMejores || search) && (
+            <button
+              onClick={() => { setSearch(""); setFilterBanda(""); setFilterVendedor(""); setFechaDesde(""); setFechaHasta(""); setSoloMejores(false); }}
+              className="h-9 rounded-lg px-3 text-sm text-text-muted underline-offset-2 hover:underline"
+            >
+              Limpiar filtros
+            </button>
+          )}
+          <span className="text-xs text-text-muted sm:ml-auto">{filtered.length} de {calls.length} llamadas</span>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-        <div className="grid grid-cols-[1fr_1.4fr_1.1fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] gap-2 border-b border-border px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
+        <div className="grid grid-cols-[1fr_1.4fr_1fr_1.1fr_0.9fr_0.9fr_0.9fr_0.8fr] gap-2 border-b border-border px-5 py-3 text-[11px] font-semibold uppercase tracking-wide text-text-muted">
           <div>ID Llamada</div>
           <div>Prospecto</div>
           <div>Vendedor</div>
@@ -298,7 +368,7 @@ export function CallIntelligenceList() {
             <button
               key={c.itemId}
               onClick={() => navigate(`/call-intelligence/${c.itemId}`)}
-              className="grid w-full grid-cols-[1fr_1.4fr_1.1fr_1.2fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
+              className="grid w-full grid-cols-[1fr_1.4fr_1fr_1.1fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
             >
               <div className="font-mono text-xs text-accent">{c.idLlamada}</div>
               <div className="truncate font-medium">{c.prospecto}</div>

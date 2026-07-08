@@ -13,7 +13,10 @@
 
 import crypto from "node:crypto";
 import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
+import { runMondayWriterAgent } from "../agents/mondayWriterAgent.js";
+import { buildCoachingComment } from "./coachingComment.js";
 import { logActivity } from "./activityLog.js";
+import type { CallIntelligenceOutput } from "../agents/types.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
@@ -41,8 +44,6 @@ export async function ingestAircallCall(
     recordingHint?: string | null;
     /** Transcripción ya provista (p. ej. pegada a mano); evita ir a Aircall. */
     transcriptOverride?: string | null;
-    /** Vendedor si ya se conoce (si no, se toma del user de Aircall). */
-    ejecutivoHint?: string | null;
   } = {}
 ): Promise<AircallIngestResult> {
   if (!callId) return { ok: false, analizada: false, motivo: "Falta el ID de la llamada." };
@@ -53,7 +54,6 @@ export async function ingestAircallCall(
   const numero = detail?.numero ?? opts.numeroHint ?? null;
   const contacto = detail?.contacto ?? opts.contactoHint ?? null;
   const recordingUrl = detail?.recordingUrl ?? opts.recordingHint ?? null;
-  const ejecutivo = detail?.agente ?? opts.ejecutivoHint ?? null;
 
   // Transcripción: override > Aircall AI > Deepgram sobre la grabación.
   let transcript: string | null = opts.transcriptOverride ?? null;
@@ -90,7 +90,13 @@ export async function ingestAircallCall(
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: numero, audioUrl: recordingUrl ?? undefined, ejecutivo }
+    payload: {
+      transcript,
+      telefono: numero,
+      audioUrl: recordingUrl ?? undefined,
+      // Identidad del vendedor (Aircall user.name): habilita coaching por vendedor.
+      vendedor: detail?.agente ?? null
+    }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: numero, contacto, result };
@@ -107,7 +113,6 @@ export async function ingestCallFromTranscript(opts: {
   transcript: string;
   prospecto?: string | null;
   telefono?: string | null;
-  ejecutivo?: string | null;
 }): Promise<AircallIngestResult> {
   const transcript = opts.transcript?.trim();
   if (!transcript) return { ok: false, analizada: false, motivo: "Falta la transcripción." };
@@ -122,7 +127,7 @@ export async function ingestCallFromTranscript(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null, ejecutivo: opts.ejecutivo ?? null }
+    payload: { transcript, telefono: opts.telefono ?? null }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.prospecto ?? null, result };
@@ -139,7 +144,6 @@ export async function ingestCallFromUrl(opts: {
   url: string;
   telefono?: string | null;
   contacto?: string | null;
-  ejecutivo?: string | null;
 }): Promise<AircallIngestResult> {
   const url = opts.url?.trim();
   if (!url) return { ok: false, analizada: false, motivo: "Falta la URL de la grabación." };
@@ -167,7 +171,7 @@ export async function ingestCallFromUrl(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url, ejecutivo: opts.ejecutivo ?? null }
+    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, result };
@@ -194,6 +198,38 @@ const CALLS_SYNC_MAX = Number(process.env.CALLS_SYNC_MAX ?? 25);
 // "De aquí en adelante": solo se analizan llamadas iniciadas en/después de esta
 // fecha ISO. Configúralo (p. ej. 2026-07-03) para ignorar el histórico.
 const CALLS_SYNC_SINCE = process.env.CALLS_SYNC_SINCE;
+
+/** Último análisis guardado para un itemId (desde la bitácora). */
+async function latestAnalysis(itemId: string): Promise<CallIntelligenceOutput | null> {
+  try {
+    const row = await db.queryOne<{ payload: string }>(
+      `SELECT payload FROM logs
+         WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference LIKE ?
+         ORDER BY timestamp DESC, id DESC LIMIT 1`,
+      [`#${itemId} ·%`]
+    );
+    return row?.payload ? (JSON.parse(row.payload) as CallIntelligenceOutput) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * C.1 — Publica el coaching accionable como update en el ITEM DE MONDAY de la
+ * llamada (tablero de Aircall), para que el vendedor lo reciba donde trabaja.
+ * Idempotente (via monday_writes). Nunca rompe el sync si falla.
+ */
+async function postCoachingToBoardItem(boardItemId: string, analysisItemId: string, itemName: string): Promise<void> {
+  try {
+    const call = await latestAnalysis(analysisItemId);
+    if (!call) return;
+    const comment = buildCoachingComment(call);
+    if (!comment) return; // buzón / sin material accionable
+    await runMondayWriterAgent({ itemId: boardItemId, itemName, comment });
+  } catch (err) {
+    console.error("[coaching] no se pudo publicar el coaching en Monday:", err instanceof Error ? err.message : err);
+  }
+}
 
 /** itemIds de llamadas ya analizadas (desde la bitácora) para no repetir. */
 async function analyzedCallItemIds(): Promise<Set<string>> {
@@ -258,7 +294,12 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
       }
       if (res?.analizada) {
         out.analizadas++;
-        if (res.itemId) analyzed.add(res.itemId);
+        if (res.itemId) {
+          analyzed.add(res.itemId);
+          // C.1: coaching accionable como comentario en el item de Monday de la
+          // llamada (it.itemId es el id REAL del board, apto para escribir).
+          await postCoachingToBoardItem(it.itemId, res.itemId, nombre);
+        }
         out.detalle.push({ itemName: nombre, estado: "analizada" });
       } else {
         out.errores.push({ itemName: nombre, motivo: res?.motivo ?? "No se pudo obtener la transcripción." });

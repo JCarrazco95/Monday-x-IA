@@ -104,29 +104,24 @@ Cada una indica **valor de negocio**, **complejidad** (baja/media/alta) y **qué
 código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligence
 (Sandler + Challenger + coaching) y la bitácora ya existentes.
 
-> **Prerrequisito transversal (alta prioridad):** hoy **no se captura la identidad
-> del vendedor por llamada**. `coaching.ts` lo dice explícitamente (`groupKey`,
-> línea 15) y `callsRouter.toListItem` deja `vendedor: null` (`calls.ts:82`). Casi
-> todas las features de abajo pasan de "nivel equipo" a "por vendedor" en cuanto se
-> agregue `vendedorId` al payload de la llamada (columna de Aircall/Monday ya
-> contemplada en el `.env`: `COL_VENDEDOR`). **Esta es la palanca #1.**
+> **Prerrequisito transversal — ✅ HECHO:** la identidad del vendedor por llamada
+> ya se captura: Aircall `user.name` → `payload.vendedor` → `vendedorNombre` en el
+> análisis (`callIntelligenceAgent`). La lista de Call Intelligence muestra el
+> vendedor y `/api/coaching` devuelve `porVendedor` (promedios + etapa más débil
+> por persona), visible en la pestaña Coaching. Las llamadas anteriores a este
+> cambio aparecen como "Sin identificar". Con esto C.2–C.7 quedan desbloqueadas.
 
-### C.1 Coaching automatizado post-llamada (accionable, no solo puntaje)
-- **Valor:** alto — cada vendedor recibe mejoras concretas con frases listas para
-  usar tras cada llamada.
-- **Complejidad:** **baja.** Ya está casi todo: `callIntelligenceAgent` produce
-  `vendedor.mejoras` con `area/accion/ejemploFrase/prioridad` y
-  `sandler.recomendaciones`. Falta empujarlo al vendedor (comentario en Monday con
-  @mención, email o notificación) en vez de solo mostrarlo en el panel.
-- **Reutiliza:** `SellerAnalysis`/`SellerImprovement` (`types.ts:174`),
-  `mondayWriterAgent`, `postMondayComment`.
+### C.1 Coaching automatizado post-llamada — ✅ HECHO
+- Tras analizar cada llamada del tablero de Aircall, se publica un **update de
+  coaching en el item de Monday** (`lib/coachingComment.ts` + `syncCallsBoard`):
+  score y banda, etapa a trabajar de ESA llamada, top 3 mejoras priorizadas con
+  frase lista para usar y objetivo de la próxima llamada. Idempotente (no se
+  duplica al re-sincronizar) y omite buzones/no evaluables. Las automatizaciones
+  nativas de Monday pueden notificar al vendedor sobre ese update.
 
-### C.2 Tendencias de desempeño por vendedor en el tiempo
-- **Valor:** alto — ver si un vendedor mejora, dónde se estanca.
-- **Complejidad:** **media** (tras el prerrequisito de `vendedorId`).
-- **Reutiliza:** `coaching.ts` ya calcula tendencia mensual **a nivel equipo**
-  (`tendencia`, línea 148) y radar de habilidades; solo hay que agrupar por
-  `vendedorId` en vez de global. `Coaching.tsx` para la UI.
+### C.2 Tendencias de desempeño por vendedor — ✅ HECHO
+- `/api/coaching` → `porVendedor[].tendencia` (score global mensual por persona).
+  En la UI, el panel "Tendencia del score global" tiene selector Equipo/vendedor.
 
 ### C.3 Rankings / gamificación por las 7 etapas Sandler
 - **Valor:** medio-alto — competencia sana, adopción.
@@ -142,13 +137,11 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
   débil recurrente" del mismo vendedor (requiere C.2) y notificación push/Slack.
 - **Reutiliza:** NBA completo, `analisisProfundo.banderasRojas`, cron `NBA_CRON_HOURS`.
 
-### C.5 Biblioteca de "mejores llamadas" para entrenar nuevos vendedores
-- **Valor:** alto — onboarding acelerado con ejemplos reales.
-- **Complejidad:** **baja.** Filtrar por `integrado.scoreGlobal >= 75` /
-  `banda verde` (datos ya calculados) y marcar `citasDestacadas` /
-  `momentos positivos` como material didáctico.
-- **Reutiliza:** `getAnalyzedCalls` con filtro por banda; `CallAnalysisTabs` para
-  ver el desglose; `analisisProfundo.momentos`/`citasDestacadas`.
+### C.5 Biblioteca de "mejores llamadas" — ✅ HECHO
+- `GET /api/calls/biblioteca?min=75`: llamadas con score global ≥ min con su
+  material didáctico (momento clave, fortalezas, citas destacadas, momentos
+  positivos), ordenadas por score. En la UI: botón **"⭐ Mejores llamadas"** en
+  Call Intelligence (junto a los filtros por vendedor/fecha/banda/texto nuevos).
 
 ### C.6 Integración con calendario/CRM para seguir las acciones recomendadas
 - **Valor:** alto — que las `accionSugerida`/compromisos se conviertan en tareas
@@ -159,13 +152,14 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
   (`parseFechaCompromiso`). Falta sincronizar esos subitems/acciones al calendario
   del vendedor y cerrar el loop cuando se completan.
 
-### C.7 Reportes ejecutivos automáticos (semanal/mensual)
-- **Valor:** alto para gerencia.
-- **Complejidad:** **media.**
-- **Reutiliza:** `coaching.ts`, `forecast.ts` y el **chat RAG** (`assistant.ts`) ya
-  agregan casi todo; falta un job programado (extender el "cron" interno de
-  `index.ts:73`, `NBA_CRON_HOURS`) que genere un resumen con el LLM y lo envíe por
-  email/Slack, más export a PDF/`.docx` (hay skills de documentos disponibles).
+### C.7 Reportes ejecutivos — ✅ HECHO (v1 bajo demanda)
+- `GET /api/reports/executive?dias=7|14|30`: KPIs de llamadas y calidad, desglose
+  por vendedor, etapa débil del equipo, objeciones recurrentes, leads nuevos/
+  calientes, upsells detectados y alertas de alta prioridad, en JSON + `markdown`
+  listo para enviar. Determinista (sin costo de IA). En la UI: botón "Reporte
+  ejecutivo" en Coaching con selector de período y Copiar.
+- **Pendiente v2:** envío automático (cron + email/Slack) cuando haya
+  credenciales de correo, y export a PDF/.docx.
 
 ### Priorización sugerida (impacto/esfuerzo)
 

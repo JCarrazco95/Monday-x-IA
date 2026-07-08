@@ -39,6 +39,9 @@ export async function structuredCompletion<T>(opts: {
   inputSchema: Record<string, unknown>;
   model?: string;
   mockFn: () => T;
+  /** Ajuste de reintentos. Endpoints interactivos (chat) usan reintentos cortos
+   *  para fallar rápido con un mensaje claro; los batch usan los defaults. */
+  retryOpts?: { retries?: number; baseDelayMs?: number; floor429Ms?: number };
 }): Promise<T> {
   if (isMockMode) {
     return opts.mockFn();
@@ -49,7 +52,8 @@ export async function structuredCompletion<T>(opts: {
       system: opts.system,
       prompt: opts.prompt,
       inputSchema: opts.inputSchema,
-      model: opts.model
+      model: opts.model,
+      retryOpts: opts.retryOpts
     });
   }
 
@@ -77,7 +81,7 @@ export async function structuredCompletion<T>(opts: {
       }
     ],
     tool_choice: { type: "tool", name: opts.toolName }
-  }), `claude structuredCompletion (${opts.toolName})`);
+  }), `claude structuredCompletion (${opts.toolName})`, opts.retryOpts);
   trackUsage(model, response.usage);
 
   const toolUse = response.content.find(

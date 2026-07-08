@@ -3,14 +3,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, LineChart, Line
 } from "recharts";
-import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users } from "lucide-react";
+import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check } from "lucide-react";
 import { api } from "../lib/api";
 import type { CoachingReport } from "../types";
 
 // ===========================================================================
-//  Coaching — convierte el análisis de llamadas en mejora de ventas.
-//  Lee /api/coaching. Selector de vendedor (identidad tomada del user de
-//  Aircall en cada llamada) y de periodo; sin selección = equipo completo.
+//  Coaching del equipo — convierte el análisis de llamadas en mejora de ventas.
+//  Lee /api/coaching (agregación a nivel equipo).
 // ===========================================================================
 
 const C = {
@@ -67,30 +66,49 @@ function FreqList({ items, color }: { items: { texto: string; count: number }[];
   );
 }
 
-const PERIODOS = [
-  { dias: null, label: "Todo el histórico" },
-  { dias: 30, label: "Últimos 30 días" },
-  { dias: 90, label: "Últimos 90 días" }
-] as const;
-
 export function Coaching() {
   const [data, setData] = useState<CoachingReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [vendedor, setVendedor] = useState<string | null>(null);
-  const [dias, setDias] = useState<number | null>(null);
+  // C.2: tendencia por vendedor ("" = todo el equipo).
+  const [trendVendedor, setTrendVendedor] = useState("");
+  // C.7: reporte ejecutivo bajo demanda.
+  const [reporte, setReporte] = useState<string | null>(null);
+  const [reporteDias, setReporteDias] = useState(7);
+  const [generando, setGenerando] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+
+  const generarReporte = async () => {
+    setGenerando(true);
+    try {
+      const r = await api.getExecutiveReport(reporteDias);
+      setReporte(r.markdown);
+      setCopiado(false);
+    } catch (err) {
+      setReporte(`Error al generar el reporte: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setGenerando(false);
+    }
+  };
+
+  const copiarReporte = async () => {
+    if (!reporte) return;
+    await navigator.clipboard.writeText(reporte);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      setData(await api.getCoaching({ vendedor, dias }));
+      setData(await api.getCoaching());
       setError(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [vendedor, dias]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -99,39 +117,40 @@ export function Coaching() {
   }));
   const habilidades = (data?.habilidades ?? []).map((h) => ({ habilidad: h.nombre.replace(/\s*\/.*/, ""), valor: h.promedio }));
   const perfiles = (data?.perfilesVendedor ?? []).map((p) => ({ name: PERFIL_LABEL[p.perfil] ?? p.perfil, value: p.count }));
-  const tendencia = (data?.tendencia ?? []).map((t) => ({ periodo: t.periodo, score: t.globalProm }));
+  // Serie de tendencia: equipo completo o el vendedor seleccionado (C.2).
+  const trendSource = trendVendedor
+    ? (data?.porVendedor ?? []).find((v) => v.vendedor === trendVendedor)?.tendencia ?? []
+    : data?.tendencia ?? [];
+  const tendencia = trendSource.map((t) => ({ periodo: t.periodo, score: t.globalProm }));
 
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-text">
-            <GraduationCap className="text-accent" /> Coaching {vendedor ? `· ${vendedor}` : "del equipo"}
+            <GraduationCap className="text-accent" /> Coaching del equipo
           </h1>
           <p className="mt-1 text-sm text-text-muted">
             De analizar llamadas a mejorar al equipo: dónde se cae la venta y qué entrenar.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <select
-            value={vendedor ?? ""}
-            onChange={(e) => setVendedor(e.target.value || null)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+            value={reporteDias}
+            onChange={(e) => setReporteDias(Number(e.target.value))}
+            className="h-9 rounded-lg border border-border bg-surface px-2 text-sm text-text-muted focus:outline-none"
           >
-            <option value="">Equipo completo</option>
-            {(data?.vendedores ?? []).map((v) => (
-              <option key={v} value={v}>{v}</option>
-            ))}
+            <option value={7}>Últimos 7 días</option>
+            <option value={14}>Últimos 14 días</option>
+            <option value={30}>Últimos 30 días</option>
           </select>
-          <select
-            value={dias ?? ""}
-            onChange={(e) => setDias(e.target.value ? Number(e.target.value) : null)}
-            className="rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text"
+          <button
+            onClick={generarReporte}
+            disabled={generando}
+            className="inline-flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
-            {PERIODOS.map((p) => (
-              <option key={p.label} value={p.dias ?? ""}>{p.label}</option>
-            ))}
-          </select>
+            <FileText size={15} className={generando ? "animate-pulse" : ""} /> Reporte ejecutivo
+          </button>
           <button
             onClick={load}
             disabled={loading}
@@ -141,6 +160,26 @@ export function Coaching() {
           </button>
         </div>
       </div>
+
+      {reporte && (
+        <div className="mb-4 rounded-xl border border-accent/25 bg-surface p-4">
+          <div className="mb-2 flex items-center justify-between">
+            <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+              <FileText size={15} className="text-accent" /> Reporte ejecutivo (listo para enviar)
+            </h3>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={copiarReporte}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-text-muted hover:text-text"
+              >
+                {copiado ? <Check size={13} className="text-success" /> : <Copy size={13} />} {copiado ? "Copiado" : "Copiar"}
+              </button>
+              <button onClick={() => setReporte(null)} className="text-xs text-text-muted hover:text-text">Cerrar</button>
+            </div>
+          </div>
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg bg-bg p-3 text-xs leading-relaxed text-text">{reporte}</pre>
+        </div>
+      )}
 
       {error && <div className="mb-4 rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
@@ -165,54 +204,42 @@ export function Coaching() {
             <div className="mb-4 flex items-center gap-3 rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm">
               <TrendingDown className="shrink-0 text-warning" size={18} />
               <span className="text-text">
-                Foco de coaching{vendedor ? ` de ${vendedor}` : " del equipo"}: la etapa Sandler más débil es{" "}
+                Foco de coaching del equipo: la etapa Sandler más débil es{" "}
                 <strong>{data.etapaMasDebil.nombre}</strong> (promedio {data.etapaMasDebil.promedio}/100). Entrenar aquí mueve la aguja.
               </span>
             </div>
           )}
 
-          {!vendedor && data.ranking.length > 0 && (
-            <div className="mb-4 rounded-xl border border-border bg-surface">
-              <h3 className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold text-text">
-                <Users size={15} className="text-accent" /> Comparativa por vendedor
-                <span className="font-normal text-text-muted">(clic para ver su coaching)</span>
-              </h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-[13px]">
-                  <thead>
-                    <tr className="border-b border-border text-left text-xs text-text-muted">
-                      <th className="px-4 py-2 font-medium">Vendedor</th>
-                      <th className="px-4 py-2 text-right font-medium">Llamadas</th>
-                      <th className="px-4 py-2 text-right font-medium">Sandler</th>
-                      <th className="px-4 py-2 text-right font-medium">Challenger</th>
-                      <th className="px-4 py-2 text-right font-medium">Global</th>
-                      <th className="px-4 py-2 text-right font-medium">Verdes</th>
-                      <th className="px-4 py-2 text-right font-medium">Rojas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.ranking.map((r) => (
-                      <tr
-                        key={r.vendedor}
-                        onClick={() => r.vendedor !== "Sin identificar" && setVendedor(r.vendedor)}
-                        className={`border-b border-border/60 last:border-0 ${
-                          r.vendedor !== "Sin identificar" ? "cursor-pointer hover:bg-accent/5" : "text-text-muted"
-                        }`}
-                      >
-                        <td className="px-4 py-2 font-medium text-text">{r.vendedor}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{r.llamadas}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{r.sandlerProm}</td>
-                        <td className="px-4 py-2 text-right tabular-nums">{r.challengerProm}</td>
-                        <td className="px-4 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(r.globalProm) }}>
-                          {r.globalProm}
-                        </td>
-                        <td className="px-4 py-2 text-right tabular-nums text-success">{r.verdes}</td>
-                        <td className="px-4 py-2 text-right tabular-nums text-danger">{r.rojas}</td>
+          {(data.porVendedor ?? []).length > 0 && (
+            <div className="mb-4">
+              <Panel title="Desempeño por vendedor" icon={<Users size={15} className="text-accent" />}>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs text-text-muted">
+                        <th className="px-3 py-2 font-medium">Vendedor</th>
+                        <th className="px-3 py-2 text-right font-medium">Llamadas</th>
+                        <th className="px-3 py-2 text-right font-medium">Sandler</th>
+                        <th className="px-3 py-2 text-right font-medium">Challenger</th>
+                        <th className="px-3 py-2 text-right font-medium">Global</th>
+                        <th className="px-3 py-2 font-medium">Etapa a entrenar</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {(data.porVendedor ?? []).map((v) => (
+                        <tr key={v.vendedor} className="border-b border-border/60 last:border-0">
+                          <td className="px-3 py-2 font-medium text-text">{v.vendedor}</td>
+                          <td className="px-3 py-2 text-right tabular-nums text-text-muted">{v.llamadas}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.sandlerProm) }}>{v.sandlerProm}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.challengerProm) }}>{v.challengerProm}</td>
+                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.globalProm) }}>{v.globalProm}</td>
+                          <td className="px-3 py-2 text-text-muted">{v.etapaMasDebil ? `${v.etapaMasDebil.nombre} (${v.etapaMasDebil.promedio})` : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
             </div>
           )}
 
@@ -267,6 +294,18 @@ export function Coaching() {
             </Panel>
 
             <Panel title="Tendencia del score global (mensual)">
+              {(data.porVendedor ?? []).length > 0 && (
+                <select
+                  value={trendVendedor}
+                  onChange={(e) => setTrendVendedor(e.target.value)}
+                  className="mb-2 h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+                >
+                  <option value="">Todo el equipo</option>
+                  {(data.porVendedor ?? []).map((v) => (
+                    <option key={v.vendedor} value={v.vendedor}>{v.vendedor}</option>
+                  ))}
+                </select>
+              )}
               {tendencia.length > 1 ? (
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={tendencia} margin={{ top: 8, right: 8, bottom: 8, left: -16 }}>

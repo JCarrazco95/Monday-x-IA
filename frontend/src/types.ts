@@ -186,7 +186,7 @@ export interface CoachingReport {
   ranking: CoachingRanking[];
   stats: {
     totalLlamadas: number;
-    noEvaluables: number;
+    noEvaluables?: number;
     sandlerProm: number;
     challengerProm: number;
     globalProm: number;
@@ -195,6 +195,15 @@ export interface CoachingReport {
   };
   etapasSandler: { id: number; nombre: string; peso: number; promedio: number; muestras: number }[];
   etapaMasDebil: { id: number; nombre: string; peso: number; promedio: number } | null;
+  porVendedor?: {
+    vendedor: string;
+    llamadas: number;
+    sandlerProm: number;
+    challengerProm: number;
+    globalProm: number;
+    etapaMasDebil: { nombre: string; promedio: number } | null;
+    tendencia?: { periodo: string; globalProm: number; count: number }[];
+  }[];
   perfilesVendedor: { perfil: string; count: number; pct: number }[];
   habilidades: { nombre: string; promedio: number }[];
   banderasRojas: { texto: string; count: number }[];

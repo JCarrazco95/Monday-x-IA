@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { structuredCompletion, MODEL_HEAVY } from "../lib/claude.js";
+import { is429 } from "../lib/retry.js";
 import { parseReference, safeParseJson } from "../lib/references.js";
 import type { LeadEnrichmentOutput, CallIntelligenceOutput } from "../agents/types.js";
 
@@ -192,7 +193,10 @@ assistantRouter.post("/chat", async (req, res) => {
       toolName: "respuesta_asistente",
       toolDescription: "Respuesta del asistente comercial basada en el histórico.",
       inputSchema: SCHEMA,
-      mockFn: () => mockAnswer(question, top)
+      mockFn: () => mockAnswer(question, top),
+      // Chat interactivo: fallar rápido (un reintento corto) en vez de dejar al
+      // usuario esperando 60s+; el 503 de abajo explica el porqué.
+      retryOpts: { retries: 1, floor429Ms: 4000 }
     });
 
     res.json({
@@ -201,6 +205,15 @@ assistantRouter.post("/chat", async (req, res) => {
       contexto: top.map((t) => ({ itemId: t.doc.itemId, itemName: t.doc.itemName }))
     });
   } catch (err) {
+    // Cuota de IA agotada: mensaje claro y accionable (no un 504 críptico ni
+    // una respuesta demo disfrazada de real).
+    if (is429(err)) {
+      return res.status(503).json({
+        error:
+          "La cuota del proveedor de IA está agotada por ahora (tier gratuito). " +
+          "Intenta de nuevo en unos minutos, o sube el plan del proveedor para eliminar el límite."
+      });
+    }
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });

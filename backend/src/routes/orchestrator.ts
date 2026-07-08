@@ -60,13 +60,13 @@ orchestratorRouter.post("/simulate/:scenario", async (req, res) => {
         "Vendedor: Juan, te llamo para darte seguimiento. Cliente: Si, ya revise la cotizacion, me interesa muchisimo. Tenemos un problema urgente de unidades paradas que nos esta costando. Vendedor: Te muestro el comparativo de costo total: mantener flota propia inmoviliza ~30% mas de capital. Cliente: No lo habia visto asi. Vendedor: Agendemos con finanzas el jueves. Cliente: De acuerdo, adelante.",
         "Vendedor: Hola Juan. Cliente: Mira, lo estuve pensando y sigo dudando por el precio, ademas mi jefe no esta convencido. Vendedor: Entiendo. Cliente: No se si avanzar. Vendedor: Te marco la proxima semana. Cliente: Va."
       ];
-      // Vendedores ficticios para poder demostrar el coaching POR VENDEDOR.
-      const EJECUTIVOS_DEMO = ["Vendedor Demo A", "Vendedor Demo B", "Vendedor Demo C"];
-      const idx = Math.floor(Math.random() * TRANSCRIPTS.length);
+      const transcript = TRANSCRIPTS[Math.floor(Math.random() * TRANSCRIPTS.length)];
+      // Vendedores de ejemplo para poblar el desglose por vendedor del Coaching.
+      const VENDEDORES = ["Nadia López", "Carlos Ruiz"];
       return {
         eventType: "call_recorded" as const,
         item: { itemId: String(4000 + Math.floor(Math.random() * 999999)), itemName: "Llamada - Juan Garcia" },
-        payload: { transcript: TRANSCRIPTS[idx], telefono: "8112345678", ejecutivo: EJECUTIVOS_DEMO[idx] }
+        payload: { transcript, telefono: "8112345678", vendedor: VENDEDORES[Math.floor(Math.random() * VENDEDORES.length)] }
       };
     })()
   };

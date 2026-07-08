@@ -249,7 +249,7 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
     transcript: (event.payload.transcript as string) ?? "",
     audioUrl: event.payload.audioUrl as string | undefined,
     telefono: (event.payload.telefono as string | undefined) ?? null,
-    ejecutivo: (event.payload.ejecutivo as string | undefined) ?? null
+    vendedor: (event.payload.vendedor as string | undefined) ?? null
   };
 
   if ((await getAgentStatus(CALL_AGENT)) !== "active") {

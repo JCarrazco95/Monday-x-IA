@@ -177,6 +177,12 @@ export const api = {
     return request<CoachingReport>(`/coaching${qs ? `?${qs}` : ""}`);
   },
 
+  // C.7: Reporte ejecutivo del período (markdown listo para enviar).
+  getExecutiveReport: (dias = 7) =>
+    request<{ periodo: { desde: string; hasta: string; dias: number }; markdown: string }>(
+      `/reports/executive?dias=${dias}`
+    ),
+
   // Forecast / pipeline ponderado por probabilidad.
   getForecast: () => request<ForecastReport>("/forecast"),
 

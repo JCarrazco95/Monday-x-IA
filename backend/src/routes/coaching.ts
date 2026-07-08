@@ -10,7 +10,7 @@ import type { CallIntelligenceOutput } from "../agents/types.js";
 //  Global, la etapa Sandler más débil, distribución de perfiles del vendedor,
 //  radar de habilidades, banderas rojas y objeciones recurrentes, y tendencia.
 //
-//  Identidad del vendedor: cada análisis guarda `ejecutivo` (el user de Aircall
+//  Identidad del vendedor: cada análisis guarda `vendedorNombre` (el user de Aircall
 //  o el capturado a mano). Filtros por query: `?vendedor=<nombre>` acota todas
 //  las métricas a ese vendedor; `?dias=<n>` acota al periodo reciente. Sin
 //  filtros = equipo completo. Además se devuelve `vendedores` (los nombres
@@ -97,15 +97,15 @@ coachingRouter.get("/", async (req, res) => {
 
     // Vendedores disponibles en el periodo (para el selector del frontend) y
     // ranking comparativo, SIEMPRE sobre el total evaluable (sin filtro de vendedor).
-    const porVendedor = new Map<string, { call: CallIntelligenceOutput; ts: string }[]>();
+    const llamadasPorVendedor = new Map<string, { call: CallIntelligenceOutput; ts: string }[]>();
     for (const c of evaluables) {
-      const key = c.call.ejecutivo?.trim() || "Sin identificar";
-      const arr = porVendedor.get(key) ?? [];
+      const key = c.call.vendedorNombre?.trim() || "Sin identificar";
+      const arr = llamadasPorVendedor.get(key) ?? [];
       arr.push(c);
-      porVendedor.set(key, arr);
+      llamadasPorVendedor.set(key, arr);
     }
-    const vendedores = [...porVendedor.keys()].filter((v) => v !== "Sin identificar").sort();
-    const ranking = [...porVendedor.entries()]
+    const vendedores = [...llamadasPorVendedor.keys()].filter((v) => v !== "Sin identificar").sort();
+    const ranking = [...llamadasPorVendedor.entries()]
       .map(([vendedor, cs]) => {
         const globales = cs.map((c) => c.call.integrado?.scoreGlobal).filter((n): n is number => typeof n === "number");
         return {
@@ -121,7 +121,7 @@ coachingRouter.get("/", async (req, res) => {
       .sort((a, b) => b.globalProm - a.globalProm);
 
     const calls = vendedorFiltro
-      ? evaluables.filter((c) => (c.call.ejecutivo?.trim() || "Sin identificar") === vendedorFiltro)
+      ? evaluables.filter((c) => (c.call.vendedorNombre?.trim() || "Sin identificar") === vendedorFiltro)
       : evaluables;
     const noEvaluables = todas.length - evaluables.length;
 
@@ -180,6 +180,56 @@ coachingRouter.get("/", async (req, res) => {
       ])
     );
 
+    // Desglose POR VENDEDOR (Aircall user.name propagado como vendedorNombre).
+    // Las llamadas sin identidad se agrupan en "Sin identificar" — irán
+    // desapareciendo conforme entren análisis nuevos con el dato.
+    const porVendedorAgg = new Map<string, { sandler: number[]; challenger: number[]; global: number[]; etapas: Map<number, { nombre: string; puntajes: number[] }>; meses: Map<string, number[]> }>();
+    for (const { call, ts } of calls) {
+      const key = call.vendedorNombre?.trim() || "Sin identificar";
+      const cur = porVendedorAgg.get(key) ?? {
+        sandler: [] as number[],
+        challenger: [] as number[],
+        global: [] as number[],
+        etapas: new Map<number, { nombre: string; puntajes: number[] }>(),
+        meses: new Map<string, number[]>()
+      };
+      if (typeof call.sandler?.puntajeFinal === "number") cur.sandler.push(call.sandler.puntajeFinal);
+      if (typeof call.challenger?.score === "number") cur.challenger.push(call.challenger.score);
+      if (typeof call.integrado?.scoreGlobal === "number") cur.global.push(call.integrado.scoreGlobal);
+      // C.2: tendencia mensual POR vendedor (score global; cae a Sandler si falta).
+      const g = call.integrado?.scoreGlobal ?? call.sandler?.puntajeFinal;
+      if (typeof g === "number") {
+        const mk = monthKey(ts);
+        const arr = cur.meses.get(mk) ?? [];
+        arr.push(g);
+        cur.meses.set(mk, arr);
+      }
+      for (const e of call.sandler?.etapas ?? []) {
+        if (e.estado === "no_aplica") continue;
+        const et = cur.etapas.get(e.id) ?? { nombre: e.nombre, puntajes: [] };
+        et.puntajes.push(e.puntaje);
+        cur.etapas.set(e.id, et);
+      }
+      porVendedorAgg.set(key, cur);
+    }
+    const porVendedor = [...porVendedorAgg.entries()]
+      .map(([vendedor, v]) => {
+        const etapas = [...v.etapas.entries()].map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }));
+        const debil = etapas.length ? etapas.reduce((min, e) => (e.promedio < min.promedio ? e : min)) : null;
+        return {
+          vendedor,
+          llamadas: v.sandler.length,
+          sandlerProm: avg(v.sandler),
+          challengerProm: avg(v.challenger),
+          globalProm: avg(v.global),
+          etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null,
+          tendencia: [...v.meses.entries()]
+            .map(([periodo, scores]) => ({ periodo, globalProm: avg(scores), count: scores.length }))
+            .sort((a, b) => a.periodo.localeCompare(b.periodo))
+        };
+      })
+      .sort((a, b) => b.globalProm - a.globalProm || b.llamadas - a.llamadas);
+
     // Tendencia mensual del score global.
     const trendAgg = new Map<string, number[]>();
     for (const { call, ts } of calls) {
@@ -210,6 +260,7 @@ coachingRouter.get("/", async (req, res) => {
       },
       etapasSandler,
       etapaMasDebil,
+      porVendedor,
       perfilesVendedor,
       habilidades,
       banderasRojas,

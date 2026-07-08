@@ -4,11 +4,12 @@ const MONDAY_API_TOKEN = process.env.MONDAY_API_TOKEN;
 export const isMondayMockMode = !MONDAY_API_TOKEN;
 
 /**
- * Modo SOLO LECTURA: con MONDAY_READ_ONLY=true las queries de lectura funcionan
- * normal (forecast, sync de llamadas, columnas), pero CUALQUIER mutation se
- * simula (igual que el modo mock) y jamás llega a Monday. Es el seguro para
- * operar con token real sobre boards de producción sin riesgo de escritura,
- * hasta que se decida activar las escrituras (columna mapeada + read-only off).
+ * MODO SOLO LECTURA (MONDAY_READ_ONLY=true): las LECTURAS (items, columnas,
+ * tablero de llamadas) funcionan normal, pero TODA mutación (columnas,
+ * comentarios, subitems, crear items) se convierte en no-op y solo se registra
+ * qué se habría escrito. Garantía dura para validar sin tocar los tableros del
+ * cliente. Doble capa: cada helper de mutación lo respeta (blockedByReadOnly) y
+ * además mondayRequest simula cualquier query que empiece con "mutation".
  */
 export const isMondayReadOnly = (process.env.MONDAY_READ_ONLY ?? "").toLowerCase() === "true";
 
@@ -52,6 +53,13 @@ export async function mondayRequest<T = unknown>(
   return json.data as T;
 }
 
+/** Devuelve true (y loguea) si la mutación debe OMITIRSE por modo solo lectura. */
+function blockedByReadOnly(accion: string, detalle: string): boolean {
+  if (!isMondayReadOnly) return false;
+  console.warn(`[monday][SOLO LECTURA] ${accion} omitido: ${detalle}`);
+  return true;
+}
+
 export async function createMondayItem(opts: {
   boardId?: string;
   itemName: string;
@@ -59,6 +67,9 @@ export async function createMondayItem(opts: {
   /** Grupo del board donde crear el item (opcional). Si no, va al grupo por defecto. */
   groupId?: string;
 }): Promise<{ create_item?: { id: string } }> {
+  if (blockedByReadOnly("create_item", opts.itemName)) {
+    return { create_item: { id: `readonly-${Date.now()}` } };
+  }
   const boardId = opts.boardId ?? process.env.MONDAY_BOARD_ID_LEADS;
   // Si se pasa groupId, lo incluimos como argumento opcional de la mutación.
   const query = `
@@ -216,6 +227,9 @@ export async function updateMondayColumn(opts: {
   columnId: string;
   value: unknown;
 }) {
+  if (blockedByReadOnly("change_column_value", `item ${opts.itemId} col ${opts.columnId}`)) {
+    return { mock: true, readOnly: true };
+  }
   // change_simple_column_value acepta un STRING plano y funciona para texto,
   // números (como "93") y estado (por etiqueta). create_labels_if_missing crea
   // la etiqueta de estado (p.ej. "Sí"/"No") si aún no existe. Más robusto que
@@ -244,6 +258,9 @@ export async function createMondaySubitem(opts: {
   itemName: string;
   columnValues?: Record<string, unknown>;
 }) {
+  if (blockedByReadOnly("create_subitem", `item ${opts.parentItemId}: ${opts.itemName}`)) {
+    return { mock: true, readOnly: true };
+  }
   const query = `
     mutation ($parentItemId: ID!, $itemName: String!, $columnValues: JSON) {
       create_subitem(parent_item_id: $parentItemId, item_name: $itemName, column_values: $columnValues) {
@@ -259,6 +276,9 @@ export async function createMondaySubitem(opts: {
 }
 
 export async function postMondayComment(opts: { itemId: string; body: string }) {
+  if (blockedByReadOnly("create_update", `item ${opts.itemId} (${opts.body.slice(0, 60)}…)`)) {
+    return { mock: true, readOnly: true };
+  }
   const query = `
     mutation ($itemId: ID!, $body: String!) {
       create_update(item_id: $itemId, body: $body) {

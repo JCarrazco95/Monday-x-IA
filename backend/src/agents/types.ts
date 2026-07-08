@@ -97,8 +97,8 @@ export interface CallIntelligenceInput extends MondayItemRef {
   transcript: string;
   audioUrl?: string;
   telefono?: string | null;
-  /** Nombre del vendedor que hizo la llamada (user de Aircall o capturado a mano). */
-  ejecutivo?: string | null;
+  /** Nombre del vendedor/agente que atendió la llamada (de Aircall `user.name`). */
+  vendedor?: string | null;
 }
 
 export interface ChallengerDimension {
@@ -234,8 +234,9 @@ export interface CallIntelligenceOutput {
   sentimiento: "positivo" | "neutro" | "negativo";
   probabilidadCierre: "alta" | "media" | "baja";
   telefono?: string | null;
-  /** Identidad del vendedor que hizo la llamada (permite coaching por vendedor). */
-  ejecutivo?: string | null;
+  /** Identidad del vendedor que atendió (para coaching/tendencias POR vendedor).
+   *  Ojo: `vendedor` (abajo) es el ANÁLISIS de coaching; este es el NOMBRE. */
+  vendedorNombre?: string | null;
   sandler?: SandlerAnalysis;
   challenger?: ChallengerAnalysis;
   integrado?: IntegratedAnalysis;

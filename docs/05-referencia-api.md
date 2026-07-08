@@ -27,6 +27,17 @@ Estado del sistema y modo activo.
 `claudeMode`: `live|mock` · `aiProvider`: `claude|gemini|demo` · `mondayMode`:
 `live|mock` · `db`: `sqlite|postgres` · `auth`: `on|off`.
 
+### `GET /api/calls/analyzed` — filtros
+Además de `?phone=`, acepta: `vendedor=` (contiene, sin acentos), `banda=rojo|amarillo|verde`
+(sobre la banda global), `desde=YYYY-MM-DD`, `hasta=YYYY-MM-DD`, `q=` (texto sobre
+prospecto/resumen/vendedor/id) y `minGlobal=NN`. Los `stats` se calculan sobre el
+conjunto filtrado.
+
+### `GET /api/calls/biblioteca?min=75`
+C.5 — "Mejores llamadas" para entrenamiento: llamadas con score global ≥ `min`
+(def. 75) con material didáctico (momento clave, fortalezas, citas destacadas,
+momentos positivos), ordenadas por score descendente.
+
 ### `POST /api/calls/sync-board` (asíncrono)
 Inicia la sincronización del tablero de Aircall en segundo plano y responde
 `202 {started, startedAt}` (o `409` si ya hay una en curso). Body opcional
@@ -36,6 +47,12 @@ por eso no se espera en el request.
 ### `GET /api/calls/sync-status`
 Estado/resultado de la última sincronización:
 `{running, startedAt, finishedAt, result:{leidas, analizadas, yaAnalizadas, sinFuente, errores[]}, error}`.
+
+### `GET /api/reports/executive?dias=7`
+C.7 — Reporte ejecutivo del período (1-90 días, def. 7): KPIs de llamadas,
+desglose por vendedor, etapa débil, objeciones, leads nuevos/calientes, upsells
+y alertas de alta prioridad. Devuelve datos estructurados + `markdown` listo
+para enviar. Determinista (no consume IA) y no escribe en Monday.
 
 ### `GET /api/admin/demo-data`
 Preview (no borra): cuántos análisis generados por heurísticas (demo/fallback) y
