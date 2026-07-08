@@ -94,3 +94,20 @@ standalone** (JSON Schema draft-07). Estructura principal:
 
 El contrato real que consume el frontend es **`CallIntelligenceOutput`**
 (`backend/src/agents/types.ts`), no `esquema-salida.json`.
+
+## Tabla `call_analyses` (dominio, A.3 fase 1)
+
+Ultimo análisis de cada llamada, para las lecturas de Call Intelligence (la
+tabla `logs` queda como auditoría). Write-through desde el orquestador +
+backfill automático al arrancar si está vacía (`db/domain.ts`).
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `item_id` | TEXT UNIQUE | `aircall-<id>`, `call-<hash>`, `url-<hash>` o id numérico |
+| `item_name` | TEXT | nombre del item/llamada |
+| `telefono` / `vendedor` | TEXT (índice) | filtros por cliente y por vendedor |
+| `sandler_score` / `challenger_score` / `global_score` | REAL | para filtros/orden sin parsear JSON |
+| `banda` | TEXT | rojo/amarillo/verde (global) |
+| `fuente` | TEXT | ia / demo / fallback |
+| `payload` | TEXT (JSON) | `CallIntelligenceOutput` completo |
+| `analyzed_at` (índice) / `updated_at` | TEXT ISO | |

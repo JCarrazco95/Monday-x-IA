@@ -51,6 +51,26 @@ CREATE TABLE IF NOT EXISTS company_intel (
   updated_at   TEXT NOT NULL
 );
 
+-- TABLA DE DOMINIO (A.3): último análisis de cada llamada, con columnas
+-- indexadas para las consultas calientes (lista, detalle por item, filtro por
+-- teléfono/vendedor). El payload completo se conserva como JSON. La tabla logs
+-- sigue siendo la auditoría; esta es el camino de LECTURA principal.
+CREATE TABLE IF NOT EXISTS call_analyses (
+  id               ${autoId},
+  item_id          TEXT NOT NULL UNIQUE,
+  item_name        TEXT NOT NULL,
+  telefono         TEXT,
+  vendedor         TEXT,
+  sandler_score    REAL,
+  challenger_score REAL,
+  global_score     REAL,
+  banda            TEXT,
+  fuente           TEXT,
+  payload          TEXT NOT NULL,
+  analyzed_at      TEXT NOT NULL,
+  updated_at       TEXT NOT NULL
+);
+
 -- Registro de escrituras a Monday para IDEMPOTENCIA: guarda la firma de cada
 -- escritura (subitems + comentario) ya aplicada, para no duplicarla si el mismo
 -- análisis se reprocesa (reintento de webhook, re-sync del board, etc.).
@@ -66,6 +86,9 @@ CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp);
 CREATE INDEX IF NOT EXISTS idx_logs_reference ON logs(reference);
 CREATE INDEX IF NOT EXISTS idx_company_intel_key ON company_intel(key);
 CREATE INDEX IF NOT EXISTS idx_monday_writes_signature ON monday_writes(signature);
+CREATE INDEX IF NOT EXISTS idx_call_analyses_telefono ON call_analyses(telefono);
+CREATE INDEX IF NOT EXISTS idx_call_analyses_vendedor ON call_analyses(vendedor);
+CREATE INDEX IF NOT EXISTS idx_call_analyses_analyzed ON call_analyses(analyzed_at);
 `;
 }
 

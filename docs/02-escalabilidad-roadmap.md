@@ -60,6 +60,15 @@ type, title, payload…                     email_hash, score, prioridad,
 indexadas para las consultas calientes. La reconstrucción desde `logs` se vuelve
 un *fallback*/migración, no el camino principal.
 
+> **✅ Fase 1 hecha — `call_analyses`:** tabla de dominio con una fila por
+> llamada (item_id UNIQUE, telefono/vendedor/scores indexados, payload JSON).
+> El orquestador hace write-through tras cada análisis y al arrancar se puebla
+> sola desde `logs` si está vacía (`db/domain.ts`). Las lecturas de Call
+> Intelligence (lista, detalle, biblioteca) ya salen de aquí — el detalle pasó
+> de un LIKE sobre todo `logs` a un lookup por índice UNIQUE. La purga demo
+> también limpia esta tabla. **Pendiente fase 2:** `lead_analyses` equivalente
+> y migrar las lecturas de coaching/forecast/NBA/asistente.
+
 ---
 
 ## B. Fases 4 y 5 pendientes

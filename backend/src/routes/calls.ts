@@ -3,14 +3,14 @@ import { db } from "../db/index.js";
 import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
 import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
 import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
-import { parseReference } from "../lib/references.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
 //  Call Intelligence — historial de llamadas analizadas (Sandler + Challenger).
-//  El analisis de cada llamada vive en la bitacora (logs) como el payload que
-//  dejo el agente "call_intelligence". Lo listamos para la pagina Call
-//  Intelligence, de modo que cada llamada simulada/real aparezca en vivo.
+//  Lee la TABLA DE DOMINIO `call_analyses` (A.3): una fila indexada por
+//  llamada con el último análisis. La bitácora (`logs`) queda como auditoría;
+//  el write-through del orquestador y el backfill de arranque mantienen la
+//  tabla al día.
 // ===========================================================================
 
 export const callsRouter = Router();
@@ -39,28 +39,22 @@ function isoUtc(ts: string | null): string | null {
 }
 
 interface AnalyzedRow {
-  reference: string;
+  item_id: string;
+  item_name: string;
   payload: string;
-  timestamp: string;
-  duration_ms: number | null;
+  analyzed_at: string;
 }
 
 async function listAnalyzedRows(): Promise<AnalyzedRow[]> {
   return db.query<AnalyzedRow>(
-    `SELECT l.reference, l.payload, l.timestamp, l.duration_ms
-         FROM logs l
-         JOIN (
-           SELECT reference, MAX(id) AS mid
-             FROM logs
-            WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference IS NOT NULL
-            GROUP BY reference
-         ) m ON l.id = m.mid
-        ORDER BY l.timestamp DESC, l.id DESC`
+    `SELECT item_id, item_name, payload, analyzed_at
+       FROM call_analyses
+      ORDER BY analyzed_at DESC, id DESC`
   );
 }
 
 function toListItem(row: AnalyzedRow) {
-  const { itemId, itemName } = parseReference(row.reference);
+  const { item_id: itemId, item_name: itemName } = row;
   let call: CallIntelligenceOutput;
   try {
     call = JSON.parse(row.payload) as CallIntelligenceOutput;
@@ -76,7 +70,7 @@ function toListItem(row: AnalyzedRow) {
     idLlamada: `#${itemId}`,
     prospecto: prospecto(itemName),
     vendedor: call.vendedorNombre ?? null,
-    fecha: isoUtc(row.timestamp),
+    fecha: isoUtc(row.analyzed_at),
     sentimiento: call.sentimiento ?? null,
     sandlerScore: sScore,
     sandlerBanda: sBanda as Banda,
@@ -157,19 +151,25 @@ callsRouter.get("/analyzed", async (req, res) => {
 callsRouter.get("/biblioteca", async (req, res) => {
   try {
     const min = Number(req.query.min) || 75;
-    const rows = await listAnalyzedRows();
+    // Prefiltro por índice (global_score) y detalle desde el payload.
+    const rows = await db.query<AnalyzedRow>(
+      `SELECT item_id, item_name, payload, analyzed_at
+         FROM call_analyses
+        WHERE COALESCE(global_score, sandler_score, 0) >= ?
+        ORDER BY COALESCE(global_score, sandler_score, 0) DESC`,
+      [min]
+    );
     const mejores = [];
     for (const row of rows) {
-      const { itemId, itemName } = parseReference(row.reference);
       let call: CallIntelligenceOutput;
       try { call = JSON.parse(row.payload) as CallIntelligenceOutput; } catch { continue; }
       const score = call.integrado?.scoreGlobal ?? call.sandler?.puntajeFinal ?? 0;
       if (score < min) continue;
       mejores.push({
-        itemId,
-        prospecto: prospecto(itemName),
+        itemId: row.item_id,
+        prospecto: prospecto(row.item_name),
         vendedor: call.vendedorNombre ?? null,
-        fecha: isoUtc(row.timestamp),
+        fecha: isoUtc(row.analyzed_at),
         globalScore: Math.round(score),
         sandlerScore: Math.round(call.sandler?.puntajeFinal ?? 0),
         challengerScore: Math.round(call.challenger?.score ?? 0),
@@ -189,25 +189,23 @@ callsRouter.get("/biblioteca", async (req, res) => {
 });
 
 // GET /api/calls/analyzed/:itemId -> analisis completo de una llamada.
+//   Lookup directo por item_id (índice UNIQUE), antes un LIKE sobre logs.
 callsRouter.get("/analyzed/:itemId", async (req, res) => {
   try {
     const itemId = req.params.itemId;
     const row = await db.queryOne<AnalyzedRow>(
-      `SELECT reference, payload, timestamp, duration_ms FROM logs
-          WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL
-            AND reference LIKE ? ORDER BY timestamp DESC, id DESC LIMIT 1`,
-      [`#${itemId} ·%`]
+      `SELECT item_id, item_name, payload, analyzed_at FROM call_analyses WHERE item_id = ?`,
+      [itemId]
     );
     if (!row) return res.status(404).json({ error: "Llamada no encontrada" });
 
-    const { itemName } = parseReference(row.reference);
     const call = JSON.parse(row.payload) as CallIntelligenceOutput;
     res.json({
       itemId,
       idLlamada: `#${itemId}`,
-      prospecto: prospecto(itemName),
-      itemName,
-      fecha: isoUtc(row.timestamp),
+      prospecto: prospecto(row.item_name),
+      itemName: row.item_name,
+      fecha: isoUtc(row.analyzed_at),
       call
     });
   } catch (err) {

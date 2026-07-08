@@ -95,12 +95,16 @@ adminRouter.post("/purge-demo", async (req, res) => {
     try {
       for (let i = 0; i < itemIds.length; i += 100) {
         const chunk = itemIds.slice(i, i + 100);
-        await db.run(
-          `DELETE FROM monday_writes WHERE item_id IN (${chunk.map(() => "?").join(",")})`,
-          chunk
-        );
+        const ph = chunk.map(() => "?").join(",");
+        await db.run(`DELETE FROM monday_writes WHERE item_id IN (${ph})`, chunk);
+        // La tabla de dominio (A.3) también se limpia: sus filas provienen de
+        // los mismos análisis que se están purgando.
+        await db.run(`DELETE FROM call_analyses WHERE item_id IN (${ph})`, chunk);
       }
-    } catch { /* la tabla puede no existir en BDs viejas; no es crítico */ }
+      // Y cualquier fila de dominio con firma demo que no tuviera log asociado.
+      const demoLikes = DEMO_MARKERS.map(() => "payload LIKE ?").join(" OR ");
+      await db.run(`DELETE FROM call_analyses WHERE ${demoLikes}`, DEMO_MARKERS);
+    } catch { /* tablas pueden no existir en BDs viejas; no es crítico */ }
 
     const borrados = rows.length;
     logActivity({
