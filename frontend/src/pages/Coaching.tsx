@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, LineChart, Line
 } from "recharts";
-import { GraduationCap, RefreshCw, TrendingDown, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check } from "lucide-react";
+import { GraduationCap, RefreshCw, TrendingDown, TrendingUp, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check } from "lucide-react";
 import { api } from "../lib/api";
 import type { CoachingReport } from "../types";
 
@@ -354,6 +354,29 @@ export function Coaching() {
               <FreqList items={data.objeciones} color={C.warning} />
             </Panel>
           </div>
+
+          {(data.temasEmergentes ?? []).length > 0 && (
+            <div className="mt-4">
+              <Panel
+                title={`Temas emergentes (últimos ${data.ventanaEmergentesDias ?? 14} días vs los ${data.ventanaEmergentesDias ?? 14} anteriores)`}
+                icon={<TrendingUp size={15} className="text-accent" />}
+              >
+                <ul className="space-y-2">
+                  {(data.temasEmergentes ?? []).map((t, i) => (
+                    <li key={i} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-sm">
+                      <span className="text-text">{t.texto}</span>
+                      <span className="shrink-0 rounded-full bg-accent/10 px-2.5 py-0.5 text-[12px] font-semibold text-accent">
+                        ⬆ ×{t.actual} <span className="font-normal text-text-muted">(antes ×{t.previo})</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-2 text-[11px] text-text-muted">
+                  Temas y objeciones que se mencionan más que en el periodo anterior — la voz del cliente antes de que sea un problema.
+                </p>
+              </Panel>
+            </div>
+          )}
 
           {data.areasMejora.length > 0 && (
             <div className="mt-4">

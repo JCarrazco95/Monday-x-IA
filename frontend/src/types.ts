@@ -184,6 +184,9 @@ export interface CoachingReport {
   vendedores: string[];
   /** Comparativa por vendedor (incluye "Sin identificar" si aplica). */
   ranking: CoachingRanking[];
+  /** Temas/objeciones creciendo: ventana reciente vs la anterior. */
+  temasEmergentes?: { texto: string; actual: number; previo: number }[];
+  ventanaEmergentesDias?: number;
   stats: {
     totalLlamadas: number;
     noEvaluables?: number;
@@ -397,6 +400,8 @@ export interface AnalyzedCallListItem {
   globalBanda: Banda | null;
   telefono: string | null;
   resumen: string | null;
+  /** Temas tratados + objeciones de la llamada (para chips de filtro). */
+  temas: string[];
 }
 
 export interface AnalyzedCallsResponse {

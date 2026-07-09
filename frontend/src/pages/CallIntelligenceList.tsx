@@ -69,6 +69,7 @@ export function CallIntelligenceList() {
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [soloMejores, setSoloMejores] = useState(false); // C.5: biblioteca de mejores llamadas
+  const [filterTema, setFilterTema] = useState(""); // chip de tema de conversación
 
   // Traer llamada: por ID de Aircall, por URL de la grabación, o pegar transcripción
   const [callId, setCallId] = useState("");
@@ -117,11 +118,26 @@ export function CallIntelligenceList() {
     [calls]
   );
 
+  // Temas más frecuentes del historial (chips de filtro; normaliza por minúsculas).
+  const temasTop = useMemo(() => {
+    const map = new Map<string, { texto: string; count: number }>();
+    for (const c of calls) {
+      for (const t of c.temas ?? []) {
+        const key = t.toLowerCase().replace(/\s+/g, " ");
+        const cur = map.get(key);
+        if (cur) cur.count += 1;
+        else map.set(key, { texto: t, count: 1 });
+      }
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 10);
+  }, [calls]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return calls.filter((c) => {
       if (filterBanda && (c.globalBanda ?? c.challengerBanda) !== filterBanda) return false;
       if (filterVendedor && c.vendedor !== filterVendedor) return false;
+      if (filterTema && !(c.temas ?? []).some((t) => t.toLowerCase().replace(/\s+/g, " ") === filterTema)) return false;
       // Fechas: la fecha viene en ISO UTC; comparar por prefijo YYYY-MM-DD.
       if (fechaDesde && (c.fecha ?? "") < fechaDesde) return false;
       if (fechaHasta && (c.fecha ?? "") > fechaHasta + "T23:59:59Z") return false;
@@ -135,7 +151,7 @@ export function CallIntelligenceList() {
         (c.perfilVendedor ?? "").toLowerCase().includes(q)
       );
     });
-  }, [calls, search, filterBanda, filterVendedor, fechaDesde, fechaHasta, soloMejores]);
+  }, [calls, search, filterBanda, filterVendedor, filterTema, fechaDesde, fechaHasta, soloMejores]);
 
   const s = data?.stats;
 
@@ -322,9 +338,9 @@ export function CallIntelligenceList() {
           >
             ⭐ Mejores llamadas
           </button>
-          {(filterVendedor || fechaDesde || fechaHasta || filterBanda || soloMejores || search) && (
+          {(filterVendedor || fechaDesde || fechaHasta || filterBanda || soloMejores || search || filterTema) && (
             <button
-              onClick={() => { setSearch(""); setFilterBanda(""); setFilterVendedor(""); setFechaDesde(""); setFechaHasta(""); setSoloMejores(false); }}
+              onClick={() => { setSearch(""); setFilterBanda(""); setFilterVendedor(""); setFechaDesde(""); setFechaHasta(""); setSoloMejores(false); setFilterTema(""); }}
               className="h-9 rounded-lg px-3 text-sm text-text-muted underline-offset-2 hover:underline"
             >
               Limpiar filtros
@@ -332,6 +348,29 @@ export function CallIntelligenceList() {
           )}
           <span className="text-xs text-text-muted sm:ml-auto">{filtered.length} de {calls.length} llamadas</span>
         </div>
+        {temasTop.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-xs text-text-muted">Temas:</span>
+            {temasTop.map((t) => {
+              const key = t.texto.toLowerCase().replace(/\s+/g, " ");
+              const activo = filterTema === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setFilterTema(activo ? "" : key)}
+                  className={`rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                    activo
+                      ? "bg-accent text-white"
+                      : "border border-border bg-surface text-text-muted hover:text-text"
+                  }`}
+                  title={`Llamadas que tocaron "${t.texto}"`}
+                >
+                  {t.texto} <span className={activo ? "text-white/80" : "text-text-muted/70"}>×{t.count}</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-border bg-surface">

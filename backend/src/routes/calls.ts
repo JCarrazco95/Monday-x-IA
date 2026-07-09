@@ -65,6 +65,13 @@ function toListItem(row: AnalyzedRow) {
   const sBanda = call.sandler?.banda ?? bandaFromScore(sScore);
   const ch = call.challenger ?? null;
   const integ = call.integrado ?? null;
+  // Temas de la conversación (temas tratados + objeciones), deduplicados,
+  // para los chips de filtro del historial.
+  const temasSet = new Map<string, string>();
+  for (const raw of [...(call.analisisProfundo?.temasTratados ?? []), ...(call.objeciones ?? [])]) {
+    const t = raw?.trim();
+    if (t) temasSet.set(t.toLowerCase().replace(/\s+/g, " "), t);
+  }
   return {
     itemId,
     idLlamada: `#${itemId}`,
@@ -80,13 +87,14 @@ function toListItem(row: AnalyzedRow) {
     globalScore: integ?.scoreGlobal ?? null,
     globalBanda: (integ?.banda ?? null) as Banda | null,
     telefono: call.telefono ?? null,
-    resumen: integ?.resumenEjecutivo ?? call.resumen ?? null
+    resumen: integ?.resumenEjecutivo ?? call.resumen ?? null,
+    temas: [...temasSet.values()]
   };
 }
 
 // GET /api/calls/analyzed -> lista de llamadas analizadas (Sandler + Challenger).
 //   Filtros opcionales: ?phone= &vendedor= &banda=(rojo|amarillo|verde)
-//   &desde=YYYY-MM-DD &hasta=YYYY-MM-DD &q=texto &minGlobal=NN
+//   &desde=YYYY-MM-DD &hasta=YYYY-MM-DD &q=texto &minGlobal=NN &tema=texto
 callsRouter.get("/analyzed", async (req, res) => {
   try {
     const Q = req.query as Record<string, string | undefined>;
@@ -120,6 +128,11 @@ callsRouter.get("/analyzed", async (req, res) => {
     const minGlobal = Number(Q.minGlobal);
     if (Number.isFinite(minGlobal) && minGlobal > 0) {
       items = items.filter((i) => (i.globalScore ?? i.sandlerScore) >= minGlobal);
+    }
+    // Filtro por tema de conversación (match parcial, sin acentos).
+    if (Q.tema?.trim()) {
+      const t = norm(Q.tema.trim());
+      items = items.filter((i) => i.temas.some((x) => norm(x).includes(t)));
     }
     const avg = (arr: number[]) => (arr.length ? Math.round(arr.reduce((s, n) => s + n, 0) / arr.length) : 0);
     // "No evaluables": buzones de voz, audio sin conversación, transcripción

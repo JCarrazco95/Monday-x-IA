@@ -71,6 +71,48 @@ function monthKey(ts: string): string {
   return (ts || "").slice(0, 7);
 }
 
+// ── Temas emergentes: qué está creciendo en las conversaciones ──
+// Compara la frecuencia de temas+objeciones de la ventana reciente (últimos N
+// días) contra la ventana anterior (los N días previos). "Emergente" = se
+// mencionó al menos 2 veces en la ventana reciente y MÁS que en la anterior.
+const VENTANA_EMERGENTES_DIAS = Number(process.env.COACHING_VENTANA_EMERGENTES ?? 14);
+
+function temasDe(call: CallIntelligenceOutput): string[] {
+  return [...(call.analisisProfundo?.temasTratados ?? []), ...(call.objeciones ?? [])];
+}
+
+function temasEmergentesDe(
+  calls: { call: CallIntelligenceOutput; ts: string }[],
+  now: Date
+): { texto: string; actual: number; previo: number }[] {
+  const corteActual = new Date(now.getTime() - VENTANA_EMERGENTES_DIAS * 24 * 3_600_000).toISOString();
+  const cortePrevio = new Date(now.getTime() - 2 * VENTANA_EMERGENTES_DIAS * 24 * 3_600_000).toISOString();
+
+  const contar = (cs: typeof calls) => {
+    const map = new Map<string, { texto: string; count: number }>();
+    for (const c of cs) {
+      for (const raw of temasDe(c.call)) {
+        const texto = raw?.trim();
+        if (!texto) continue;
+        const key = texto.toLowerCase().replace(/\s+/g, " ");
+        const cur = map.get(key);
+        if (cur) cur.count += 1;
+        else map.set(key, { texto, count: 1 });
+      }
+    }
+    return map;
+  };
+
+  const actual = contar(calls.filter((c) => (c.ts ?? "") >= corteActual));
+  const previo = contar(calls.filter((c) => (c.ts ?? "") >= cortePrevio && (c.ts ?? "") < corteActual));
+
+  return [...actual.entries()]
+    .map(([key, v]) => ({ texto: v.texto, actual: v.count, previo: previo.get(key)?.count ?? 0 }))
+    .filter((t) => t.actual >= 2 && t.actual > t.previo)
+    .sort((a, b) => (b.actual - b.previo) - (a.actual - a.previo) || b.actual - a.actual)
+    .slice(0, 8);
+}
+
 // GET /api/coaching[?vendedor=&dias=]  → métricas de coaching (equipo o por vendedor).
 coachingRouter.get("/", async (req, res) => {
   try {
@@ -82,8 +124,16 @@ coachingRouter.get("/", async (req, res) => {
       ? new Date(Date.now() - dias * 24 * 3_600_000).toISOString().slice(0, 10)
       : null;
 
-    let todas = await latestCalls();
+    const todasSinPeriodo = await latestCalls();
+    let todas = todasSinPeriodo;
     if (desde) todas = todas.filter((c) => (c.ts ?? "") >= desde);
+
+    // Temas emergentes: SIEMPRE sobre el histórico completo evaluable (las
+    // ventanas de comparación son fijas e independientes del filtro de periodo).
+    const temasEmergentes = temasEmergentesDe(
+      todasSinPeriodo.filter((c) => (c.call.sandler?.puntajeFinal ?? 0) > 0),
+      new Date()
+    );
 
     // Coaching mide calidad de VENTA: los buzones/llamadas no evaluables
     // (score 0) se excluyen de todas las métricas para no hundir promedios.
@@ -251,6 +301,8 @@ coachingRouter.get("/", async (req, res) => {
       filtro: { vendedor: vendedorFiltro, dias: desde ? dias : null },
       vendedores,
       ranking,
+      temasEmergentes,
+      ventanaEmergentesDias: VENTANA_EMERGENTES_DIAS,
       stats: {
         totalLlamadas: calls.length,
         noEvaluables,
