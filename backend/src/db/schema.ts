@@ -71,6 +71,26 @@ CREATE TABLE IF NOT EXISTS call_analyses (
   updated_at       TEXT NOT NULL
 );
 
+-- TABLA DE DOMINIO (A.3 fase 2): último análisis de cada LEAD. Combina el
+-- enriquecimiento (lead_payload) y el análisis de formulario (form_payload)
+-- del mismo item. email/rfc indexados para detectar duplicados sin LIKE.
+CREATE TABLE IF NOT EXISTS lead_analyses (
+  id           ${autoId},
+  item_id      TEXT NOT NULL UNIQUE,
+  item_name    TEXT NOT NULL,
+  score        INTEGER,
+  prioridad    TEXT,
+  riesgo       TEXT,
+  duplicado    INTEGER NOT NULL DEFAULT 0,
+  email        TEXT,
+  telefono     TEXT,
+  rfc          TEXT,
+  lead_payload TEXT,
+  form_payload TEXT,
+  analyzed_at  TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
 -- Registro de escrituras a Monday para IDEMPOTENCIA: guarda la firma de cada
 -- escritura (subitems + comentario) ya aplicada, para no duplicarla si el mismo
 -- análisis se reprocesa (reintento de webhook, re-sync del board, etc.).
@@ -89,6 +109,9 @@ CREATE INDEX IF NOT EXISTS idx_monday_writes_signature ON monday_writes(signatur
 CREATE INDEX IF NOT EXISTS idx_call_analyses_telefono ON call_analyses(telefono);
 CREATE INDEX IF NOT EXISTS idx_call_analyses_vendedor ON call_analyses(vendedor);
 CREATE INDEX IF NOT EXISTS idx_call_analyses_analyzed ON call_analyses(analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_lead_analyses_email ON lead_analyses(email);
+CREATE INDEX IF NOT EXISTS idx_lead_analyses_rfc ON lead_analyses(rfc);
+CREATE INDEX IF NOT EXISTS idx_lead_analyses_analyzed ON lead_analyses(analyzed_at);
 `;
 }
 

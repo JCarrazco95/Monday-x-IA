@@ -1,5 +1,5 @@
 import { db } from "../db/index.js";
-import { saveCallAnalysis } from "../db/domain.js";
+import { saveCallAnalysis, saveLeadAnalysis, saveFormAnalysis } from "../db/domain.js";
 import { logActivity } from "../lib/activityLog.js";
 import { formatReference } from "../lib/references.js";
 import { runFormAnalysisAgent, AGENT_ID as FORM_AGENT } from "./formAnalysisAgent.js";
@@ -141,6 +141,13 @@ async function processFormSubmitted(event: OrchestratorEvent): Promise<MondayWri
     durationMs: Date.now() - start
   });
 
+  // Write-through a la tabla de dominio (A.3 fase 2). Nunca rompe el flujo.
+  try {
+    await saveFormAnalysis(input.itemId, input.itemName, result);
+  } catch (err) {
+    console.error("[domain] no se pudo guardar form en lead_analyses:", err instanceof Error ? err.message : err);
+  }
+
   return {
     itemId: input.itemId,
     itemName: input.itemName,
@@ -191,6 +198,17 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
     payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono },
     durationMs: Date.now() - start
   });
+
+  // Write-through a la tabla de dominio (A.3 fase 2). Nunca rompe el flujo.
+  try {
+    await saveLeadAnalysis(input.itemId, input.itemName, result, {
+      email: input.email,
+      telefono: input.telefono,
+      rfc: input.rfc
+    });
+  } catch (err) {
+    console.error("[domain] no se pudo guardar lead_analyses:", err instanceof Error ? err.message : err);
+  }
 
   const r = result.research;
   const columnUpdates: Record<string, unknown> = {

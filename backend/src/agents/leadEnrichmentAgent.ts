@@ -1,4 +1,5 @@
-import { db } from "../db/index.js";
+import { findDuplicateLead } from "../db/domain.js";
+import { formatReference } from "../lib/references.js";
 import { structuredCompletion, webResearch, isMockMode, MODEL_HEAVY } from "../lib/claude.js";
 import { intelKey, getCompanyIntel, saveCompanyIntel } from "../lib/companyIntel.js";
 import { searchGovernmentContracts } from "../lib/governmentIntel.js";
@@ -328,31 +329,15 @@ Califica con la rúbrica (devuelve el desglose) y consolida todo orientado a cer
 }
 
 // ----- Duplicados -----
+// A.3 fase 2: búsqueda por columnas INDEXADAS (email/rfc) en lead_analyses, en
+// vez del LIKE sobre el JSON de la bitácora (más rápido y sin falsos positivos).
 async function findDuplicate(
   input: LeadEnrichmentInput
 ): Promise<{ isDuplicate: boolean; ref: string | null }> {
-  if (!input.email && !input.rfc) return { isDuplicate: false, ref: null };
-  // Se busca el patrón JSON EXACTO `"email":"<valor>"` / `"rfc":"<valor>"` en el
-  // payload, en vez del valor suelto: evita falsos positivos (p. ej. que el email
-  // aparezca dentro de otro campo o de una URL). El itemName se excluye para no
-  // marcarse a sí mismo. Nota: cuando exista una tabla `leads` indexada, esta
-  // búsqueda se hará por columna en vez de LIKE sobre el JSON (ver docs).
-  const emailPat = input.email ? `%${jsonField("email", input.email)}%` : " ";
-  const rfcPat = input.rfc ? `%${jsonField("rfc", input.rfc)}%` : " ";
-  const row = await db.queryOne<{ reference: string }>(
-    `SELECT reference FROM logs
-       WHERE agent_id = 'lead_enrichment'
-       AND reference IS NOT NULL AND reference NOT LIKE ?
-       AND (payload LIKE ? OR payload LIKE ?)
-       ORDER BY timestamp DESC LIMIT 1`,
-    [`%· ${input.itemName}`, emailPat, rfcPat]
-  );
-  return row ? { isDuplicate: true, ref: row.reference } : { isDuplicate: false, ref: null };
-}
-
-/** Fragmento JSON `"clave":"valor"` (con el valor escapado como en JSON.stringify). */
-function jsonField(key: string, value: string): string {
-  return `${JSON.stringify(key)}:${JSON.stringify(value)}`;
+  const dup = await findDuplicateLead({ itemId: input.itemId, email: input.email, rfc: input.rfc });
+  return dup
+    ? { isDuplicate: true, ref: formatReference(dup.itemId, dup.itemName) }
+    : { isDuplicate: false, ref: null };
 }
 
 /**

@@ -99,13 +99,16 @@ adminRouter.post("/purge-demo", async (req, res) => {
         const chunk = itemIds.slice(i, i + 100);
         const ph = chunk.map(() => "?").join(",");
         await db.run(`DELETE FROM monday_writes WHERE item_id IN (${ph})`, chunk);
-        // La tabla de dominio (A.3) también se limpia: sus filas provienen de
-        // los mismos análisis que se están purgando.
+        // Las tablas de dominio (A.3) también se limpian: sus filas provienen
+        // de los mismos análisis que se están purgando.
         await db.run(`DELETE FROM call_analyses WHERE item_id IN (${ph})`, chunk);
+        await db.run(`DELETE FROM lead_analyses WHERE item_id IN (${ph})`, chunk);
       }
       // Y cualquier fila de dominio con firma demo que no tuviera log asociado.
       const demoLikes = DEMO_MARKERS.map(() => "payload LIKE ?").join(" OR ");
       await db.run(`DELETE FROM call_analyses WHERE ${demoLikes}`, DEMO_MARKERS);
+      const leadLikes = DEMO_MARKERS.map(() => "COALESCE(lead_payload,'') LIKE ?").join(" OR ");
+      await db.run(`DELETE FROM lead_analyses WHERE ${leadLikes}`, DEMO_MARKERS);
     } catch { /* tablas pueden no existir en BDs viejas; no es crítico */ }
 
     const borrados = rows.length;

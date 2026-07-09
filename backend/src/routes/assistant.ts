@@ -47,29 +47,37 @@ function tokens(s: string): string[] {
   return norm(s).replace(/[^a-z0-9ñ\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !STOP.has(w));
 }
 
-// Construye un documento de texto por referencia (lead + llamada + form).
+// Construye un documento de texto por item (lead + llamada + form), leyendo
+// las TABLAS DE DOMINIO (A.3) en vez de reconstruir desde logs.
 async function buildCorpus(): Promise<Doc[]> {
-  const rows = await db.query<LogRow>(
-    `SELECT reference, agent_id, payload, timestamp
-       FROM logs
-      WHERE agent_id IN ('lead_enrichment','form_analysis','call_intelligence')
-        AND payload IS NOT NULL AND reference IS NOT NULL
-      ORDER BY timestamp ASC, id ASC`
-  );
+  const byRef = new Map<string, { itemId: string; itemName: string; lead: LeadEnrichmentOutput | null; call: CallIntelligenceOutput | null; ts: string | null }>();
 
-  const byRef = new Map<string, { lead: LeadEnrichmentOutput | null; call: CallIntelligenceOutput | null; form: Record<string, unknown> | null; ts: string | null }>();
-  for (const r of rows) {
-    const cur = byRef.get(r.reference) ?? { lead: null, call: null, form: null, ts: null };
-    cur.ts = r.timestamp;
-    if (r.agent_id === "lead_enrichment") cur.lead = safeParseJson<LeadEnrichmentOutput>(r.payload) ?? cur.lead;
-    else if (r.agent_id === "call_intelligence") cur.call = safeParseJson<CallIntelligenceOutput>(r.payload) ?? cur.call;
-    else if (r.agent_id === "form_analysis") cur.form = safeParseJson<Record<string, unknown>>(r.payload) ?? cur.form;
-    byRef.set(r.reference, cur);
+  const leadRows = await db.query<{ item_id: string; item_name: string; lead_payload: string | null; analyzed_at: string }>(
+    `SELECT item_id, item_name, lead_payload, analyzed_at FROM lead_analyses`
+  );
+  for (const r of leadRows) {
+    byRef.set(r.item_id, {
+      itemId: r.item_id,
+      itemName: r.item_name,
+      lead: safeParseJson<LeadEnrichmentOutput>(r.lead_payload),
+      call: null,
+      ts: r.analyzed_at
+    });
+  }
+
+  const callRows = await db.query<{ item_id: string; item_name: string; payload: string; analyzed_at: string }>(
+    `SELECT item_id, item_name, payload, analyzed_at FROM call_analyses`
+  );
+  for (const r of callRows) {
+    const cur = byRef.get(r.item_id) ?? { itemId: r.item_id, itemName: r.item_name, lead: null, call: null, ts: null };
+    cur.call = safeParseJson<CallIntelligenceOutput>(r.payload);
+    cur.ts = r.analyzed_at;
+    byRef.set(r.item_id, cur);
   }
 
   const docs: Doc[] = [];
-  for (const [reference, s] of byRef) {
-    const { itemId, itemName } = parseReference(reference);
+  for (const [, s] of byRef) {
+    const { itemId, itemName } = s;
     const L = s.lead;
     const C = s.call;
     const partes: string[] = [`Lead: ${itemName}.`];

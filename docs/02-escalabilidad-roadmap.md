@@ -66,8 +66,16 @@ un *fallback*/migración, no el camino principal.
 > sola desde `logs` si está vacía (`db/domain.ts`). Las lecturas de Call
 > Intelligence (lista, detalle, biblioteca) ya salen de aquí — el detalle pasó
 > de un LIKE sobre todo `logs` a un lookup por índice UNIQUE. La purga demo
-> también limpia esta tabla. **Pendiente fase 2:** `lead_analyses` equivalente
-> y migrar las lecturas de coaching/forecast/NBA/asistente.
+> también limpia esta tabla.
+>
+> **✅ Fase 2 hecha — `lead_analyses` + lecturas migradas:** tabla de dominio de
+> leads (enriquecimiento + formulario por item, email/rfc indexados) con
+> write-through y backfill automático. Migrados: **Leads** (lista + detalle por
+> índice), **Coaching** (lee `call_analyses`), **Asistente** (corpus desde las
+> dos tablas) y el **dedupe de leads** (por columnas indexadas email/rfc, antes
+> LIKE sobre el JSON de logs). **Pendiente fase 3 (coordinar):** forecast (su
+> modo demo) y NBA siguen leyendo `logs` — se migran cuando se estabilice el
+> trabajo en curso de esos módulos.
 
 ---
 

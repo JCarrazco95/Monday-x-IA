@@ -101,10 +101,11 @@ async function start() {
   // los agentes ANTES de aceptar peticiones, para que nada toque la BD sin estar lista.
   await initDb();
   await seed();
-  // A.3: si la tabla de dominio está vacía (deploy existente), se puebla sola
-  // desde la bitácora — migración sin pasos manuales.
-  const { ensureCallAnalysesPopulated } = await import("./db/domain.js");
+  // A.3: si las tablas de dominio están vacías (deploy existente), se pueblan
+  // solas desde la bitácora — migración sin pasos manuales.
+  const { ensureCallAnalysesPopulated, ensureLeadAnalysesPopulated } = await import("./db/domain.js");
   await ensureCallAnalysesPopulated();
+  await ensureLeadAnalysesPopulated();
 
   app.listen(PORT, () => {
     console.log(`\n🚀 MAXIRent backend escuchando en http://localhost:${PORT}`);

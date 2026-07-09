@@ -51,20 +51,14 @@ function topFrequencies(items: string[], limit = 8): { texto: string; count: num
 }
 
 async function latestCalls(): Promise<{ call: CallIntelligenceOutput; ts: string }[]> {
-  const rows = await db.query<Row>(
-    `SELECT l.reference, l.payload, l.timestamp
-       FROM logs l
-       JOIN (
-         SELECT reference, MAX(id) AS mid
-           FROM logs
-          WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference IS NOT NULL
-          GROUP BY reference
-       ) m ON l.id = m.mid`
+  // A.3: lee la tabla de dominio (una fila por llamada) en vez de agrupar logs.
+  const rows = await db.query<{ payload: string; analyzed_at: string }>(
+    `SELECT payload, analyzed_at FROM call_analyses`
   );
   const out: { call: CallIntelligenceOutput; ts: string }[] = [];
   for (const r of rows) {
     try {
-      out.push({ call: JSON.parse(r.payload) as CallIntelligenceOutput, ts: r.timestamp });
+      out.push({ call: JSON.parse(r.payload) as CallIntelligenceOutput, ts: r.analyzed_at });
     } catch {
       /* payload corrupto: se ignora */
     }
