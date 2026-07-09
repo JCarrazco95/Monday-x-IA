@@ -143,9 +143,13 @@ const googlePlacesSource: LeadSource = {
 //  Datos públicos. Busca procedimientos por palabra clave y extrae a los
 //  PROVEEDORES (parties con rol supplier/tenderer) como prospectos: empresas
 //  que ganan contratos suelen necesitar flotilla.
-const GOV_API_URL =
-  process.env.GOV_API_URL ?? "https://api.datos.gob.mx/v2/contratacionesabiertas";
-const GOV_API_ENABLED = (process.env.GOV_API_ENABLED ?? "true").toLowerCase() !== "false";
+//
+//  ⚠️ La API pública original (api.datos.gob.mx) fue DESCONTINUADA: sin una
+//  GOV_API_URL explícita (formato OCDS) la fuente queda como NO configurada
+//  y usa demo — así el panel lo muestra honesto en vez de fingir datos reales.
+const GOV_API_URL = process.env.GOV_API_URL ?? "";
+const GOV_API_ENABLED =
+  Boolean(GOV_API_URL) && (process.env.GOV_API_ENABLED ?? "true").toLowerCase() !== "false";
 const GOV_TIMEOUT_MS = Number(process.env.GOV_API_TIMEOUT_MS ?? 8000);
 
 interface GovOcdsResponse {
@@ -161,7 +165,9 @@ const governmentSource: LeadSource = {
   id: "gov",
   label: "Licitaciones de gobierno",
   enabled: GOV_API_ENABLED,
-  aviso: "Datos públicos (Contrataciones Abiertas / CompraNet).",
+  aviso: GOV_API_ENABLED
+    ? "Datos públicos (Contrataciones Abiertas / CompraNet)."
+    : "La API pública de datos.gob.mx fue descontinuada. Configura GOV_API_URL (endpoint OCDS) para activar esta fuente; mientras, muestra datos de demostración.",
   async search(params) {
     if (!GOV_API_ENABLED) return { prospects: demoProspects(params, "gov"), demo: true };
     const limite = clampLimit(params.limite);

@@ -207,6 +207,16 @@ export function LeadScraper() {
         <div className="mt-4 rounded-lg border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>
       )}
 
+      {/* Aviso inequívoco cuando el resultado es de demostración */}
+      {demo && rows.length > 0 && (
+        <div className="mt-4 rounded-lg border border-warning/40 bg-warning/10 px-4 py-3 text-sm text-text">
+          <span className="font-semibold text-warning">⚠️ Resultados de DEMOSTRACIÓN — no son empresas reales.</span>{" "}
+          La fuente «{activeSource?.label ?? source}» no tiene credencial/API configurada.{" "}
+          {activeSource?.aviso ?? "Configura su credencial en el backend para obtener prospectos reales."}{" "}
+          Las fuentes marcadas con «(demo)» en el selector están en este estado; usa una sin marca (p. ej. Lusha) para datos reales.
+        </div>
+      )}
+
       {/* Resultado de importación */}
       {importResult && (
         <div className="mt-4 rounded-xl border border-success/30 bg-success/10 p-4">
