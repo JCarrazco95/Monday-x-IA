@@ -234,6 +234,8 @@ export interface CallIntelligenceOutput {
   sentimiento: "positivo" | "neutro" | "negativo";
   probabilidadCierre: "alta" | "media" | "baja";
   telefono?: string | null;
+  /** Transcripción completa de la llamada (Deepgram/Aircall/pegada) para mostrarla en el detalle. */
+  transcript?: string | null;
   /** Identidad del vendedor que atendió (para coaching/tendencias POR vendedor).
    *  Ojo: `vendedor` (abajo) es el ANÁLISIS de coaching; este es el NOMBRE. */
   vendedorNombre?: string | null;

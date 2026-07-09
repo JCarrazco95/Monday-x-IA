@@ -98,13 +98,31 @@ function OportunidadesCard({ op }: { op: UpsellAnalysis }) {
   );
 }
 
+// ─── Transcripción de la llamada (lo primero de la pestaña Llamada) ──
+function TranscripcionCard({ transcript }: { transcript?: string | null }) {
+  if (!transcript?.trim()) return null;
+  return (
+    <Section
+      icon={<FileText size={15} />}
+      title="Transcripción de la llamada"
+      right={<span className="rounded-full bg-accent/10 px-2.5 py-1 text-[11px] font-semibold text-accent">Deepgram</span>}
+    >
+      <div className="max-h-80 overflow-y-auto rounded-lg border border-border bg-black/[0.02] p-3">
+        <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-text">{transcript.trim()}</p>
+      </div>
+    </Section>
+  );
+}
+
 // ─── LLAMADA (analisis profundo) ──
 function LlamadaView({ call }: { call: CallAnalysisData }) {
   const dp = call.analisisProfundo;
+  const transcripcion = <TranscripcionCard transcript={call.transcript} />;
   const upsell = call.oportunidades ? <OportunidadesCard op={call.oportunidades} /> : null;
   if (!dp) {
     return (
       <div className="flex flex-col gap-4">
+        {transcripcion}
         {upsell}
         <Section icon={<FileText size={15} />} title="Resumen de la llamada">
           <p className="text-[13px] leading-relaxed text-text-muted">{call.resumen ?? "Sin analisis profundo para esta llamada. Vuelve a analizarla para el desglose completo."}</p>
@@ -114,6 +132,7 @@ function LlamadaView({ call }: { call: CallAnalysisData }) {
   }
   return (
     <div className="flex flex-col gap-4">
+      {transcripcion}
       {upsell}
       <Section icon={<FileText size={15} />} title="Analisis profundo de la llamada">
         <p className="text-[13px] leading-relaxed text-text">{dp.resumenDetallado}</p>

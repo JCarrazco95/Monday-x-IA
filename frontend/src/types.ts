@@ -421,6 +421,8 @@ export interface UpsellAnalysis {
 
 export interface CallAnalysisData {
   telefono?: string | null;
+  /** Transcripción completa de la llamada (Deepgram/Aircall/pegada). */
+  transcript?: string | null;
   sentimiento: string | null;
   probabilidadCierre: string | null;
   vehiculosMencionados: string[];

@@ -113,6 +113,8 @@ export async function ingestCallFromTranscript(opts: {
   transcript: string;
   prospecto?: string | null;
   telefono?: string | null;
+  /** Vendedor que hizo la llamada (aquí no hay Aircall que lo aporte). */
+  vendedor?: string | null;
 }): Promise<AircallIngestResult> {
   const transcript = opts.transcript?.trim();
   if (!transcript) return { ok: false, analizada: false, motivo: "Falta la transcripción." };
@@ -127,7 +129,7 @@ export async function ingestCallFromTranscript(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null }
+    payload: { transcript, telefono: opts.telefono ?? null, vendedor: opts.vendedor ?? null }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.prospecto ?? null, result };
@@ -144,6 +146,8 @@ export async function ingestCallFromUrl(opts: {
   url: string;
   telefono?: string | null;
   contacto?: string | null;
+  /** Vendedor que hizo la llamada (URL genérica: no hay Aircall que lo aporte). */
+  vendedor?: string | null;
 }): Promise<AircallIngestResult> {
   const url = opts.url?.trim();
   if (!url) return { ok: false, analizada: false, motivo: "Falta la URL de la grabación." };
@@ -171,7 +175,7 @@ export async function ingestCallFromUrl(opts: {
   const result = await handleOrchestratorEvent({
     eventType: "call_recorded",
     item: { itemId, itemName },
-    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url }
+    payload: { transcript, telefono: opts.telefono ?? null, audioUrl: url, vendedor: opts.vendedor ?? null }
   });
 
   return { ok: true, analizada: true, itemId, itemName, telefono: opts.telefono ?? null, contacto: opts.contacto ?? null, result };

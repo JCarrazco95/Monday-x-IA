@@ -200,6 +200,25 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
     if (!row) return res.status(404).json({ error: "Llamada no encontrada" });
 
     const call = JSON.parse(row.payload) as CallIntelligenceOutput;
+
+    // Llamadas analizadas ANTES de que el análisis guardara la transcripción:
+    // se recupera del evento que registró el orquestador en la bitácora
+    // (payload = OrchestratorEvent con payload.transcript). Solo lectura.
+    if (!call.transcript) {
+      const evt = await db.queryOne<{ payload: string }>(
+        `SELECT payload FROM logs
+          WHERE agent_id = 'orchestrator' AND reference LIKE ? AND payload LIKE '%"transcript"%'
+          ORDER BY id DESC LIMIT 1`,
+        [`#${itemId} ·%`]
+      );
+      if (evt?.payload) {
+        try {
+          const parsed = JSON.parse(evt.payload) as { payload?: { transcript?: string } };
+          if (parsed?.payload?.transcript) call.transcript = parsed.payload.transcript;
+        } catch { /* payload corrupto: se omite */ }
+      }
+    }
+
     res.json({
       itemId,
       idLlamada: `#${itemId}`,
@@ -295,8 +314,8 @@ callsRouter.get("/sync-status", (_req, res) => res.json(syncState));
 //   (pegada o traída de otro sistema), sin re-transcribir. Body:
 //   { transcript, prospecto?, telefono? }.
 callsRouter.post("/analyze-transcript", async (req, res) => {
-  const { transcript, prospecto, telefono } = (req.body ?? {}) as {
-    transcript?: string; prospecto?: string; telefono?: string;
+  const { transcript, prospecto, telefono, vendedor } = (req.body ?? {}) as {
+    transcript?: string; prospecto?: string; telefono?: string; vendedor?: string;
   };
   if (typeof transcript !== "string" || !transcript.trim()) {
     return res.status(400).json({ error: "Se requiere 'transcript' (texto de la conversación)." });
@@ -305,7 +324,8 @@ callsRouter.post("/analyze-transcript", async (req, res) => {
     const out = await ingestCallFromTranscript({
       transcript,
       prospecto: typeof prospecto === "string" && prospecto.trim() ? prospecto.trim() : null,
-      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null
+      telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
+      vendedor: typeof vendedor === "string" && vendedor.trim() ? vendedor.trim() : null
     });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
@@ -317,7 +337,9 @@ callsRouter.post("/analyze-transcript", async (req, res) => {
 //   analiza. Independiente del proveedor (Twilio, Aircall, S3…). Body:
 //   { url, telefono?, contacto? }.
 callsRouter.post("/from-url", async (req, res) => {
-  const { url, telefono, contacto } = (req.body ?? {}) as { url?: string; telefono?: string; contacto?: string };
+  const { url, telefono, contacto, vendedor } = (req.body ?? {}) as {
+    url?: string; telefono?: string; contacto?: string; vendedor?: string;
+  };
   if (typeof url !== "string" || !url.trim()) {
     return res.status(400).json({ error: "Se requiere 'url' (enlace a la grabación de audio)." });
   }
@@ -325,7 +347,8 @@ callsRouter.post("/from-url", async (req, res) => {
     const out = await ingestCallFromUrl({
       url: url.trim(),
       telefono: typeof telefono === "string" && telefono.trim() ? telefono.trim() : null,
-      contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null
+      contacto: typeof contacto === "string" && contacto.trim() ? contacto.trim() : null,
+      vendedor: typeof vendedor === "string" && vendedor.trim() ? vendedor.trim() : null
     });
     res.status(out.analizada ? 200 : 422).json(out);
   } catch (err) {
