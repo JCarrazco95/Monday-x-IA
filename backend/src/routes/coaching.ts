@@ -208,8 +208,12 @@ coachingRouter.get("/", async (req, res) => {
     }
     const porVendedor = [...porVendedorAgg.entries()]
       .map(([vendedor, v]) => {
-        const etapas = [...v.etapas.entries()].map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }));
+        const etapas = [...v.etapas.entries()]
+          .map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }))
+          .sort((a, b) => a.id - b.id);
         const debil = etapas.length ? etapas.reduce((min, e) => (e.promedio < min.promedio ? e : min)) : null;
+        // C.3 — insignias: etapas Sandler DOMINADAS (promedio en banda verde).
+        const insignias = etapas.filter((e) => e.promedio >= 75).map((e) => e.nombre);
         return {
           vendedor,
           llamadas: v.sandler.length,
@@ -217,12 +221,16 @@ coachingRouter.get("/", async (req, res) => {
           challengerProm: avg(v.challenger),
           globalProm: avg(v.global),
           etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null,
+          etapas,
+          insignias,
           tendencia: [...v.meses.entries()]
             .map(([periodo, scores]) => ({ periodo, globalProm: avg(scores), count: scores.length }))
             .sort((a, b) => a.periodo.localeCompare(b.periodo))
         };
       })
-      .sort((a, b) => b.globalProm - a.globalProm || b.llamadas - a.llamadas);
+      // Ranking: score global > insignias > volumen de llamadas.
+      .sort((a, b) => b.globalProm - a.globalProm || b.insignias.length - a.insignias.length || b.llamadas - a.llamadas)
+      .map((v, i) => ({ ...v, posicion: i + 1 }));
 
     // Tendencia mensual del score global.
     const trendAgg = new Map<string, number[]>();

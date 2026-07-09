@@ -140,11 +140,12 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
 - `/api/coaching` → `porVendedor[].tendencia` (score global mensual por persona).
   En la UI, el panel "Tendencia del score global" tiene selector Equipo/vendedor.
 
-### C.3 Rankings / gamificación por las 7 etapas Sandler
-- **Valor:** medio-alto — competencia sana, adopción.
-- **Complejidad:** **media.**
-- **Reutiliza:** `etapasSandler`/`etapaMasDebil` de `coaching.ts:97`; se agrega un
-  leaderboard por vendedor y badges por etapa dominada. Nueva vista frontend.
+### C.3 Rankings / gamificación — ✅ HECHO
+- `/api/coaching` → `porVendedor` ahora trae `posicion` (ranking por score
+  global, desempate por insignias y volumen), `etapas` (promedio por etapa
+  Sandler) e `insignias` (etapas dominadas: promedio ≥75). En la UI, el panel
+  "Ranking del equipo · 7 etapas Sandler" muestra podio (🥇🥈🥉), insignias 🏅
+  por etapa dominada y la etapa a entrenar de cada vendedor.
 
 ### C.4 Alertas en tiempo real de llamadas/leads en riesgo
 - **Valor:** alto — intervenir antes de perder el trato.
