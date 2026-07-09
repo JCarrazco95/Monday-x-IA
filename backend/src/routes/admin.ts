@@ -3,6 +3,7 @@ import { db } from "../db/index.js";
 import { logActivity } from "../lib/activityLog.js";
 import { itemIdOf } from "../lib/references.js";
 import { getAircallCall, aircallEnabled } from "../lib/aircall.js";
+import { backfillCallAnalyses } from "../db/domain.js";
 
 // ===========================================================================
 //  Administración — limpieza de datos demo/fallback.
@@ -183,7 +184,11 @@ adminRouter.post("/backfill-vendedor", async (req, res) => {
       detalle.push({ reference: r.reference, vendedor: agente });
     }
 
+    // Refresca la tabla de dominio (A.3) para que lista/detalle/coaching vean
+    // el vendedor recién completado (re-upsert desde el último log por llamada).
+    let dominioActualizado = 0;
     if (actualizados > 0) {
+      dominioActualizado = await backfillCallAnalyses();
       logActivity({
         agentId: "call_intelligence",
         type: "success",
@@ -191,7 +196,7 @@ adminRouter.post("/backfill-vendedor", async (req, res) => {
         detail: `Se completó vendedorNombre desde Aircall en análisis previos a la identidad del vendedor.`
       });
     }
-    res.json({ ok: true, revisados, actualizados, sinDatoEnAircall, noAplicables, detalle });
+    res.json({ ok: true, revisados, actualizados, sinDatoEnAircall, noAplicables, dominioActualizado, detalle });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
