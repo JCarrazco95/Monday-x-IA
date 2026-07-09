@@ -212,33 +212,56 @@ export function Coaching() {
 
           {(data.porVendedor ?? []).length > 0 && (
             <div className="mb-4">
-              <Panel title="Desempeño por vendedor" icon={<Users size={15} className="text-accent" />}>
+              <Panel title="Ranking del equipo · 7 etapas Sandler" icon={<Users size={15} className="text-accent" />}>
                 <div className="overflow-x-auto">
                   <table className="w-full text-[13px]">
                     <thead>
                       <tr className="border-b border-border text-left text-xs text-text-muted">
+                        <th className="px-3 py-2 font-medium">#</th>
                         <th className="px-3 py-2 font-medium">Vendedor</th>
                         <th className="px-3 py-2 text-right font-medium">Llamadas</th>
                         <th className="px-3 py-2 text-right font-medium">Sandler</th>
                         <th className="px-3 py-2 text-right font-medium">Challenger</th>
                         <th className="px-3 py-2 text-right font-medium">Global</th>
+                        <th className="px-3 py-2 font-medium">Insignias (etapas dominadas)</th>
                         <th className="px-3 py-2 font-medium">Etapa a entrenar</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(data.porVendedor ?? []).map((v) => (
-                        <tr key={v.vendedor} className="border-b border-border/60 last:border-0">
-                          <td className="px-3 py-2 font-medium text-text">{v.vendedor}</td>
-                          <td className="px-3 py-2 text-right tabular-nums text-text-muted">{v.llamadas}</td>
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.sandlerProm) }}>{v.sandlerProm}</td>
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.challengerProm) }}>{v.challengerProm}</td>
-                          <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.globalProm) }}>{v.globalProm}</td>
-                          <td className="px-3 py-2 text-text-muted">{v.etapaMasDebil ? `${v.etapaMasDebil.nombre} (${v.etapaMasDebil.promedio})` : "—"}</td>
-                        </tr>
-                      ))}
+                      {(data.porVendedor ?? []).map((v, i) => {
+                        const pos = v.posicion ?? i + 1;
+                        const medalla = pos === 1 ? "🥇" : pos === 2 ? "🥈" : pos === 3 ? "🥉" : `${pos}`;
+                        return (
+                          <tr key={v.vendedor} className="border-b border-border/60 last:border-0">
+                            <td className="px-3 py-2 text-base">{medalla}</td>
+                            <td className="px-3 py-2 font-medium text-text">{v.vendedor}</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-text-muted">{v.llamadas}</td>
+                            <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.sandlerProm) }}>{v.sandlerProm}</td>
+                            <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.challengerProm) }}>{v.challengerProm}</td>
+                            <td className="px-3 py-2 text-right font-semibold tabular-nums" style={{ color: colorForScore(v.globalProm) }}>{v.globalProm}</td>
+                            <td className="px-3 py-2">
+                              {(v.insignias ?? []).length ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {(v.insignias ?? []).map((n) => (
+                                    <span key={n} className="rounded-full bg-success/10 px-2 py-0.5 text-[11px] font-medium text-success ring-1 ring-success/25" title={`Etapa dominada: promedio ≥75 en ${n}`}>
+                                      🏅 {n.replace(/\s*\(.*\)/, "")}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-text-muted">— aún sin etapas en verde</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2 text-text-muted">{v.etapaMasDebil ? `${v.etapaMasDebil.nombre.replace(/\s*\(.*\)/, "")} (${v.etapaMasDebil.promedio})` : "—"}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
+                <p className="mt-2 text-[11px] text-text-muted">
+                  Ranking por score global (desempate: insignias, luego volumen). 🏅 = etapa Sandler con promedio ≥75 (banda verde).
+                </p>
               </Panel>
             </div>
           )}

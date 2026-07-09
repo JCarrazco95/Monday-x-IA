@@ -51,20 +51,14 @@ function topFrequencies(items: string[], limit = 8): { texto: string; count: num
 }
 
 async function latestCalls(): Promise<{ call: CallIntelligenceOutput; ts: string }[]> {
-  const rows = await db.query<Row>(
-    `SELECT l.reference, l.payload, l.timestamp
-       FROM logs l
-       JOIN (
-         SELECT reference, MAX(id) AS mid
-           FROM logs
-          WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference IS NOT NULL
-          GROUP BY reference
-       ) m ON l.id = m.mid`
+  // A.3: lee la tabla de dominio (una fila por llamada) en vez de agrupar logs.
+  const rows = await db.query<{ payload: string; analyzed_at: string }>(
+    `SELECT payload, analyzed_at FROM call_analyses`
   );
   const out: { call: CallIntelligenceOutput; ts: string }[] = [];
   for (const r of rows) {
     try {
-      out.push({ call: JSON.parse(r.payload) as CallIntelligenceOutput, ts: r.timestamp });
+      out.push({ call: JSON.parse(r.payload) as CallIntelligenceOutput, ts: r.analyzed_at });
     } catch {
       /* payload corrupto: se ignora */
     }
@@ -214,8 +208,12 @@ coachingRouter.get("/", async (req, res) => {
     }
     const porVendedor = [...porVendedorAgg.entries()]
       .map(([vendedor, v]) => {
-        const etapas = [...v.etapas.entries()].map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }));
+        const etapas = [...v.etapas.entries()]
+          .map(([id, e]) => ({ id, nombre: e.nombre, promedio: avg(e.puntajes) }))
+          .sort((a, b) => a.id - b.id);
         const debil = etapas.length ? etapas.reduce((min, e) => (e.promedio < min.promedio ? e : min)) : null;
+        // C.3 — insignias: etapas Sandler DOMINADAS (promedio en banda verde).
+        const insignias = etapas.filter((e) => e.promedio >= 75).map((e) => e.nombre);
         return {
           vendedor,
           llamadas: v.sandler.length,
@@ -223,12 +221,16 @@ coachingRouter.get("/", async (req, res) => {
           challengerProm: avg(v.challenger),
           globalProm: avg(v.global),
           etapaMasDebil: debil ? { nombre: debil.nombre, promedio: debil.promedio } : null,
+          etapas,
+          insignias,
           tendencia: [...v.meses.entries()]
             .map(([periodo, scores]) => ({ periodo, globalProm: avg(scores), count: scores.length }))
             .sort((a, b) => a.periodo.localeCompare(b.periodo))
         };
       })
-      .sort((a, b) => b.globalProm - a.globalProm || b.llamadas - a.llamadas);
+      // Ranking: score global > insignias > volumen de llamadas.
+      .sort((a, b) => b.globalProm - a.globalProm || b.insignias.length - a.insignias.length || b.llamadas - a.llamadas)
+      .map((v, i) => ({ ...v, posicion: i + 1 }));
 
     // Tendencia mensual del score global.
     const trendAgg = new Map<string, number[]>();
