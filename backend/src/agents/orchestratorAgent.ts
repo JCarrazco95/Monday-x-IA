@@ -1,4 +1,5 @@
 import { db } from "../db/index.js";
+import { saveCallAnalysis } from "../db/domain.js";
 import { logActivity } from "../lib/activityLog.js";
 import { formatReference } from "../lib/references.js";
 import { runFormAnalysisAgent, AGENT_ID as FORM_AGENT } from "./formAnalysisAgent.js";
@@ -274,6 +275,14 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
     payload: result,
     durationMs: Date.now() - start
   });
+
+  // Write-through a la tabla de dominio (A.3): las lecturas de Call
+  // Intelligence salen de aquí, no de reconstruir logs. Nunca rompe el flujo.
+  try {
+    await saveCallAnalysis(input.itemId, input.itemName, result);
+  } catch (err) {
+    console.error("[domain] no se pudo guardar call_analyses:", err instanceof Error ? err.message : err);
+  }
 
   const op = result.oportunidades;
   const columnUpdates: Record<string, unknown> = {
