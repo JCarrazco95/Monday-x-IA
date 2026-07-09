@@ -58,7 +58,8 @@ export async function ingestAircallCall(
   // Transcripción: override > Aircall AI > Deepgram sobre la grabación.
   let transcript: string | null = opts.transcriptOverride ?? null;
   if (!transcript && aircallEnabled) transcript = await getAircallTranscript(callId);
-  if (!transcript) transcript = await transcribeRecording(recordingUrl);
+  // La dirección permite etiquetar Vendedor/Cliente en la diarización.
+  if (!transcript) transcript = await transcribeRecording(recordingUrl, { direction: detail?.direction ?? null });
 
   const itemId = `aircall-${callId}`;
   const itemName = `Llamada — ${contacto ?? numero ?? `Aircall ${callId}`}`;
