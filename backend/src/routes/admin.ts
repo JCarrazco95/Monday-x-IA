@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "../db/index.js";
 import { logActivity } from "../lib/activityLog.js";
 import { itemIdOf } from "../lib/references.js";
+import { getAircallCall, aircallEnabled } from "../lib/aircall.js";
 
 // ===========================================================================
 //  Administración — limpieza de datos demo/fallback.
@@ -110,6 +111,83 @@ adminRouter.post("/purge-demo", async (req, res) => {
       detail: `Se eliminaron análisis generados por heurísticas (demo/fallback)${includeSims ? " y simulaciones" : ""}. Las llamadas afectadas se re-analizarán con IA real en el próximo sync.`
     });
     res.json({ ok: true, borrados });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ===========================================================================
+//  POST /api/admin/backfill-vendedor — completa la identidad del vendedor en
+//  análisis VIEJOS (hechos antes de que se propagara `vendedorNombre`).
+//
+//  Recorre los payloads de call_intelligence sin vendedor cuya referencia sea
+//  `aircall-<id>`, consulta la llamada en Aircall (user.name sigue disponible)
+//  y actualiza el payload en la bitácora. NO re-analiza ni gasta IA/Deepgram.
+//  Idempotente: los que ya tienen vendedor se saltan. Body: { "confirm": true }.
+// ===========================================================================
+adminRouter.post("/backfill-vendedor", async (req, res) => {
+  const { confirm } = (req.body ?? {}) as { confirm?: boolean };
+  if (confirm !== true) {
+    return res.status(400).json({ error: 'Confirmación requerida: envía {"confirm": true}.' });
+  }
+  if (!aircallEnabled) {
+    return res.status(422).json({ error: "Aircall no está configurado (AIRCALL_API_ID/TOKEN)." });
+  }
+  try {
+    const rows = await db.query<{ id: number; reference: string; payload: string }>(
+      `SELECT id, reference, payload FROM logs
+        WHERE agent_id = 'call_intelligence' AND payload IS NOT NULL AND reference IS NOT NULL`
+    );
+    let revisados = 0;
+    let actualizados = 0;
+    let sinDatoEnAircall = 0;
+    let noAplicables = 0; // sin id de Aircall (url-/call-) o payload corrupto
+    const detalle: { reference: string; vendedor: string }[] = [];
+    // Cache por callId: varios logs pueden referir la misma llamada.
+    const agenteCache = new Map<string, string | null>();
+
+    for (const r of rows) {
+      revisados++;
+      let payload: Record<string, unknown>;
+      try {
+        payload = JSON.parse(r.payload) as Record<string, unknown>;
+      } catch {
+        noAplicables++;
+        continue;
+      }
+      if (typeof payload.vendedorNombre === "string" && payload.vendedorNombre.trim()) continue;
+
+      const m = itemIdOf(r.reference).match(/^aircall-(\d+)$/);
+      if (!m) {
+        noAplicables++;
+        continue;
+      }
+      const callId = m[1];
+      let agente = agenteCache.get(callId);
+      if (agente === undefined) {
+        const detail = await getAircallCall(callId);
+        agente = detail?.agente ?? null;
+        agenteCache.set(callId, agente);
+      }
+      if (!agente) {
+        sinDatoEnAircall++;
+        continue;
+      }
+      payload.vendedorNombre = agente;
+      await db.run("UPDATE logs SET payload = ? WHERE id = ?", [JSON.stringify(payload), r.id]);
+      actualizados++;
+      detalle.push({ reference: r.reference, vendedor: agente });
+    }
+
+    if (actualizados > 0) {
+      logActivity({
+        agentId: "call_intelligence",
+        type: "success",
+        title: `Backfill de vendedor: ${actualizados} análisis actualizado(s)`,
+        detail: `Se completó vendedorNombre desde Aircall en análisis previos a la identidad del vendedor.`
+      });
+    }
+    res.json({ ok: true, revisados, actualizados, sinDatoEnAircall, noAplicables, detalle });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

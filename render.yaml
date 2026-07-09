@@ -62,6 +62,13 @@ services:
         sync: false
       - key: DEEPGRAM_API_KEY
         sync: false
+      # Sincronización AUTOMÁTICA del tablero de llamadas de Aircall: corre cada
+      # hora, analiza solo llamadas NUEVAS (dedupe idempotente) con tope por
+      # corrida para controlar el costo de IA/Deepgram.
+      - key: CALLS_SYNC_CRON_HOURS
+        value: "1"
+      - key: CALLS_SYNC_MAX
+        value: "25"
 
   - type: web
     name: maxirent-frontend
