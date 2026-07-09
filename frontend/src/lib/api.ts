@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs } from "../types";
 
 const BASE = "/api";
 
@@ -176,6 +176,29 @@ export const api = {
     const qs = params.toString();
     return request<CoachingReport>(`/coaching${qs ? `?${qs}` : ""}`);
   },
+
+  // Entrenamiento (LMS Sandler).
+  getCourses: (vendedor?: string, todos = false) => {
+    const qs = new URLSearchParams();
+    if (vendedor) qs.set("vendedor", vendedor);
+    if (todos) qs.set("todos", "true");
+    return request<{ cursos: TrainingCourse[] }>(`/training/courses${qs.toString() ? `?${qs}` : ""}`);
+  },
+  getLesson: (id: number) => request<TrainingLesson>(`/training/lessons/${id}`),
+  completeLesson: (id: number, vendedor: string) =>
+    request<{ ok: boolean }>(`/training/lessons/${id}/complete`, { method: "POST", body: JSON.stringify({ vendedor }) }),
+  getTrainingRecs: (vendedor?: string) =>
+    request<TrainingRecs>(`/training/recomendaciones${vendedor ? `?vendedor=${encodeURIComponent(vendedor)}` : ""}`),
+  createCourse: (data: { titulo: string; descripcion?: string; etapaSandler?: number | null; publicado?: boolean }) =>
+    request<{ ok: boolean; id: number }>(`/training/courses`, { method: "POST", body: JSON.stringify(data) }),
+  updateCourse: (id: number, data: Partial<{ titulo: string; descripcion: string; publicado: boolean; orden: number }>) =>
+    request<{ ok: boolean }>(`/training/courses/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCourse: (id: number) => request<{ ok: boolean }>(`/training/courses/${id}`, { method: "DELETE" }),
+  createLesson: (courseId: number, data: { titulo: string; contenido: string; videoUrl?: string; etapaSandler?: number | null; duracionMin?: number }) =>
+    request<{ ok: boolean; id: number }>(`/training/courses/${courseId}/lessons`, { method: "POST", body: JSON.stringify(data) }),
+  updateLesson: (id: number, data: Partial<{ titulo: string; contenido: string; videoUrl: string; etapaSandler: number; duracionMin: number; orden: number }>) =>
+    request<{ ok: boolean }>(`/training/lessons/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteLesson: (id: number) => request<{ ok: boolean }>(`/training/lessons/${id}`, { method: "DELETE" }),
 
   // C.7: Reporte ejecutivo del período (markdown listo para enviar).
   getExecutiveReport: (dias = 7) =>

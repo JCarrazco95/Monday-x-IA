@@ -45,3 +45,20 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* ── Contenido de lecciones (Markdown del Entrenamiento) ── */
+.lesson-md { font-size: 0.875rem; line-height: 1.7; color: var(--color-text); }
+.lesson-md h2 { font-size: 1.05rem; font-weight: 700; margin: 1.25rem 0 0.5rem; }
+.lesson-md h3 { font-size: 0.95rem; font-weight: 600; margin: 1rem 0 0.4rem; }
+.lesson-md p { margin: 0.5rem 0; }
+.lesson-md ul, .lesson-md ol { margin: 0.5rem 0 0.5rem 1.25rem; }
+.lesson-md ul { list-style: disc; }
+.lesson-md ol { list-style: decimal; }
+.lesson-md li { margin: 0.25rem 0; }
+.lesson-md strong { font-weight: 700; }
+.lesson-md blockquote { margin: 0.75rem 0; padding: 0.5rem 1rem; border-left: 3px solid var(--color-accent); background: color-mix(in srgb, var(--color-accent) 6%, transparent); border-radius: 0 0.5rem 0.5rem 0; }
+.lesson-md table { width: 100%; border-collapse: collapse; margin: 0.75rem 0; font-size: 0.8rem; }
+.lesson-md th, .lesson-md td { border: 1px solid var(--color-border); padding: 0.4rem 0.6rem; text-align: left; }
+.lesson-md th { background: color-mix(in srgb, var(--color-border) 30%, transparent); font-weight: 600; }
+.lesson-md input[type="checkbox"] { margin-right: 0.4rem; accent-color: var(--color-accent); }
+.lesson-md hr { border: none; border-top: 1px solid var(--color-border); margin: 1rem 0; }

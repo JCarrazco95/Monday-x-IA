@@ -16,6 +16,7 @@ const CallIntelligence = lazy(() => import('./pages/CallIntelligence').then((m) 
 const CallIntelligenceList = lazy(() => import('./pages/CallIntelligenceList').then((m) => ({ default: m.CallIntelligenceList })))
 const NextBestAction = lazy(() => import('./pages/NextBestAction').then((m) => ({ default: m.NextBestAction })))
 const Coaching = lazy(() => import('./pages/Coaching').then((m) => ({ default: m.Coaching })))
+const Training = lazy(() => import('./pages/Training').then((m) => ({ default: m.Training })))
 const Pipeline = lazy(() => import('./pages/Pipeline').then((m) => ({ default: m.Pipeline })))
 const Assistant = lazy(() => import('./pages/Assistant').then((m) => ({ default: m.Assistant })))
 const Logs = lazy(() => import('./pages/Logs').then((m) => ({ default: m.Logs })))
@@ -50,6 +51,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="pipeline" element={<Pipeline />} />
               <Route path="asistente" element={<Assistant />} />
               <Route path="coaching" element={<RequireAdmin><Coaching /></RequireAdmin>} />
+              <Route path="entrenamiento" element={<Training />} />
               {/* Pestañas solo para administradores */}
               <Route path="logs" element={<RequireAdmin><Logs /></RequireAdmin>} />
               <Route path="settings" element={<RequireAdmin><Settings /></RequireAdmin>} />

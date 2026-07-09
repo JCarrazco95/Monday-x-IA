@@ -493,3 +493,42 @@ export interface ScraperImportResult {
   itemIds: string[];
   errores: { nombre: string; error: string }[];
 }
+
+// ── Entrenamiento (LMS Sandler) ──
+export interface TrainingLessonSummary {
+  id: number;
+  titulo: string;
+  etapaSandler: number | null;
+  etapaNombre: string | null;
+  duracionMin: number | null;
+  tieneVideo: boolean;
+  orden: number;
+  completada: boolean;
+}
+export interface TrainingCourse {
+  id: number;
+  titulo: string;
+  descripcion: string | null;
+  etapaSandler: number | null;
+  publicado: boolean;
+  lecciones: TrainingLessonSummary[];
+  progreso: number;
+  completadas: number;
+  total: number;
+}
+export interface TrainingLesson {
+  id: number;
+  courseId: number;
+  cursoTitulo: string;
+  titulo: string;
+  contenido: string;
+  videoUrl: string | null;
+  etapaSandler: number | null;
+  etapaNombre: string | null;
+  duracionMin: number | null;
+}
+export interface TrainingRecs {
+  vendedor: string | null;
+  etapaDebil: { id: number; nombre: string; promedio: number; fuente: "vendedor" | "equipo" } | null;
+  lecciones: { id: number; titulo: string; cursoTitulo: string; duracionMin: number | null; tieneVideo: boolean; completada: boolean }[];
+}

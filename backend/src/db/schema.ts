@@ -91,6 +91,42 @@ CREATE TABLE IF NOT EXISTS lead_analyses (
   updated_at   TEXT NOT NULL
 );
 
+-- ENTRENAMIENTO (LMS): cursos y lecciones Sandler creados por los admins,
+-- consumidos por los vendedores. El progreso se registra por nombre de
+-- vendedor (el mismo del Coaching). quiz es JSON (fase 2).
+CREATE TABLE IF NOT EXISTS courses (
+  id          ${autoId},
+  titulo      TEXT NOT NULL,
+  descripcion TEXT,
+  etapa_sandler INTEGER,
+  orden       INTEGER NOT NULL DEFAULT 0,
+  publicado   INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lessons (
+  id           ${autoId},
+  course_id    INTEGER NOT NULL,
+  titulo       TEXT NOT NULL,
+  contenido    TEXT NOT NULL,
+  video_url    TEXT,
+  etapa_sandler INTEGER,
+  duracion_min INTEGER,
+  orden        INTEGER NOT NULL DEFAULT 0,
+  quiz         TEXT,
+  created_at   TEXT NOT NULL,
+  updated_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lesson_progress (
+  id           ${autoId},
+  lesson_id    INTEGER NOT NULL,
+  vendedor     TEXT NOT NULL,
+  completed_at TEXT NOT NULL,
+  UNIQUE (lesson_id, vendedor)
+);
+
 -- Registro de escrituras a Monday para IDEMPOTENCIA: guarda la firma de cada
 -- escritura (subitems + comentario) ya aplicada, para no duplicarla si el mismo
 -- análisis se reprocesa (reintento de webhook, re-sync del board, etc.).
@@ -112,6 +148,9 @@ CREATE INDEX IF NOT EXISTS idx_call_analyses_analyzed ON call_analyses(analyzed_
 CREATE INDEX IF NOT EXISTS idx_lead_analyses_email ON lead_analyses(email);
 CREATE INDEX IF NOT EXISTS idx_lead_analyses_rfc ON lead_analyses(rfc);
 CREATE INDEX IF NOT EXISTS idx_lead_analyses_analyzed ON lead_analyses(analyzed_at);
+CREATE INDEX IF NOT EXISTS idx_lessons_course ON lessons(course_id);
+CREATE INDEX IF NOT EXISTS idx_lessons_etapa ON lessons(etapa_sandler);
+CREATE INDEX IF NOT EXISTS idx_lesson_progress_vendedor ON lesson_progress(vendedor);
 `;
 }
 

@@ -189,3 +189,22 @@ código actual reutiliza o modifica**. Todas apalancan el motor Call Intelligenc
 
 En paralelo, la base para todo lo anterior a escala es **A.1 (cola) + A.3 (tablas
 de dominio) + auth real**, que además resuelven los hallazgos críticos de seguridad.
+
+### C.8 Entrenamiento Sandler (LMS) — ✅ Fase 1 HECHA
+- Nueva pestaña **Entrenamiento** (vendedores y admins): cursos → lecciones en
+  Markdown con video embebible (YouTube), progreso por vendedor y **"Tu ruta
+  recomendada"** — lecciones elegidas por la etapa Sandler más débil REAL del
+  vendedor (de sus llamadas en `call_analyses`).
+- Contenido inicial: **3 cursos / 14 lecciones originales en español**
+  (Fundamentos, las 7 etapas aplicadas a flotillas, técnicas avanzadas),
+  alineados a la rúbrica del sistema. Se siembran solo si no hay cursos (nunca
+  pisan ediciones del admin).
+- Gestión (admin): crear/editar/publicar/borrar cursos y lecciones desde la UI.
+- API: `GET/POST/PATCH/DELETE /api/training/*` (cursos, lecciones, completar,
+  recomendaciones). Tablas: `courses`, `lessons` (campo `quiz` listo para la
+  fase 2), `lesson_progress`.
+- **Fase 2 (aprobada, pendiente):** quiz por lección + insignia 📚, lección
+  sugerida en el comentario de Monday post-llamada, llamadas de la biblioteca
+  como material. **Fase 3 (aprobada, pendiente):** métricas de adopción y
+  correlación entrenamiento→scores. **Pendiente:** curaduría de videos en
+  español (bloqueada por límite del buscador web en esta sesión).

@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { LayoutDashboard, Bot, Sparkles, Radar, Phone, ListChecks, TrendingUp, GraduationCap, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Bot, Sparkles, Radar, Phone, ListChecks, TrendingUp, GraduationCap, BookOpen, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { useRole } from "../lib/useRole";
 import { Logo } from "./Logo";
@@ -17,6 +17,7 @@ const navItems: { to: string; label: string; icon: LucideIcon; end?: boolean; ad
   { to: "/pipeline", label: "Pipeline", icon: TrendingUp, adminOnly: false },
   { to: "/asistente", label: "Asistente", icon: MessageSquare, adminOnly: false },
   { to: "/coaching", label: "Coaching", icon: GraduationCap, adminOnly: true },
+  { to: "/entrenamiento", label: "Entrenamiento", icon: BookOpen, adminOnly: false },
   { to: "/logs", label: "Bitácora", icon: ScrollText, adminOnly: true },
   { to: "/settings", label: "Configuración", icon: Settings, adminOnly: true }
 ];

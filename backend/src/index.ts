@@ -19,6 +19,7 @@ import { mondayRouter } from "./routes/monday.js";
 import { scraperRouter } from "./routes/scraper.js";
 import { adminRouter } from "./routes/admin.js";
 import { reportsRouter } from "./routes/reports.js";
+import { trainingRouter } from "./routes/training.js";
 import { isMockMode } from "./lib/claude.js";
 import { PROVIDER, providerLabel } from "./lib/provider.js";
 import { isMondayMockMode, isMondayReadOnly } from "./lib/monday.js";
@@ -95,6 +96,7 @@ app.use("/api/monday", mondayRouter);
 app.use("/api/scraper", aiLimiter, scraperRouter);
 app.use("/api/admin", adminRouter);
 app.use("/api/reports", reportsRouter);
+app.use("/api/training", trainingRouter);
 
 async function start() {
   // Inicializa la BD (SQLite local o Postgres si hay DATABASE_URL) y siembra
@@ -106,6 +108,9 @@ async function start() {
   const { ensureCallAnalysesPopulated, ensureLeadAnalysesPopulated } = await import("./db/domain.js");
   await ensureCallAnalysesPopulated();
   await ensureLeadAnalysesPopulated();
+  // Entrenamiento: siembra los cursos Sandler iniciales si no hay ninguno.
+  const { seedTraining } = await import("./db/trainingSeed.js");
+  await seedTraining();
 
   app.listen(PORT, () => {
     console.log(`\n🚀 MAXIRent backend escuchando en http://localhost:${PORT}`);
