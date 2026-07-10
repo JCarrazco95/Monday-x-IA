@@ -203,8 +203,13 @@ de dominio) + auth real**, que además resuelven los hallazgos críticos de segu
 - API: `GET/POST/PATCH/DELETE /api/training/*` (cursos, lecciones, completar,
   recomendaciones). Tablas: `courses`, `lessons` (campo `quiz` listo para la
   fase 2), `lesson_progress`.
-- **Fase 2 (aprobada, pendiente):** quiz por lección + insignia 📚, lección
-  sugerida en el comentario de Monday post-llamada, llamadas de la biblioteca
-  como material. **Fase 3 (aprobada, pendiente):** métricas de adopción y
-  correlación entrenamiento→scores. **Pendiente:** curaduría de videos en
-  español (bloqueada por límite del buscador web en esta sesión).
+- **✅ Fase 2 HECHA:** quiz por módulo (16 preguntas, calificación en servidor,
+  80% para aprobar, mejor intento, insignia 📚, desbloqueado al completar las
+  lecciones), 5 videos en español curados y embebidos, diálogos modelo en las
+  7 lecciones de etapas, lección sugerida en el comentario de coaching de
+  Monday post-llamada, y POST /api/training/reseed (actualiza contenido
+  conservando progreso).
+- **✅ Fase 3 HECHA:** GET /api/training/adopcion + panel "Adopción del
+  entrenamiento" en Coaching: avance y quizzes por vendedor (incluye a los que
+  no han empezado) y CORRELACIÓN por etapa entrenada — score promedio en
+  llamadas reales antes vs. después de la primera lección (con Δ).

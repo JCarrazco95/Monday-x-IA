@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion } from "../types";
 
 const BASE = "/api";
 
@@ -202,6 +202,10 @@ export const api = {
   updateLesson: (id: number, data: Partial<{ titulo: string; contenido: string; videoUrl: string; etapaSandler: number; duracionMin: number; orden: number }>) =>
     request<{ ok: boolean }>(`/training/lessons/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteLesson: (id: number) => request<{ ok: boolean }>(`/training/lessons/${id}`, { method: "DELETE" }),
+
+  // Fase 3: adopción del entrenamiento + correlación entrenamiento→scores.
+  getTrainingAdopcion: () =>
+    request<TrainingAdopcion>(`/training/adopcion`),
 
   // C.7: Reporte ejecutivo del período (markdown listo para enviar).
   getExecutiveReport: (dias = 7) =>

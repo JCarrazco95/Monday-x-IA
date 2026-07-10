@@ -12,9 +12,21 @@ import type { CallIntelligenceOutput } from "../agents/types.js";
 
 const BANDA_EMOJI: Record<string, string> = { verde: "🟢", amarillo: "🟡", rojo: "🔴" };
 
+/** Etapa más débil (evaluable) de UNA llamada, para sugerir la lección. */
+export function etapaDebilDeLlamada(call: CallIntelligenceOutput): { id: number; nombre: string; puntaje: number } | null {
+  const evaluables = (call.sandler?.etapas ?? []).filter((e) => e.estado !== "no_aplica");
+  if (!evaluables.length) return null;
+  const debil = evaluables.reduce((min, e) => (e.puntaje < min.puntaje ? e : min));
+  return { id: debil.id, nombre: debil.nombre, puntaje: debil.puntaje };
+}
+
 /** Comentario de coaching para el vendedor. Devuelve null si el análisis no
- *  es evaluable (buzón/score 0) o no trae material de coaching. */
-export function buildCoachingComment(call: CallIntelligenceOutput): string | null {
+ *  es evaluable (buzón/score 0) o no trae material de coaching.
+ *  `leccionSugerida` (opcional): lección de Entrenamiento para la etapa débil. */
+export function buildCoachingComment(
+  call: CallIntelligenceOutput,
+  leccionSugerida?: { titulo: string; curso: string } | null
+): string | null {
   const sandler = call.sandler;
   const integrado = call.integrado;
   if (!sandler || sandler.puntajeFinal <= 0) return null; // buzón / no evaluable
@@ -51,6 +63,13 @@ export function buildCoachingComment(call: CallIntelligenceOutput): string | nul
   if (integrado?.proximaLlamada) {
     lines.push("");
     lines.push(`📅 Próxima llamada: ${integrado.proximaLlamada}`);
+  }
+
+  // Fase 2: cerrar el loop con el Entrenamiento — la lección que trabaja la
+  // etapa débil de ESTA llamada, en la pestaña Entrenamiento del panel.
+  if (leccionSugerida) {
+    lines.push("");
+    lines.push(`📚 Lección sugerida: "${leccionSugerida.titulo}" (${leccionSugerida.curso}) — pestaña Entrenamiento del panel.`);
   }
 
   // Sin material accionable no vale la pena comentar.

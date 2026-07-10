@@ -14,7 +14,7 @@
 import crypto from "node:crypto";
 import { handleOrchestratorEvent } from "../agents/orchestratorAgent.js";
 import { runMondayWriterAgent } from "../agents/mondayWriterAgent.js";
-import { buildCoachingComment } from "./coachingComment.js";
+import { buildCoachingComment, etapaDebilDeLlamada } from "./coachingComment.js";
 import { logActivity } from "./activityLog.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
@@ -224,11 +224,30 @@ async function latestAnalysis(itemId: string): Promise<CallIntelligenceOutput | 
  * llamada (tablero de Aircall), para que el vendedor lo reciba donde trabaja.
  * Idempotente (via monday_writes). Nunca rompe el sync si falla.
  */
+/** Lección publicada que trabaja la etapa indicada (para sugerirla en el coaching). */
+async function leccionParaEtapa(etapaId: number): Promise<{ titulo: string; curso: string } | null> {
+  try {
+    const row = await db.queryOne<{ titulo: string; curso: string }>(
+      `SELECT l.titulo, c.titulo as curso
+         FROM lessons l JOIN courses c ON c.id = l.course_id
+        WHERE c.publicado = 1 AND l.etapa_sandler = ?
+        ORDER BY l.orden ASC, l.id ASC LIMIT 1`,
+      [etapaId]
+    );
+    return row ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function postCoachingToBoardItem(boardItemId: string, analysisItemId: string, itemName: string): Promise<void> {
   try {
     const call = await latestAnalysis(analysisItemId);
     if (!call) return;
-    const comment = buildCoachingComment(call);
+    // Fase 2: sugerir la lección del Entrenamiento para la etapa débil de ESTA llamada.
+    const debil = etapaDebilDeLlamada(call);
+    const leccion = debil ? await leccionParaEtapa(debil.id) : null;
+    const comment = buildCoachingComment(call, leccion);
     if (!comment) return; // buzón / sin material accionable
     await runMondayWriterAgent({ itemId: boardItemId, itemName, comment });
   } catch (err) {

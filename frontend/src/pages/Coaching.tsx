@@ -3,9 +3,9 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
   PieChart, Pie, LineChart, Line
 } from "recharts";
-import { GraduationCap, RefreshCw, TrendingDown, TrendingUp, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check } from "lucide-react";
+import { GraduationCap, RefreshCw, TrendingDown, TrendingUp, AlertTriangle, MessageSquareWarning, Users, FileText, Copy, Check, BookOpen } from "lucide-react";
 import { api } from "../lib/api";
-import type { CoachingReport } from "../types";
+import type { CoachingReport, TrainingAdopcion } from "../types";
 
 // ===========================================================================
 //  Coaching del equipo — convierte el análisis de llamadas en mejora de ventas.
@@ -266,6 +266,8 @@ export function Coaching() {
             </div>
           )}
 
+          <AdopcionPanel />
+
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Desempeño por etapa Sandler (equipo)">
               <ResponsiveContainer width="100%" height={260}>
@@ -387,6 +389,89 @@ export function Coaching() {
           )}
         </>
       )}
+    </div>
+  );
+}
+
+// ── Fase 3: adopción del entrenamiento + correlación entrenamiento→scores ────
+function AdopcionPanel() {
+  const [data, setData] = useState<TrainingAdopcion | null>(null);
+
+  useEffect(() => {
+    api.getTrainingAdopcion().then(setData).catch(() => setData(null));
+  }, []);
+
+  if (!data || (!data.vendedores.length && !data.correlaciones.length)) return null;
+
+  return (
+    <div className="mb-4 mt-4">
+      <Panel title="Adopción del entrenamiento Sandler" icon={<BookOpen size={15} className="text-accent" />}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-text-muted">
+                <th className="px-3 py-2 font-medium">Vendedor</th>
+                <th className="px-3 py-2 font-medium">Avance de lecciones</th>
+                <th className="px-3 py-2 text-right font-medium">Quizzes 📚</th>
+                <th className="px-3 py-2 font-medium">Última actividad</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.vendedores.map((v) => (
+                <tr key={v.vendedor} className="border-b border-border/60 last:border-0">
+                  <td className="px-3 py-2 font-medium text-text">{v.vendedor}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2">
+                      <div className="h-2 w-28 overflow-hidden rounded-full bg-black/10">
+                        <div
+                          className={`h-full rounded-full ${v.avancePct >= 100 ? "bg-success" : v.avancePct > 0 ? "bg-accent" : "bg-border"}`}
+                          style={{ width: `${Math.max(v.avancePct, 3)}%` }}
+                        />
+                      </div>
+                      <span className="text-xs tabular-nums text-text-muted">{v.completadas}/{v.totalLecciones}</span>
+                      {v.avancePct === 0 && <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">sin empezar</span>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums text-text">{v.quizzesAprobados}/{v.totalQuizzes}</td>
+                  <td className="px-3 py-2 text-xs text-text-muted">
+                    {v.ultimaActividad ? new Date(v.ultimaActividad).toLocaleDateString("es-MX", { day: "2-digit", month: "short" }) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {data.correlaciones.length > 0 && (
+          <div className="mt-4 border-t border-border pt-3">
+            <div className="mb-2 text-xs font-semibold text-text">
+              📈 ¿El entrenamiento está funcionando? — score por etapa antes vs. después de estudiarla
+            </div>
+            <ul className="space-y-1.5">
+              {data.correlaciones.map((c, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
+                  <span className="font-medium text-text">{c.vendedor}</span>
+                  <span className="text-text-muted">· {c.etapaNombre.replace(/\s*\(.*\)/, "")}:</span>
+                  <span className="tabular-nums text-text-muted">{c.antes}</span>
+                  <span className="text-text-muted">→</span>
+                  <span className="font-semibold tabular-nums" style={{ color: colorForScore(c.despues) }}>{c.despues}</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                      c.delta > 0 ? "bg-success/15 text-success" : c.delta < 0 ? "bg-danger/15 text-danger" : "bg-border/50 text-text-muted"
+                    }`}
+                  >
+                    {c.delta > 0 ? `+${c.delta}` : c.delta}
+                  </span>
+                  <span className="text-[11px] text-text-muted">({c.llamadasAntes} llam. antes · {c.llamadasDespues} después)</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-2 text-[11px] text-text-muted">
+              Comparación del puntaje promedio del vendedor en esa etapa (llamadas reales) antes y después de completar su primera lección de la etapa. Se muestra cuando hay llamadas en ambos lados.
+            </p>
+          </div>
+        )}
+      </Panel>
     </div>
   );
 }

@@ -405,6 +405,111 @@ trainingRouter.patch("/lessons/:id", async (req, res) => {
   }
 });
 
+// GET /api/training/adopcion — Fase 3: métricas para gerencia.
+//   Por vendedor: avance de lecciones, quizzes aprobados y última actividad
+//   (incluye a los que NO han estudiado). Además, CORRELACIÓN: para cada
+//   etapa que un vendedor entrenó, su puntaje promedio en esa etapa ANTES de
+//   la primera lección completada vs DESPUÉS (con sus llamadas reales).
+trainingRouter.get("/adopcion", async (_req, res) => {
+  try {
+    const totalRow = await db.queryOne<{ c: number }>(
+      `SELECT CAST(COUNT(*) AS INTEGER) as c FROM lessons l JOIN courses c2 ON c2.id = l.course_id WHERE c2.publicado = 1`
+    );
+    const totalLecciones = totalRow?.c ?? 0;
+    const totalQuizzesRow = await db.queryOne<{ c: number }>(
+      `SELECT CAST(COUNT(*) AS INTEGER) as c FROM courses WHERE publicado = 1 AND quiz IS NOT NULL`
+    );
+    const totalQuizzes = totalQuizzesRow?.c ?? 0;
+
+    // Universo de vendedores: los que estudian ∪ los que llaman (para ver quién NO estudia).
+    const estudian = await db.query<{ vendedor: string; completadas: number; ultima: string }>(
+      `SELECT vendedor, CAST(COUNT(*) AS INTEGER) as completadas, MAX(completed_at) as ultima
+         FROM lesson_progress GROUP BY vendedor`
+    );
+    const aprobados = await db.query<{ vendedor: string; aprobados: number }>(
+      `SELECT vendedor, CAST(SUM(aprobado) AS INTEGER) as aprobados FROM quiz_results GROUP BY vendedor`
+    );
+    const llaman = await db.query<{ vendedor: string }>(
+      `SELECT DISTINCT vendedor FROM call_analyses WHERE vendedor IS NOT NULL`
+    );
+    const nombres = new Set<string>([
+      ...estudian.map((e) => e.vendedor),
+      ...llaman.map((l) => l.vendedor)
+    ]);
+    const progresoMap = new Map(estudian.map((e) => [e.vendedor, e]));
+    const quizMap = new Map(aprobados.map((a) => [a.vendedor, a.aprobados]));
+
+    const vendedores = [...nombres]
+      .map((v) => ({
+        vendedor: v,
+        completadas: progresoMap.get(v)?.completadas ?? 0,
+        totalLecciones,
+        avancePct: totalLecciones ? Math.round(((progresoMap.get(v)?.completadas ?? 0) / totalLecciones) * 100) : 0,
+        quizzesAprobados: quizMap.get(v) ?? 0,
+        totalQuizzes,
+        ultimaActividad: progresoMap.get(v)?.ultima ?? null
+      }))
+      .sort((a, b) => b.avancePct - a.avancePct || a.vendedor.localeCompare(b.vendedor));
+
+    // ── Correlación: puntaje por etapa antes/después de entrenarla ──────────
+    // Primera lección completada por vendedor+etapa.
+    const entrenos = await db.query<{ vendedor: string; etapa: number; desde: string }>(
+      `SELECT p.vendedor, l.etapa_sandler as etapa, MIN(p.completed_at) as desde
+         FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id
+        WHERE l.etapa_sandler IS NOT NULL
+        GROUP BY p.vendedor, l.etapa_sandler`
+    );
+    // Llamadas evaluables por vendedor (payload con etapas + fecha).
+    const callRows = await db.query<{ vendedor: string; payload: string; analyzed_at: string }>(
+      `SELECT vendedor, payload, analyzed_at FROM call_analyses WHERE vendedor IS NOT NULL`
+    );
+    const callsPorVendedor = new Map<string, { etapas: Map<number, number>; ts: string }[]>();
+    for (const r of callRows) {
+      const call = safeParseJson<CallIntelligenceOutput>(r.payload);
+      if (!call?.sandler || call.sandler.puntajeFinal <= 0) continue;
+      const etapas = new Map<number, number>();
+      for (const e of call.sandler.etapas ?? []) {
+        if (e.estado !== "no_aplica") etapas.set(e.id, e.puntaje);
+      }
+      const arr = callsPorVendedor.get(r.vendedor) ?? [];
+      arr.push({ etapas, ts: r.analyzed_at });
+      callsPorVendedor.set(r.vendedor, arr);
+    }
+
+    const correlaciones = [];
+    for (const t of entrenos) {
+      const calls = callsPorVendedor.get(t.vendedor) ?? [];
+      const antes: number[] = [];
+      const despues: number[] = [];
+      for (const c of calls) {
+        const p = c.etapas.get(t.etapa);
+        if (p === undefined) continue;
+        (c.ts < t.desde ? antes : despues).push(p);
+      }
+      // Solo tiene sentido con datos en ambos lados.
+      if (!antes.length || !despues.length) continue;
+      const pa = avg(antes);
+      const pd = avg(despues);
+      correlaciones.push({
+        vendedor: t.vendedor,
+        etapaId: t.etapa,
+        etapaNombre: ETAPAS_SANDLER[t.etapa] ?? `Etapa ${t.etapa}`,
+        entrenadaDesde: t.desde,
+        antes: pa,
+        despues: pd,
+        delta: pd - pa,
+        llamadasAntes: antes.length,
+        llamadasDespues: despues.length
+      });
+    }
+    correlaciones.sort((a, b) => b.delta - a.delta);
+
+    res.json({ totalLecciones, totalQuizzes, vendedores, correlaciones });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // POST /api/training/reseed { confirm: true }
 //   Reemplaza TODO el contenido por la versión más reciente del seed (código),
 //   CONSERVANDO el progreso y los quizzes aprobados de los vendedores (se

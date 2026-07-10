@@ -542,3 +542,29 @@ export interface TrainingRecs {
   etapaDebil: { id: number; nombre: string; promedio: number; fuente: "vendedor" | "equipo" } | null;
   lecciones: { id: number; titulo: string; cursoTitulo: string; duracionMin: number | null; tieneVideo: boolean; completada: boolean }[];
 }
+
+// ── Fase 3: adopción del entrenamiento ──
+export interface TrainingAdopcion {
+  totalLecciones: number;
+  totalQuizzes: number;
+  vendedores: {
+    vendedor: string;
+    completadas: number;
+    totalLecciones: number;
+    avancePct: number;
+    quizzesAprobados: number;
+    totalQuizzes: number;
+    ultimaActividad: string | null;
+  }[];
+  correlaciones: {
+    vendedor: string;
+    etapaId: number;
+    etapaNombre: string;
+    entrenadaDesde: string;
+    antes: number;
+    despues: number;
+    delta: number;
+    llamadasAntes: number;
+    llamadasDespues: number;
+  }[];
+}
