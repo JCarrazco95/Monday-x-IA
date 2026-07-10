@@ -1,6 +1,6 @@
 import { db } from "../db/index.js";
 import { logActivity } from "../lib/activityLog.js";
-import { parseReference, safeParseJson } from "../lib/references.js";
+import { formatReference, safeParseJson } from "../lib/references.js";
 import { runMondayWriterAgent } from "./mondayWriterAgent.js";
 import type {
   NextBestAction,
@@ -32,13 +32,6 @@ const H_TIBIA = Number(process.env.NBA_HORAS_TIBIA ?? 72);
 const H_COMPROMISO = Number(process.env.NBA_HORAS_COMPROMISO ?? 24);
 
 const PRIO_RANK: Record<NextBestAction["prioridad"], number> = { alta: 0, media: 1, baja: 2 };
-
-interface LogRow {
-  reference: string;
-  agent_id: string;
-  payload: string | null;
-  timestamp: string;
-}
 
 interface ItemSnapshot {
   reference: string;
@@ -95,59 +88,50 @@ export function parseFechaCompromiso(texto: string | undefined | null, now: Date
   return null;
 }
 
-// ---- Carga de estado desde la bitácora ----
+// ---- Carga de estado desde las tablas de dominio (A.3 fase 3) ----
+// Antes se reconstruía desde `logs`; ahora leemos lead_analyses y call_analyses
+// (una fila por item, indexadas). Cada lead y cada llamada es su propio
+// snapshot — coincide con el comportamiento previo, porque un lead y sus
+// llamadas tienen item_id distintos (lead vs. aircall-*). `analyzed_at` es la
+// "última actividad" (equivalente al MAX(timestamp) que se usaba antes).
 async function loadSnapshots(): Promise<ItemSnapshot[]> {
-  // Última actividad REAL por referencia = último análisis de un agente de
-  // negocio (nueva llamada, formulario o re-enriquecimiento del lead). Los logs
-  // de plomería (orchestrator/writer/NBA) se excluyen: siempre acompañan al
-  // análisis unos segundos después y hacían que "la llamada es la última
-  // actividad" nunca se cumpliera.
-  const activity = await db.query<{ reference: string; last_ts: string }>(
-    `SELECT reference, MAX(timestamp) as last_ts
-       FROM logs
-      WHERE reference IS NOT NULL
-        AND agent_id IN ('lead_enrichment','form_analysis','call_intelligence')
-      GROUP BY reference`
-  );
-  const lastActivity = new Map(activity.map((a) => [a.reference, a.last_ts]));
+  const snaps: ItemSnapshot[] = [];
 
-  // Todos los análisis de lead/llamada, en orden, para quedarnos con el más reciente.
-  const rows = await db.query<LogRow>(
-    `SELECT reference, agent_id, payload, timestamp
-       FROM logs
-      WHERE agent_id IN ('lead_enrichment','call_intelligence')
-        AND payload IS NOT NULL AND reference IS NOT NULL
-      ORDER BY timestamp ASC, id ASC`
+  const leads = await db.query<{ item_id: string; item_name: string; lead_payload: string | null; analyzed_at: string }>(
+    `SELECT item_id, item_name, lead_payload, analyzed_at FROM lead_analyses WHERE lead_payload IS NOT NULL`
   );
-
-  const byRef = new Map<string, ItemSnapshot>();
-  for (const r of rows) {
-    let snap = byRef.get(r.reference);
-    if (!snap) {
-      const { itemId, itemName } = parseReference(r.reference);
-      snap = {
-        reference: r.reference,
-        itemId,
-        itemName,
-        lead: null,
-        call: null,
-        callTs: null,
-        lastActivityTs: lastActivity.get(r.reference) ?? null
-      };
-      byRef.set(r.reference, snap);
-    }
-    if (r.agent_id === "lead_enrichment") {
-      const p = safeParseJson<LeadEnrichmentOutput>(r.payload);
-      if (p) snap.lead = p; // el orden ASC garantiza que el último gana
-    } else if (r.agent_id === "call_intelligence") {
-      const p = safeParseJson<CallIntelligenceOutput>(r.payload);
-      if (p) {
-        snap.call = p;
-        snap.callTs = r.timestamp;
-      }
-    }
+  for (const r of leads) {
+    const lead = safeParseJson<LeadEnrichmentOutput>(r.lead_payload);
+    if (!lead) continue;
+    snaps.push({
+      reference: formatReference(r.item_id, r.item_name),
+      itemId: r.item_id,
+      itemName: r.item_name,
+      lead,
+      call: null,
+      callTs: null,
+      lastActivityTs: r.analyzed_at
+    });
   }
-  return [...byRef.values()];
+
+  const calls = await db.query<{ item_id: string; item_name: string; payload: string; analyzed_at: string }>(
+    `SELECT item_id, item_name, payload, analyzed_at FROM call_analyses`
+  );
+  for (const r of calls) {
+    const call = safeParseJson<CallIntelligenceOutput>(r.payload);
+    if (!call) continue;
+    snaps.push({
+      reference: formatReference(r.item_id, r.item_name),
+      itemId: r.item_id,
+      itemName: r.item_name,
+      lead: null,
+      call,
+      callTs: r.analyzed_at,
+      lastActivityTs: r.analyzed_at
+    });
+  }
+
+  return snaps;
 }
 
 function telOf(snap: ItemSnapshot): string | null {

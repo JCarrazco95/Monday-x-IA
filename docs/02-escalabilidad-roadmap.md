@@ -73,9 +73,14 @@ un *fallback*/migración, no el camino principal.
 > write-through y backfill automático. Migrados: **Leads** (lista + detalle por
 > índice), **Coaching** (lee `call_analyses`), **Asistente** (corpus desde las
 > dos tablas) y el **dedupe de leads** (por columnas indexadas email/rfc, antes
-> LIKE sobre el JSON de logs). **Pendiente fase 3 (coordinar):** forecast (su
-> modo demo) y NBA siguen leyendo `logs` — se migran cuando se estabilice el
-> trabajo en curso de esos módulos.
+> LIKE sobre el JSON de logs).
+>
+> **✅ Fase 3 hecha — vistas 100% sobre dominio:** NBA (`loadSnapshots`),
+> Forecast modo estimado y el Reporte ejecutivo (`/reports/executive`) ya leen
+> `lead_analyses` + `call_analyses` en vez de reconstruir `logs`. Ninguna vista
+> escanea `logs` por request; solo queda un fallback puntual por item (recuperar
+> la transcripción de análisis viejos), que es uso legítimo de auditoría. `logs`
+> queda como bitácora/auditoría pura.
 
 ---
 

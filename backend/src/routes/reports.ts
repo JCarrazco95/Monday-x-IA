@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { runNextBestActionAgent } from "../agents/nextBestActionAgent.js";
-import { parseReference, safeParseJson } from "../lib/references.js";
+import { safeParseJson } from "../lib/references.js";
 import type { CallIntelligenceOutput, LeadEnrichmentOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -19,8 +19,6 @@ import type { CallIntelligenceOutput, LeadEnrichmentOutput } from "../agents/typ
 
 export const reportsRouter = Router();
 
-interface LogRow { reference: string; agent_id: string; payload: string; timestamp: string }
-
 const avg = (ns: number[]) => (ns.length ? Math.round(ns.reduce((s, n) => s + n, 0) / ns.length) : 0);
 
 function top<T>(map: Map<string, T[]>, limit: number): { texto: string; count: number }[] {
@@ -37,32 +35,26 @@ reportsRouter.get("/executive", async (req, res) => {
     const desde = new Date(hasta.getTime() - dias * 86_400_000);
     const desdeISO = desde.toISOString();
 
-    // Último análisis por referencia DENTRO del período.
-    const rows = await db.query<LogRow>(
-      `SELECT l.reference, l.agent_id, l.payload, l.timestamp
-         FROM logs l
-         JOIN (
-           SELECT reference, agent_id, MAX(id) AS mid
-             FROM logs
-            WHERE agent_id IN ('call_intelligence','lead_enrichment')
-              AND payload IS NOT NULL AND reference IS NOT NULL
-              AND timestamp >= ?
-            GROUP BY reference, agent_id
-         ) m ON l.id = m.mid`,
+    // A.3 fase 3: del período, desde las tablas de dominio (indexadas por fecha).
+    const callRows = await db.query<{ payload: string }>(
+      `SELECT payload FROM call_analyses WHERE analyzed_at >= ?`,
+      [desdeISO]
+    );
+    const leadRows = await db.query<{ item_name: string; lead_payload: string | null }>(
+      `SELECT item_name, lead_payload FROM lead_analyses WHERE lead_payload IS NOT NULL AND analyzed_at >= ?`,
       [desdeISO]
     );
 
-    // ── Llamadas del período ────────────────────────────────────────────────
+    // ── Llamadas y leads del período ────────────────────────────────────────
     const llamadas: CallIntelligenceOutput[] = [];
     const leads: { nombre: string; lead: LeadEnrichmentOutput }[] = [];
-    for (const r of rows) {
-      if (r.agent_id === "call_intelligence") {
-        const c = safeParseJson<CallIntelligenceOutput>(r.payload);
-        if (c) llamadas.push(c);
-      } else {
-        const l = safeParseJson<LeadEnrichmentOutput>(r.payload);
-        if (l) leads.push({ nombre: parseReference(r.reference).itemName, lead: l });
-      }
+    for (const r of callRows) {
+      const c = safeParseJson<CallIntelligenceOutput>(r.payload);
+      if (c) llamadas.push(c);
+    }
+    for (const r of leadRows) {
+      const l = safeParseJson<LeadEnrichmentOutput>(r.lead_payload);
+      if (l) leads.push({ nombre: r.item_name, lead: l });
     }
     const evaluables = llamadas.filter((c) => (c.sandler?.puntajeFinal ?? 0) > 0);
     const noEvaluables = llamadas.length - evaluables.length;

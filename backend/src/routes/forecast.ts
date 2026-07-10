@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { parseReference, safeParseJson } from "../lib/references.js";
+import { safeParseJson } from "../lib/references.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -203,14 +203,7 @@ async function buildForecastFromMonday(now: Date) {
   };
 }
 
-// ──────────────────────── MODO DEMO (estimación por bitácora) ────────────────────────
-
-interface LogRow {
-  reference: string;
-  agent_id: string;
-  payload: string | null;
-  timestamp: string;
-}
+// ──────────────────────── MODO DEMO (estimación por tablas de dominio) ────────────────────────
 
 type Etapa = "Calificado" | "Cotización" | "Negociación" | "Cierre probable" | "Descartado";
 
@@ -223,28 +216,42 @@ interface Snapshot {
   lastTs: string | null;
 }
 
+// A.3 fase 3: se leen las tablas de dominio (lead_analyses + call_analyses) en
+// vez de reconstruir desde `logs`. Cada lead (con su formulario) y cada llamada
+// es un snapshot propio — equivalente al comportamiento anterior, porque lead y
+// llamada tienen item_id distintos (lead vs. aircall-*).
 async function loadSnapshots(): Promise<Snapshot[]> {
-  const rows = await db.query<LogRow>(
-    `SELECT reference, agent_id, payload, timestamp
-       FROM logs
-      WHERE agent_id IN ('lead_enrichment','form_analysis','call_intelligence')
-        AND payload IS NOT NULL AND reference IS NOT NULL
-      ORDER BY timestamp ASC, id ASC`
+  const out: Snapshot[] = [];
+
+  const leads = await db.query<{ item_id: string; item_name: string; lead_payload: string | null; form_payload: string | null; analyzed_at: string }>(
+    `SELECT item_id, item_name, lead_payload, form_payload, analyzed_at FROM lead_analyses`
   );
-  const byRef = new Map<string, Snapshot>();
-  for (const r of rows) {
-    let s = byRef.get(r.reference);
-    if (!s) {
-      const { itemId, itemName } = parseReference(r.reference);
-      s = { itemId, itemName, lead: null, form: null, call: null, lastTs: null };
-      byRef.set(r.reference, s);
-    }
-    s.lastTs = r.timestamp;
-    if (r.agent_id === "lead_enrichment") s.lead = safeParseJson<LeadEnrichmentOutput>(r.payload) ?? s.lead;
-    else if (r.agent_id === "form_analysis") s.form = safeParseJson<Record<string, unknown>>(r.payload) ?? s.form;
-    else if (r.agent_id === "call_intelligence") s.call = safeParseJson<CallIntelligenceOutput>(r.payload) ?? s.call;
+  for (const r of leads) {
+    out.push({
+      itemId: r.item_id,
+      itemName: r.item_name,
+      lead: safeParseJson<LeadEnrichmentOutput>(r.lead_payload),
+      form: safeParseJson<Record<string, unknown>>(r.form_payload),
+      call: null,
+      lastTs: r.analyzed_at
+    });
   }
-  return [...byRef.values()];
+
+  const calls = await db.query<{ item_id: string; item_name: string; payload: string; analyzed_at: string }>(
+    `SELECT item_id, item_name, payload, analyzed_at FROM call_analyses`
+  );
+  for (const r of calls) {
+    out.push({
+      itemId: r.item_id,
+      itemName: r.item_name,
+      lead: null,
+      form: null,
+      call: safeParseJson<CallIntelligenceOutput>(r.payload),
+      lastTs: r.analyzed_at
+    });
+  }
+
+  return out;
 }
 
 function etapaDe(s: Snapshot): Etapa {
