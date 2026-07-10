@@ -21,11 +21,20 @@ interface SeedLesson {
   contenido: string;
 }
 
+export interface QuizQuestion {
+  pregunta: string;
+  opciones: string[];
+  correcta: number; // índice de la opción correcta
+  explicacion: string;
+}
+
 interface SeedCourse {
   titulo: string;
   descripcion: string;
   etapa: number | null;
   lecciones: SeedLesson[];
+  /** Quiz del módulo (fase 2): se presenta al final del curso. */
+  quiz?: QuizQuestion[];
 }
 
 const CURSOS: SeedCourse[] = [
@@ -40,6 +49,7 @@ const CURSOS: SeedCourse[] = [
         titulo: "El submarino Sandler: 7 compartimentos en orden",
         etapa: null,
         duracion: 10,
+        video: "https://www.youtube.com/watch?v=YcI7_b_u7Rk",
         contenido: `## La idea central
 
 David Sandler comparaba la venta con un **submarino de 7 compartimentos**: para avanzar al siguiente, cierras la compuerta del anterior. No presentas precio sin conocer el dolor; no cotizas sin saber quién decide.
@@ -74,6 +84,7 @@ El cliente que pide "cotización de 3 pickups" casi nunca tiene un problema de p
         titulo: "Romper el 'modo vendedor': igual a igual",
         etapa: null,
         duracion: 8,
+        video: "https://www.youtube.com/watch?v=EvipNuwXUqw",
         contenido: `## El problema del "modo vendedor"
 
 El comprador B2B tiene un sistema aprendido: pedir información, obtener el precio, desaparecer, y usar tu cotización para negociar con su proveedor actual. El vendedor tradicional lo alimenta: habla de features, manda PDFs, persigue.
@@ -130,6 +141,58 @@ El **Dolor pesa 25 de 100 puntos** — más que Cierre y Post-Venta juntos. Si s
 - [ ] Abre Coaching y anota tu etapa más débil actual.
 - [ ] Completa las lecciones recomendadas que aparecen arriba en esta pestaña.`
       }
+    ],
+    quiz: [
+      {
+        pregunta: "¿Por qué Sandler compara la venta con un submarino de 7 compartimentos?",
+        opciones: [
+          "Porque hay que vender rápido antes de 'hundirse'",
+          "Porque cada etapa debe cerrarse antes de avanzar a la siguiente",
+          "Porque el vendedor debe mantenerse invisible ante el cliente",
+          "Porque las ventas B2B duran 7 semanas en promedio"
+        ],
+        correcta: 1,
+        explicacion: "El submarino avanza cerrando la compuerta de cada compartimento: no presentas precio sin conocer el dolor, ni cotizas sin saber quién decide."
+      },
+      {
+        pregunta: "¿Cuál es la etapa con MAYOR peso en tu evaluación (25 de 100 puntos)?",
+        opciones: ["Cierre / Cumplimiento", "Presupuesto", "Dolor (Pain)", "Vínculo y Confianza"],
+        correcta: 2,
+        explicacion: "El Dolor pesa 25 pts — más que Cierre y Post-Venta juntos. Sin dolor descubierto y cuantificado, la cotización compite solo por precio."
+      },
+      {
+        pregunta: "Un cliente pide precio en el minuto 2. La respuesta 'igual a igual' es:",
+        opciones: [
+          "Darle el precio de inmediato para no incomodarlo",
+          "Decirle que el precio es confidencial",
+          "'Antes de cotizar necesito entender su operación; ¿me regala 15 minutos?'",
+          "Ofrecerle un descuento de bienvenida"
+        ],
+        correcta: 2,
+        explicacion: "El consultor de igual a igual no da consultoría ni precios sin entender el problema. Pedir permiso para descubrir mantiene la dirección de la llamada."
+      },
+      {
+        pregunta: "¿Qué significa 'está bien decir no' en Sandler?",
+        opciones: [
+          "Rechazar clientes difíciles",
+          "Un 'no' rápido vale más que un 'déjame pensarlo' eterno — para ambas partes",
+          "Nunca aceptar la primera propuesta del cliente",
+          "Decir no a todo descuento"
+        ],
+        correcta: 1,
+        explicacion: "El derecho mutuo a decir 'no' elimina la persecución: descalificar a tiempo libera tu tiempo para prospectos reales."
+      },
+      {
+        pregunta: "¿Para qué usa el equipo la pestaña de Coaching junto con este entrenamiento?",
+        opciones: [
+          "Para ver cuántas llamadas hizo cada quien",
+          "Para conocer su etapa más débil REAL y entrenarla con las lecciones recomendadas",
+          "Para escuchar las grabaciones de otros vendedores",
+          "Para pedir aumentos de sueldo"
+        ],
+        correcta: 1,
+        explicacion: "La IA mide tus llamadas con esta misma rúbrica; tu etapa más débil elige automáticamente tu ruta recomendada en Entrenamiento."
+      }
     ]
   },
   // ──────────────────────────────────────────────────────────────────────────
@@ -170,6 +233,18 @@ Busca: uso del nombre, tono de igual a igual, interés genuino en el negocio del
 
 ## Ponlo en práctica hoy
 
+## 🎬 Diálogo modelo (60 segundos de vínculo)
+
+> **Vendedor:** "Ing. Torres, gracias por tomarme la llamada. Vi que están arrancando el parque industrial de Apodaca — ¿cómo van con eso?"
+> **Cliente:** "Uf, a marchas forzadas, arrancamos en 3 semanas."
+> **Vendedor:** "Se nota el ritmo. ¿Usted lleva toda la operación o solo la parte de obra?"
+> **Cliente:** "Obra y logística, por eso andamos viendo lo de las camionetas."
+> **Vendedor:** "Perfecto, ahí voy a poder ayudarle o decirle honestamente si no. ¿Le parece si le hago unas preguntas primero?"
+
+**Nota cómo:** usó el nombre, mostró interés real por SU proyecto (no por vender), y la transición al Contrato Previo salió natural.
+
+## Ponlo en práctica hoy
+
 - [ ] En tu próxima llamada, dedica los primeros 60-90 segundos SOLO a la persona y su operación.
 - [ ] Usa el nombre del cliente al menos 2 veces de forma natural.`
       },
@@ -203,6 +278,16 @@ Antes de colgar, siempre el siguiente con fecha:
 
 Busca acuerdos explícitos de agenda/tiempo/objetivo al inicio y un siguiente paso fechado al final. "Le marco la próxima semana" = puntaje bajo.
 
+## 🎬 Diálogo modelo (Contrato Previo en acción)
+
+> **Vendedor:** "Juan, antes de entrar en tema: tenemos 20 minutos, ¿correcto? Le propongo esto — yo le hago unas preguntas sobre su operación para saber si de verdad podemos ayudarle; usted me pregunta lo que quiera; y al final decidimos juntos: avanzamos a una propuesta o lo dejamos aquí, y cualquiera de las dos está bien. ¿Le funciona?"
+> **Cliente:** "Va, me parece justo."
+> *…al final de la llamada…*
+> **Vendedor:** "Entonces quedamos: el jueves a las 10 le presento el comparativo con su jefe de operaciones presente, y ahí deciden si avanzamos a contrato o lo descartamos. ¿Confirmamos?"
+> **Cliente:** "Confirmado, jueves a las 10."
+
+**Nota cómo:** tiempo ✓, objetivo ✓, derecho a decir no ✓, y salida con fecha, hora y decisores. Cero "le marco luego".
+
 ## Ponlo en práctica hoy
 
 - [ ] Memoriza LA fórmula (adáptala a tus palabras) y úsala en las próximas 5 llamadas.
@@ -212,6 +297,7 @@ Busca acuerdos explícitos de agenda/tiempo/objetivo al inicio y un siguiente pa
         titulo: "Etapa 3 · Dolor (25 pts) — ⭐ la etapa que decide la venta",
         etapa: 3,
         duracion: 15,
+        video: "https://www.youtube.com/watch?v=fv7F4uo0Oqw",
         contenido: `## Qué es
 
 Descubrir el **problema real** detrás de la solicitud — con preguntas, no afirmaciones. Nadie renta 3 pickups por gusto: hay obra que arranca, unidades en el taller, capital que no alcanza o un contrato nuevo que cumplir.
@@ -246,6 +332,19 @@ Ahora tu renta de $25,000/mes compite contra $80,000 de pérdidas, no contra la 
 
 Cuenta preguntas de descubrimiento, profundización en niveles y cuantificación en pesos. Es el 25% de tu puntaje total.
 
+## 🎬 Diálogo modelo (los 3 niveles en 90 segundos)
+
+> **Cliente:** "Necesitamos 3 camionetas para julio." *(nivel 1: síntoma)*
+> **Vendedor:** "Claro. ¿Y qué está pasando en julio que las hace necesarias?"
+> **Cliente:** "Arranca la obra del hospital y las unidades propias ya no alcanzan."
+> **Vendedor:** "¿Qué pasa con la obra si no las tienen a tiempo?" *(nivel 2: impacto de negocio)*
+> **Cliente:** "Penalización del cliente y cuadrilla parada… unos 80 mil al mes, fácil."
+> **Vendedor:** "¿Y a usted cómo le pega ese tema, personalmente?" *(nivel 3: impacto personal)*
+> **Cliente:** "El director me lo recuerda cada lunes. Es mi responsabilidad."
+> **Vendedor:** "Entiendo. Entonces esto no es de camionetas — es de que la obra no se detenga y usted no cargue con ese pendiente. Con eso claro, déjeme hacerle dos preguntas más antes de hablar de opciones."
+
+**Nota cómo:** cero features. Tres preguntas convirtieron "3 camionetas" en un dolor de $80k/mes con presión del director. Ahora la renta compite contra la pérdida, no contra otra cotización.
+
 ## Ponlo en práctica hoy
 
 - [ ] En la próxima llamada haz MÍNIMO 3 preguntas de dolor antes de mencionar cualquier producto.
@@ -255,6 +354,7 @@ Cuenta preguntas de descubrimiento, profundización en niveles y cuantificación
         titulo: "Etapa 4 · Presupuesto (18 pts): hablar de dinero sin rodeos",
         etapa: 4,
         duracion: 12,
+        video: "https://www.youtube.com/watch?v=_VKZYS8FW6c",
         contenido: `## Qué es
 
 Confirmar que el cliente **puede y quiere invertir** — antes de armar propuesta. Hablar de dinero incomoda al vendedor promedio; por eso el que lo hace bien destaca.
@@ -282,6 +382,17 @@ La horquilla provoca una reacción honesta sin comprometerte a un precio.
 ## Cómo lo mide la IA
 
 Busca conversación económica explícita: rango, capacidad, disposición, costo de no resolver. Evadir el tema o descontar por ansiedad baja el puntaje.
+
+## 🎬 Diálogo modelo (la horquilla)
+
+> **Vendedor:** "Juan, ya que dimensionamos el problema — los 80 mil al mes de paros — hablemos de inversión. ¿Tienen un rango presupuestado para resolverlo?"
+> **Cliente:** "Pues… no exactamente, apenas lo estamos viendo."
+> **Vendedor:** "Le doy contexto entonces: para una operación como la suya, esto suele andar entre 20 y 35 mil mensuales por unidad, todo incluido — seguro, mantenimiento y reemplazo. ¿Ese rango está dentro de lo que imaginaban, o estamos en otra película?"
+> **Cliente:** "No, sí anda por ahí… pensábamos algo como 25."
+> **Vendedor:** "Perfecto, con eso trabajo. Y para ponerlo en perspectiva: contra los 80 mil que se les van en paros, ¿cómo lo ven?"
+> **Cliente:** "Visto así, se paga solo."
+
+**Nota cómo:** la horquilla sacó el número real del cliente sin comprometerse a un precio, y el cierre contra el dolor hizo el resto. Cero descuentos.
 
 ## Ponlo en práctica hoy
 
@@ -317,6 +428,18 @@ Presentarle la propuesta **solo a tu contacto** y dejar que él la "venda adentr
 ## Cómo lo mide la IA
 
 Busca que identifiques decisores, proceso, criterios, tiempos y competencia. "Mi jefe no está convencido" apareciendo en la llamada 3 = etapa 5 fallada en la llamada 1.
+
+## 🎬 Diálogo modelo (mapear sin interrogar)
+
+> **Vendedor:** "Juan, para armarle una propuesta que sí camine adentro: además de usted, ¿quién más participa en esta decisión?"
+> **Cliente:** "La ve finanzas y al final firma el director."
+> **Vendedor:** "¿Y qué le pesa más a finanzas: el monto mensual, el plazo del contrato…?"
+> **Cliente:** "El flujo. No quieren compromisos largos este año."
+> **Vendedor:** "Buen dato — entonces propongo esquema a 6 meses renovable. Para que finanzas no la rebote por algo que yo pueda resolver de primera mano: ¿me incluye al licenciado en la reunión del jueves?"
+> **Cliente:** "Sí, se lo comento."
+> **Vendedor:** "¿Le parece si mejor le mando yo la invitación con usted en copia? Así no le cargo la tarea."
+
+**Nota cómo:** mapeó decisores, criterio real (flujo, no precio) y se ganó el lugar en la mesa — sin dejar que el contacto "venda adentro" solo.
 
 ## Ponlo en práctica hoy
 
@@ -354,6 +477,19 @@ Ambas respuestas son victoria: un sí, o un no que te libera para el siguiente p
 
 Busca presentación ligada al dolor, compromiso explícito solicitado y siguiente paso con fecha. Es la diferencia entre "quedamos así" y "quedó en verlo".
 
+## 🎬 Diálogo modelo (el termómetro + pedir la decisión)
+
+> **Vendedor:** "Recapitulando: el problema son los paros de cuadrilla, ~80 mil al mes. La propuesta es 3 doble cabina con reemplazo en 24 horas — ese es el punto clave, lo demás es estándar. Del 1 al 10, ¿qué tan resuelto ven su problema con esto?"
+> **Cliente:** "Un 8."
+> **Vendedor:** "¿Qué le falta para ser 10?"
+> **Cliente:** "Saber qué pasa si la obra se extiende dos meses."
+> **Vendedor:** "Buena pregunta: el contrato se extiende mes a mes con el mismo precio, sin penalización. ¿Con eso, dónde queda el número?"
+> **Cliente:** "Ahí sí, un 10."
+> **Vendedor:** "Entonces se lo pido directo, como acordamos al inicio: ¿avanzamos a contrato para tener las unidades el día 15, o lo descartamos?"
+> **Cliente:** "Avanzamos."
+
+**Nota cómo:** presentó SOLO lo que resuelve el dolor, tomó la temperatura, resolvió el faltante y pidió la decisión con las dos salidas. Sin presión y sin rodeos.
+
 ## Ponlo en práctica hoy
 
 - [ ] En tu próxima presentación, elimina todo slide/párrafo que no responda a un dolor que el cliente te dijo.
@@ -388,10 +524,90 @@ El post-venta es el mejor momento para sembrar upsell (el sistema ya detecta est
 
 Es la etapa que casi nunca aparece en las llamadas del equipo (promedio actual: 40). Mencionar expectativas, remordimiento o competencia después del acuerdo ya te pone arriba del promedio.
 
+## 🎬 Diálogo modelo (los 3 movimientos después del sí)
+
+> **Vendedor:** "Antes de colgar, recapitulemos para que no haya sorpresas: 3 doble cabina, entrega el 15, reemplazo en 24 horas, factura los días 1°. ¿Algo no cuadra?"
+> **Cliente:** "Todo bien."
+> **Vendedor:** "Una cosa más, Juan. Es normal que esta semana alguien adentro pregunte '¿y por qué no mejor compramos?'. Cuando pase, mándemelo directo — tengo el comparativo de capital listo para esa conversación."
+> **Cliente:** "Ja, seguro pasa. Va."
+> **Vendedor:** "Y su proveedor anterior probablemente les llame con una contraoferta. Si eso pasa, ¿me da chance de platicarlo antes de que decidan?"
+> **Cliente:** "Me parece justo."
+> **Vendedor:** "Última: cuando arranque la obra 2, ¿cómo ven cubrir esa flota? Lo dejo anotado para adelantarnos."
+
+**Nota cómo:** expectativas ✓, vacuna contra el remordimiento ✓, competidor anticipado ✓ — y de regalo, la semilla del upsell que el sistema ya detecta en tus llamadas.
+
 ## Ponlo en práctica hoy
 
 - [ ] Agrega los 3 movimientos a tu checklist de cierre.
 - [ ] En tu próximo cierre, haz al menos la recapitulación de expectativas.`
+      }
+    ],
+    quiz: [
+      {
+        pregunta: "Un cliente dice 'necesito 3 pickups para julio'. En Sandler, ¿qué es eso?",
+        opciones: [
+          "El dolor real: hay que cotizar 3 pickups de inmediato",
+          "Un síntoma: falta descubrir el problema de negocio detrás",
+          "Una objeción de precio disfrazada",
+          "Una señal de compra para cerrar ya"
+        ],
+        correcta: 1,
+        explicacion: "Es el nivel 1 (síntoma). El dolor real está en el nivel 2-3: obra que arranca, cuadrilla parada, capital inmovilizado. Sin llegar ahí, compites solo por precio."
+      },
+      {
+        pregunta: "¿Cuál es la fórmula del Contrato Previo (Up-Front Contract)?",
+        opciones: [
+          "Enviar la cotización antes de la reunión",
+          "Firmar un contrato de exclusividad al inicio",
+          "Acordar tiempo + objetivo + qué hará cada quien + derecho a decir no",
+          "Prometer el mejor precio del mercado"
+        ],
+        correcta: 2,
+        explicacion: "El Contrato Previo alinea la llamada al inicio y elimina el 'le marco luego': la reunión termina con una decisión de avanzar o no."
+      },
+      {
+        pregunta: "¿Cómo se CUANTIFICA el dolor en una llamada de flotillas?",
+        opciones: [
+          "Preguntando '¿cuánto les cuesta un día de cuadrilla parada?'",
+          "Presentando el catálogo completo de unidades",
+          "Ofreciendo un descuento por volumen",
+          "Mencionando que somos líderes del mercado"
+        ],
+        correcta: 0,
+        explicacion: "Cuantificar en pesos convierte tu renta de $25k/mes en la solución a $80k/mes de pérdidas — dejas de competir contra la cotización del rival."
+      },
+      {
+        pregunta: "En la etapa de Presupuesto, ante 'se ve caro', el vendedor Sandler:",
+        opciones: [
+          "Ofrece un descuento inmediato",
+          "Pregunta contra qué lo comparan y recuerda el costo de no resolver",
+          "Sube el precio para dar margen a negociar",
+          "Cambia de tema hacia las características del producto"
+        ],
+        correcta: 1,
+        explicacion: "Descontar por ansiedad confirma que tu precio estaba inflado. Aislar la objeción y comparar contra el dolor mantiene el valor."
+      },
+      {
+        pregunta: "El error más común en la etapa de Decisión es:",
+        opciones: [
+          "Preguntar demasiado sobre el proceso de compra",
+          "Presentar solo a tu contacto y dejar que él 'venda adentro'",
+          "Insistir en conocer a todos los decisores",
+          "Preguntar por la competencia"
+        ],
+        correcta: 1,
+        explicacion: "Tu contacto no sabe vender tu propuesta y pierde contra el de compras que solo compara números. Consigue estar frente a finanzas/dirección."
+      },
+      {
+        pregunta: "¿Por qué la Post-Venta (5 pts) importa aunque valga poco?",
+        opciones: [
+          "Porque sube mucho el puntaje total",
+          "Porque blinda la venta contra el remordimiento del comprador y el competidor desplazado",
+          "Porque es obligatoria en el contrato",
+          "Porque reemplaza al cierre"
+        ],
+        correcta: 1,
+        explicacion: "Firmó, y esa noche duda; su proveedor anterior le llamará. Confirmar expectativas y anticipar la contraoferta evita que la venta se caiga en la semana."
       }
     ]
   },
@@ -500,6 +716,7 @@ Nadie quiere lo que le sobra a todos; todos quieren lo que se puede ir. El rever
         titulo: "La objeción de precio sin descuentos",
         etapa: 4,
         duracion: 12,
+        video: "https://www.youtube.com/watch?v=0MjHSw5P6D0",
         contenido: `## "Está caro" casi nunca significa caro
 
 Significa: "no veo suficiente valor **todavía**", "tengo una cotización más baja", o "me entrenaron para decir esto". El descuento inmediato confirma que tu precio era inflado y educa al cliente a regatear siempre.
@@ -529,6 +746,58 @@ La objeción más frecuente del equipo (según Coaching) es **comparación de pr
 - [ ] Escribe tu versión de los pasos 1-3 con tus palabras.
 - [ ] Próxima objeción de precio: prohibido ofrecer descuento en esa llamada. Usa la secuencia y anota qué pasó.`
       }
+    ],
+    quiz: [
+      {
+        pregunta: "En el embudo del dolor, ¿cuál es el paso que da los puntos clave?",
+        opciones: [
+          "Preguntar el nombre de la empresa",
+          "Cuantificar el costo del problema en pesos",
+          "Presentar la propuesta",
+          "Pedir referencias de otros clientes"
+        ],
+        correcta: 1,
+        explicacion: "'¿Cuánto les costó eso el mes pasado?' transforma un síntoma vago en un dolor de $60k/mes — ahí está la venta."
+      },
+      {
+        pregunta: "¿Qué es el 'reversing'?",
+        opciones: [
+          "Devolver el producto si no funciona",
+          "Responder cada pregunta del cliente con otra pregunta (con ablandador)",
+          "Bajar el precio poco a poco",
+          "Repetir lo que dice el cliente"
+        ],
+        correcta: 1,
+        explicacion: "Cada pregunta esconde una preocupación. Reversar con un ablandador ('buena pregunta, ¿qué…?') descubre qué hay detrás y mantiene la dirección."
+      },
+      {
+        pregunta: "¿Cuántos reversings seguidos son el máximo recomendado?",
+        opciones: ["1", "2-3", "5-6", "Los que hagan falta"],
+        correcta: 1,
+        explicacion: "Más de 2-3 se siente evasivo. Después de descubrir el contexto, responde con franqueza."
+      },
+      {
+        pregunta: "El 'reverso negativo' consiste en:",
+        opciones: [
+          "Presionar más fuerte cuando el cliente duda",
+          "Soltar la cuerda y moverte en dirección opuesta para que el cliente te persiga",
+          "Ofrecer un descuento agresivo",
+          "Amenazar con retirar la oferta"
+        ],
+        correcta: 1,
+        explicacion: "'Suena a que esto no es prioridad ahora, ¿lo cerramos?' — si hay interés real, el cliente lo defiende y sale la objeción escondida."
+      },
+      {
+        pregunta: "Ante 'está caro', ¿qué se mueve si hay que ceder algo?",
+        opciones: [
+          "El precio, de inmediato",
+          "El alcance del paquete, no el precio a secas",
+          "La fecha de entrega",
+          "Nada, se termina la negociación"
+        ],
+        correcta: 1,
+        explicacion: "Un precio que baja sin quitar nada nunca fue serio. 'Sin unidad de reemplazo baja a X, ¿les funciona ese riesgo?' mantiene el valor."
+      }
     ]
   }
 ];
@@ -543,9 +812,9 @@ export async function seedTraining(): Promise<void> {
   let totalLecciones = 0;
   for (const curso of CURSOS) {
     const res = await db.queryOne<{ id: number }>(
-      `INSERT INTO courses (titulo, descripcion, etapa_sandler, orden, publicado, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 1, ?, ?) RETURNING id`,
-      [curso.titulo, curso.descripcion, curso.etapa, cOrden++, now, now]
+      `INSERT INTO courses (titulo, descripcion, etapa_sandler, orden, publicado, quiz, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?) RETURNING id`,
+      [curso.titulo, curso.descripcion, curso.etapa, cOrden++, curso.quiz ? JSON.stringify(curso.quiz) : null, now, now]
     );
     const courseId = res?.id;
     if (!courseId) continue;

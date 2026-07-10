@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult } from "../types";
 
 const BASE = "/api";
 
@@ -189,6 +189,9 @@ export const api = {
     request<{ ok: boolean }>(`/training/lessons/${id}/complete`, { method: "POST", body: JSON.stringify({ vendedor }) }),
   getTrainingRecs: (vendedor?: string) =>
     request<TrainingRecs>(`/training/recomendaciones${vendedor ? `?vendedor=${encodeURIComponent(vendedor)}` : ""}`),
+  getQuiz: (courseId: number) => request<QuizForm>(`/training/courses/${courseId}/quiz`),
+  submitQuiz: (courseId: number, vendedor: string, respuestas: number[]) =>
+    request<QuizResult>(`/training/courses/${courseId}/quiz`, { method: "POST", body: JSON.stringify({ vendedor, respuestas }) }),
   createCourse: (data: { titulo: string; descripcion?: string; etapaSandler?: number | null; publicado?: boolean }) =>
     request<{ ok: boolean; id: number }>(`/training/courses`, { method: "POST", body: JSON.stringify(data) }),
   updateCourse: (id: number, data: Partial<{ titulo: string; descripcion: string; publicado: boolean; orden: number }>) =>

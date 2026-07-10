@@ -101,6 +101,7 @@ CREATE TABLE IF NOT EXISTS courses (
   etapa_sandler INTEGER,
   orden       INTEGER NOT NULL DEFAULT 0,
   publicado   INTEGER NOT NULL DEFAULT 0,
+  quiz        TEXT,
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL
 );
@@ -125,6 +126,19 @@ CREATE TABLE IF NOT EXISTS lesson_progress (
   vendedor     TEXT NOT NULL,
   completed_at TEXT NOT NULL,
   UNIQUE (lesson_id, vendedor)
+);
+
+-- Resultado del quiz de cada módulo (curso) por vendedor. Se conserva el MEJOR
+-- intento. aprobado = score/total >= 0.8.
+CREATE TABLE IF NOT EXISTS quiz_results (
+  id           ${autoId},
+  course_id    INTEGER NOT NULL,
+  vendedor     TEXT NOT NULL,
+  score        INTEGER NOT NULL,
+  total        INTEGER NOT NULL,
+  aprobado     INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT NOT NULL,
+  UNIQUE (course_id, vendedor)
 );
 
 -- Registro de escrituras a Monday para IDEMPOTENCIA: guarda la firma de cada

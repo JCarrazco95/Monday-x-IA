@@ -27,6 +27,23 @@ export async function initDb(): Promise<void> {
     driver = createSqliteDriver(process.env.DATABASE_PATH);
   }
   await driver.init();
+  await softMigrations();
+}
+
+/**
+ * Migraciones suaves: columnas añadidas a tablas EXISTENTES (el DDL con
+ * CREATE IF NOT EXISTS no las agrega). Cada ALTER falla en silencio si la
+ * columna ya existe — idempotente en SQLite y Postgres.
+ */
+async function softMigrations(): Promise<void> {
+  const alters = [
+    "ALTER TABLE courses ADD COLUMN quiz TEXT" // fase 2 del entrenamiento
+  ];
+  for (const sql of alters) {
+    try {
+      await ready().run(sql);
+    } catch { /* la columna ya existe */ }
+  }
 }
 
 function ready(): Driver {

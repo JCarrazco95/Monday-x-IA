@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
+import { seedTraining } from "../db/trainingSeed.js";
 import { safeParseJson } from "../lib/references.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
@@ -32,8 +33,14 @@ const ETAPAS_SANDLER: Record<number, string> = {
 
 interface CourseRow {
   id: number; titulo: string; descripcion: string | null; etapa_sandler: number | null;
-  orden: number; publicado: number;
+  orden: number; publicado: number; quiz: string | null;
 }
+
+interface QuizQuestion {
+  pregunta: string; opciones: string[]; correcta: number; explicacion: string;
+}
+
+const APROBACION = 0.8; // 80% para aprobar el quiz del módulo
 interface LessonRow {
   id: number; course_id: number; titulo: string; contenido: string; video_url: string | null;
   etapa_sandler: number | null; duracion_min: number | null; orden: number;
@@ -86,7 +93,7 @@ trainingRouter.get("/courses", async (req, res) => {
     const vendedor = (req.query.vendedor as string | undefined)?.trim() || null;
     const todos = req.query.todos === "true"; // editor admin: incluye no publicados
     const cursos = await db.query<CourseRow>(
-      `SELECT id, titulo, descripcion, etapa_sandler, orden, publicado
+      `SELECT id, titulo, descripcion, etapa_sandler, orden, publicado, quiz
          FROM courses ${todos ? "" : "WHERE publicado = 1"}
         ORDER BY orden ASC, id ASC`
     );
@@ -95,6 +102,15 @@ trainingRouter.get("/courses", async (req, res) => {
          FROM lessons ORDER BY orden ASC, id ASC`
     );
     const done = await completadasDe(vendedor);
+    // Quizzes ya aprobados por el vendedor (para mostrar la insignia 📚).
+    const quizAprobado = new Map<number, { score: number; total: number; aprobado: boolean }>();
+    if (vendedor) {
+      const qr = await db.query<{ course_id: number; score: number; total: number; aprobado: number }>(
+        `SELECT course_id, score, total, aprobado FROM quiz_results WHERE vendedor = ?`,
+        [vendedor]
+      );
+      for (const r of qr) quizAprobado.set(r.course_id, { score: r.score, total: r.total, aprobado: Boolean(r.aprobado) });
+    }
 
     const out = cursos.map((c) => {
       const ls = lecciones
@@ -110,6 +126,8 @@ trainingRouter.get("/courses", async (req, res) => {
           completada: done.has(l.id)
         }));
       const completadas = ls.filter((l) => l.completada).length;
+      const quiz = safeParseJson<QuizQuestion[]>(c.quiz) ?? [];
+      const qr = quizAprobado.get(c.id);
       return {
         id: c.id,
         titulo: c.titulo,
@@ -119,7 +137,12 @@ trainingRouter.get("/courses", async (req, res) => {
         lecciones: ls,
         progreso: ls.length ? Math.round((completadas / ls.length) * 100) : 0,
         completadas,
-        total: ls.length
+        total: ls.length,
+        // Quiz: número de preguntas (nunca las respuestas) + resultado del vendedor.
+        quizPreguntas: quiz.length,
+        // El quiz se habilita cuando el vendedor completó todas las lecciones.
+        quizDisponible: quiz.length > 0 && completadas === ls.length && ls.length > 0,
+        quizResultado: qr ? { score: qr.score, total: qr.total, aprobado: qr.aprobado } : null
       };
     });
     res.json({ vendedor, cursos: out });
@@ -168,6 +191,71 @@ trainingRouter.post("/lessons/:id/complete", async (req, res) => {
       [lesson.id, vendedor, new Date().toISOString()]
     );
     res.json({ ok: true, lessonId: lesson.id, vendedor });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// GET /api/training/courses/:id/quiz → preguntas del quiz SIN la respuesta correcta.
+trainingRouter.get("/courses/:id/quiz", async (req, res) => {
+  try {
+    const row = await db.queryOne<{ titulo: string; quiz: string | null }>(
+      `SELECT titulo, quiz FROM courses WHERE id = ?`,
+      [Number(req.params.id)]
+    );
+    if (!row) return res.status(404).json({ error: "Curso no encontrado" });
+    const quiz = safeParseJson<QuizQuestion[]>(row.quiz) ?? [];
+    if (!quiz.length) return res.status(404).json({ error: "Este curso no tiene quiz." });
+    res.json({
+      cursoTitulo: row.titulo,
+      aprobacion: Math.round(APROBACION * 100),
+      // Se omite `correcta` y `explicacion` para no filtrar respuestas al cliente.
+      preguntas: quiz.map((q, i) => ({ id: i, pregunta: q.pregunta, opciones: q.opciones }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/training/courses/:id/quiz { vendedor, respuestas: number[] }
+//   Califica en el servidor y guarda el MEJOR intento. Devuelve el detalle
+//   (correcta + explicación) para que el vendedor aprenda de sus errores.
+trainingRouter.post("/courses/:id/quiz", async (req, res) => {
+  const { vendedor, respuestas } = (req.body ?? {}) as { vendedor?: string; respuestas?: number[] };
+  const v = (vendedor ?? "").trim();
+  if (!v) return res.status(400).json({ error: "Falta 'vendedor'." });
+  if (!Array.isArray(respuestas)) return res.status(400).json({ error: "Falta 'respuestas' (arreglo)." });
+  try {
+    const row = await db.queryOne<{ quiz: string | null }>(`SELECT quiz FROM courses WHERE id = ?`, [Number(req.params.id)]);
+    const quiz = safeParseJson<QuizQuestion[]>(row?.quiz ?? null) ?? [];
+    if (!quiz.length) return res.status(404).json({ error: "Este curso no tiene quiz." });
+
+    let score = 0;
+    const detalle = quiz.map((q, i) => {
+      const elegida = respuestas[i];
+      const acierto = elegida === q.correcta;
+      if (acierto) score++;
+      return { id: i, correcta: q.correcta, elegida, acierto, explicacion: q.explicacion };
+    });
+    const total = quiz.length;
+    const aprobado = score / total >= APROBACION;
+
+    // Guarda solo si mejora el intento previo (o si no había).
+    const prev = await db.queryOne<{ score: number }>(
+      `SELECT score FROM quiz_results WHERE course_id = ? AND vendedor = ?`,
+      [Number(req.params.id), v]
+    );
+    if (!prev || score > prev.score) {
+      await db.run(
+        `INSERT INTO quiz_results (course_id, vendedor, score, total, aprobado, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(course_id, vendedor) DO UPDATE SET
+           score = excluded.score, total = excluded.total,
+           aprobado = excluded.aprobado, completed_at = excluded.completed_at`,
+        [Number(req.params.id), v, score, total, aprobado ? 1 : 0, new Date().toISOString()]
+      );
+    }
+    res.json({ score, total, aprobado, porcentaje: Math.round((score / total) * 100), detalle });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
@@ -312,6 +400,66 @@ trainingRouter.patch("/lessons/:id", async (req, res) => {
       ]
     );
     res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/training/reseed { confirm: true }
+//   Reemplaza TODO el contenido por la versión más reciente del seed (código),
+//   CONSERVANDO el progreso y los quizzes aprobados de los vendedores (se
+//   re-vinculan por título de lección / de curso). Ojo: las ediciones manuales
+//   de los admins sobre los cursos sembrados se pierden — es para actualizar
+//   el contenido base cuando sale una versión nueva.
+trainingRouter.post("/reseed", async (req, res) => {
+  const { confirm } = (req.body ?? {}) as { confirm?: boolean };
+  if (confirm !== true) {
+    return res.status(400).json({ error: 'Confirmación requerida: envía {"confirm": true}. Reemplaza el contenido conservando el progreso.' });
+  }
+  try {
+    // 1) Progreso actual, re-vinculable por título.
+    const progreso = await db.query<{ titulo: string; vendedor: string; completed_at: string }>(
+      `SELECT l.titulo, p.vendedor, p.completed_at
+         FROM lesson_progress p JOIN lessons l ON l.id = p.lesson_id`
+    );
+    const quizzes = await db.query<{ titulo: string; vendedor: string; score: number; total: number; aprobado: number; completed_at: string }>(
+      `SELECT c.titulo, q.vendedor, q.score, q.total, q.aprobado, q.completed_at
+         FROM quiz_results q JOIN courses c ON c.id = q.course_id`
+    );
+
+    // 2) Borrar y re-sembrar la versión nueva.
+    await db.run(`DELETE FROM lesson_progress`);
+    await db.run(`DELETE FROM quiz_results`);
+    await db.run(`DELETE FROM lessons`);
+    await db.run(`DELETE FROM courses`);
+    await seedTraining();
+
+    // 3) Restaurar progreso por título (lo que ya no exista, se omite).
+    let lecRestauradas = 0;
+    for (const p of progreso) {
+      const row = await db.queryOne<{ id: number }>(`SELECT id FROM lessons WHERE titulo = ?`, [p.titulo]);
+      if (!row) continue;
+      await db.run(
+        `INSERT INTO lesson_progress (lesson_id, vendedor, completed_at) VALUES (?, ?, ?)
+         ON CONFLICT(lesson_id, vendedor) DO NOTHING`,
+        [row.id, p.vendedor, p.completed_at]
+      );
+      lecRestauradas++;
+    }
+    let quizRestaurados = 0;
+    for (const q of quizzes) {
+      const row = await db.queryOne<{ id: number }>(`SELECT id FROM courses WHERE titulo = ?`, [q.titulo]);
+      if (!row) continue;
+      await db.run(
+        `INSERT INTO quiz_results (course_id, vendedor, score, total, aprobado, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(course_id, vendedor) DO NOTHING`,
+        [row.id, q.vendedor, q.score, q.total, q.aprobado, q.completed_at]
+      );
+      quizRestaurados++;
+    }
+
+    res.json({ ok: true, progresoRestaurado: lecRestauradas, quizzesRestaurados: quizRestaurados });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

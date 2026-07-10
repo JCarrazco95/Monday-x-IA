@@ -2,11 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { marked } from "marked";
 import {
   BookOpen, PlayCircle, CheckCircle2, Circle, Target, ChevronLeft, Clock,
-  Plus, Pencil, Trash2, Eye, EyeOff, GraduationCap, Save, X
+  Plus, Pencil, Trash2, Eye, EyeOff, GraduationCap, Save, X, Award, XCircle, RotateCcw
 } from "lucide-react";
 import { api } from "../lib/api";
 import { useRole } from "../lib/useRole";
-import type { TrainingCourse, TrainingLesson, TrainingRecs } from "../types";
+import type { TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult } from "../types";
 
 // ===========================================================================
 //  Entrenamiento — LMS Sandler.
@@ -62,6 +62,7 @@ export function Training() {
   const [recs, setRecs] = useState<TrainingRecs | null>(null);
   const [vendedores, setVendedores] = useState<string[]>([]);
   const [leccion, setLeccion] = useState<TrainingLesson | null>(null);
+  const [quiz, setQuiz] = useState<{ courseId: number; form: QuizForm } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [gestionar, setGestionar] = useState(false);
@@ -108,8 +109,30 @@ export function Training() {
     load();
   };
 
+  const abrirQuiz = async (courseId: number) => {
+    try {
+      const form = await api.getQuiz(courseId);
+      setQuiz({ courseId, form });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
   const totalLecciones = useMemo(() => cursos.reduce((s, c) => s + c.total, 0), [cursos]);
   const totalCompletadas = useMemo(() => cursos.reduce((s, c) => s + c.completadas, 0), [cursos]);
+
+  // ── Quiz del módulo ──────────────────────────────────────────────────────────
+  if (quiz) {
+    return (
+      <QuizView
+        courseId={quiz.courseId}
+        form={quiz.form}
+        vendedor={vendedor}
+        onClose={() => { setQuiz(null); load(); }}
+      />
+    );
+  }
 
   // ── Visor de lección ────────────────────────────────────────────────────────
   if (leccion) {
@@ -276,6 +299,30 @@ export function Training() {
                         </li>
                       ))}
                     </ul>
+
+                    {/* Quiz del módulo (fase 2): se habilita al completar todas las lecciones. */}
+                    {c.quizPreguntas > 0 && (
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-bg/50 px-4 py-3">
+                        <div className="flex items-center gap-2 text-sm">
+                          <Award size={16} className={c.quizResultado?.aprobado ? "text-success" : "text-accent"} />
+                          <span className="font-medium text-text">Quiz del módulo</span>
+                          <span className="text-text-muted">· {c.quizPreguntas} preguntas</span>
+                          {c.quizResultado && (
+                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${c.quizResultado.aprobado ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
+                              {c.quizResultado.aprobado ? "📚 Aprobado" : "Reprobado"} {c.quizResultado.score}/{c.quizResultado.total}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => abrirQuiz(c.id)}
+                          disabled={!c.quizDisponible && !c.quizResultado}
+                          title={!c.quizDisponible && !c.quizResultado ? "Completa todas las lecciones para desbloquear el quiz" : ""}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          {c.quizResultado ? <><RotateCcw size={13} /> Reintentar</> : <><Award size={13} /> Presentar quiz</>}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {cursos.length === 0 && (
@@ -434,6 +481,125 @@ function AdminCursos({ cursos, onChanged }: { cursos: TrainingCourse[]; onChange
           </ul>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ── Quiz del módulo: presentar, calificar en servidor y revisar respuestas ────
+
+function QuizView({ courseId, form, vendedor, onClose }: { courseId: number; form: QuizForm; vendedor: string; onClose: () => void }) {
+  const [respuestas, setRespuestas] = useState<Record<number, number>>({});
+  const [resultado, setResultado] = useState<QuizResult | null>(null);
+  const [enviando, setEnviando] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const todas = form.preguntas.length;
+  const contestadas = Object.keys(respuestas).length;
+
+  const enviar = async () => {
+    if (!vendedor) { setErr("Elige tu nombre para registrar tu resultado."); return; }
+    setEnviando(true);
+    setErr(null);
+    try {
+      const arr = form.preguntas.map((p) => respuestas[p.id] ?? -1);
+      setResultado(await api.submitQuiz(courseId, vendedor, arr));
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  // Vista de resultados: puntaje + revisión pregunta por pregunta.
+  if (resultado) {
+    const detalle = new Map(resultado.detalle.map((d) => [d.id, d]));
+    return (
+      <div className="mx-auto max-w-3xl">
+        <button onClick={onClose} className="mb-4 flex items-center gap-1.5 text-sm text-text-muted hover:text-text">
+          <ChevronLeft size={15} /> Volver al entrenamiento
+        </button>
+        <div className={`mb-5 rounded-2xl border p-6 text-center ${resultado.aprobado ? "border-success/30 bg-success/[0.06]" : "border-warning/30 bg-warning/[0.06]"}`}>
+          {resultado.aprobado
+            ? <Award size={40} className="mx-auto text-success" />
+            : <RotateCcw size={40} className="mx-auto text-warning" />}
+          <h1 className="mt-2 text-2xl font-bold text-text">{resultado.porcentaje}%</h1>
+          <p className="text-sm text-text-muted">{resultado.score} de {resultado.total} correctas · se aprueba con {form.aprobacion}%</p>
+          <p className={`mt-1 text-sm font-semibold ${resultado.aprobado ? "text-success" : "text-warning"}`}>
+            {resultado.aprobado ? "📚 ¡Módulo aprobado! Ya tienes tu insignia." : "Casi — repasa las lecciones y reinténtalo."}
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          {form.preguntas.map((p, i) => {
+            const d = detalle.get(p.id);
+            return (
+              <div key={p.id} className="rounded-xl border border-border bg-surface p-4">
+                <div className="flex items-start gap-2">
+                  {d?.acierto ? <CheckCircle2 size={18} className="mt-0.5 shrink-0 text-success" /> : <XCircle size={18} className="mt-0.5 shrink-0 text-danger" />}
+                  <p className="text-sm font-medium text-text">{i + 1}. {p.pregunta}</p>
+                </div>
+                <ul className="mt-2 space-y-1 pl-7 text-sm">
+                  {p.opciones.map((op, oi) => {
+                    const esCorrecta = oi === d?.correcta;
+                    const esElegida = oi === d?.elegida;
+                    return (
+                      <li key={oi} className={`rounded px-2 py-1 ${esCorrecta ? "bg-success/10 font-medium text-success" : esElegida ? "bg-danger/10 text-danger line-through" : "text-text-muted"}`}>
+                        {esCorrecta ? "✓ " : esElegida ? "✗ " : ""}{op}
+                      </li>
+                    );
+                  })}
+                </ul>
+                {d?.explicacion && <p className="mt-2 pl-7 text-xs italic text-text-muted">💡 {d.explicacion}</p>}
+              </div>
+            );
+          })}
+        </div>
+        <div className="mt-5 flex justify-center gap-2">
+          <button onClick={() => { setResultado(null); setRespuestas({}); }} className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm text-text-muted hover:text-text">
+            <RotateCcw size={14} /> Reintentar
+          </button>
+          <button onClick={onClose} className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white">Terminar</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Formulario del quiz.
+  return (
+    <div className="mx-auto max-w-3xl">
+      <button onClick={onClose} className="mb-4 flex items-center gap-1.5 text-sm text-text-muted hover:text-text">
+        <ChevronLeft size={15} /> Volver al entrenamiento
+      </button>
+      <div className="mb-4 rounded-2xl border border-accent/25 bg-surface p-5">
+        <h1 className="flex items-center gap-2 text-lg font-bold text-text"><Award className="text-accent" /> Quiz — {form.cursoTitulo}</h1>
+        <p className="mt-1 text-sm text-text-muted">{todas} preguntas · se aprueba con {form.aprobacion}%. Elige una opción por pregunta.</p>
+      </div>
+
+      <div className="space-y-3">
+        {form.preguntas.map((p, i) => (
+          <div key={p.id} className="rounded-xl border border-border bg-surface p-4">
+            <p className="text-sm font-medium text-text">{i + 1}. {p.pregunta}</p>
+            <div className="mt-3 space-y-2">
+              {p.opciones.map((op, oi) => (
+                <label key={oi} className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${respuestas[p.id] === oi ? "border-accent bg-accent/5 text-text" : "border-border text-text-muted hover:border-accent/50"}`}>
+                  <input type="radio" name={`q${p.id}`} checked={respuestas[p.id] === oi} onChange={() => setRespuestas({ ...respuestas, [p.id]: oi })} className="accent-accent" />
+                  {op}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {err && <div className="mt-4 rounded-lg border border-danger/20 bg-danger/10 px-4 py-2 text-sm text-danger">{err}</div>}
+      <div className="mt-5 flex items-center justify-between">
+        <span className="text-xs text-text-muted">{contestadas} de {todas} contestadas</span>
+        <button onClick={enviar} disabled={enviando || contestadas < todas}
+          className="inline-flex items-center gap-2 rounded-xl bg-success px-5 py-2.5 text-sm font-medium text-white disabled:opacity-50">
+          <CheckCircle2 size={16} /> {enviando ? "Calificando…" : "Enviar respuestas"}
+        </button>
+      </div>
     </div>
   );
 }

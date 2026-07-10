@@ -515,6 +515,16 @@ export interface TrainingCourse {
   progreso: number;
   completadas: number;
   total: number;
+  quizPreguntas: number;
+  quizDisponible: boolean;
+  quizResultado: { score: number; total: number; aprobado: boolean } | null;
+}
+
+export interface QuizQuestionPublic { id: number; pregunta: string; opciones: string[]; }
+export interface QuizForm { cursoTitulo: string; aprobacion: number; preguntas: QuizQuestionPublic[]; }
+export interface QuizResult {
+  score: number; total: number; aprobado: boolean; porcentaje: number;
+  detalle: { id: number; correcta: number; elegida: number; acierto: boolean; explicacion: string }[];
 }
 export interface TrainingLesson {
   id: number;
