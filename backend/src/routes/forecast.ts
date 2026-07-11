@@ -86,11 +86,14 @@ async function buildForecastFromMonday(now: Date) {
     const valorEstimado = d.valor ?? 0;
     const valorPonderado = Math.round((valorEstimado * probabilidad) / 100);
     const mesDate = mesCierreDe(d);
+    // La cotización: primer PDF adjunto al item (si hay).
+    const pdf = d.archivos.find((a) => a.extension === ".pdf" || a.extension === "pdf") ?? null;
     return {
       itemId: d.itemId,
       itemName: d.itemName,
       empresa: d.empresa,
       ejecutivo: d.ejecutivo,
+      grupo: d.grupo || "Sin grupo",
       etapa: d.etapa as string,
       prioridad: null as null,
       probabilidad,
@@ -99,9 +102,15 @@ async function buildForecastFromMonday(now: Date) {
       valorPonderado,
       sinMonto: d.valor == null,
       mesCierreKey: mesDate ? monthKey(mesDate) : "sin-fecha",
-      mesCierre: mesDate ? monthLabel(mesDate) : "Sin fecha"
+      mesCierre: mesDate ? monthLabel(mesDate) : "Sin fecha",
+      mondayUrl: d.mondayUrl,
+      cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
+      archivos: d.archivos.length
     };
   });
+
+  // Grupos reales del board (en el orden en que aparecen), para el filtro.
+  const grupos = [...new Set(abiertos.map((d) => d.grupo || "Sin grupo"))];
 
   const conMonto = oportunidades.filter((o) => !o.sinMonto);
   const valorPipeline = conMonto.reduce((s, o) => s + o.valorEstimado, 0);
@@ -171,12 +180,15 @@ async function buildForecastFromMonday(now: Date) {
   }
   const porEjecutivo = [...ejecMap.values()].sort((a, b) => b.valorPonderado - a.valorPonderado);
 
-  const topOportunidades = [...oportunidades]
-    .sort((a, b) => b.valorPonderado - a.valorPonderado)
-    .slice(0, 12);
+  const ordenadas = [...oportunidades].sort((a, b) => b.valorPonderado - a.valorPonderado);
+  const topOportunidades = ordenadas.slice(0, 12);
 
   return {
     fuente: "monday" as const,
+    grupos,
+    // TODAS las oportunidades abiertas (con grupo, link a Monday y cotización),
+    // para la tabla completa con filtros del Pipeline.
+    oportunidades: ordenadas,
     supuestos: {
       moneda: MONEDA,
       nota:

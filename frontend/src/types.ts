@@ -224,6 +224,14 @@ export interface ForecastOpportunity {
   itemName: string;
   empresa: string | null;
   ejecutivo: string | null;
+  /** Grupo del board de Oportunidades (modo Monday). */
+  grupo?: string;
+  /** Link directo al item en Monday. */
+  mondayUrl?: string | null;
+  /** PDF de la cotización adjunta al item (enlace firmado de Monday). */
+  cotizacion?: { nombre: string; url: string } | null;
+  /** Cantidad de archivos adjuntos al item. */
+  archivos?: number;
   etapa: string;
   prioridad: "caliente" | "tibia" | "fria" | null;
   probabilidad: number;            // 0-100
@@ -238,6 +246,10 @@ export interface ForecastOpportunity {
 export interface ForecastReport {
   /** "monday" = datos reales del board de Oportunidades; "estimado" = heurística demo. */
   fuente: "monday" | "estimado";
+  /** Grupos reales del board (para filtrar), solo en modo Monday. */
+  grupos?: string[];
+  /** TODAS las oportunidades abiertas (la tabla completa), solo en modo Monday. */
+  oportunidades?: ForecastOpportunity[];
   supuestos: {
     ticketBase?: number;
     moneda: string;

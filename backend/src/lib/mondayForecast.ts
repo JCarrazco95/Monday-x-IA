@@ -46,17 +46,52 @@ export interface DealRow {
   fechaCierreEstimada: string | null; // YYYY-MM-DD
   fechaCierreReal: string | null;     // YYYY-MM-DD
   mesCierreLabel: string | null;      // etiqueta del status "Mes de cierre" (p. ej. "JULIO 2026")
+  /** Link directo al item en Monday (para abrirlo desde el panel). */
+  mondayUrl: string | null;
+  /** Archivos del item (cotizaciones): el primero con extensión .pdf primero. */
+  archivos: { nombre: string; url: string; extension: string | null }[];
 }
 
 interface RawCV {
   id: string;
   text: string | null;
 }
+interface RawAsset {
+  name?: string;
+  public_url?: string | null;
+  file_extension?: string | null;
+}
 interface RawItem {
   id: string;
   name: string;
   group?: { title?: string };
   column_values?: RawCV[];
+  assets?: RawAsset[];
+}
+
+// ── Slug de la cuenta (para construir URLs de items) ─────────────────────────
+// https://<slug>.monday.com/boards/<boardId>/pulses/<itemId>
+// Se consulta una vez y se cachea; MONDAY_ACCOUNT_SLUG lo puede fijar por env.
+let accountSlug: string | null | undefined; // undefined = aún no consultado
+
+async function getAccountSlug(): Promise<string | null> {
+  if (accountSlug !== undefined) return accountSlug;
+  const fromEnv = process.env.MONDAY_ACCOUNT_SLUG?.trim();
+  if (fromEnv) {
+    accountSlug = fromEnv;
+    return accountSlug;
+  }
+  try {
+    const data: { account?: { slug?: string } } = await mondayRequest(`query { account { slug } }`);
+    accountSlug = data?.account?.slug ?? null;
+  } catch {
+    accountSlug = null;
+  }
+  return accountSlug;
+}
+
+export function itemUrl(slug: string | null, boardId: string, itemId: string): string | null {
+  return slug ? `https://${slug}.monday.com/boards/${boardId}/pulses/${itemId}` : null;
 }
 
 function parseMonto(text: string | null): number | null {
@@ -91,11 +126,13 @@ export async function getDealsBoard(): Promise<DealRow[]> {
             name
             group { title }
             column_values (ids: $cols) { id text }
+            assets { name public_url file_extension }
           }
         }
       }
     }
   `;
+  const slug = await getAccountSlug();
   const out: DealRow[] = [];
   let cursor: string | null = null;
   do {
@@ -107,6 +144,12 @@ export async function getDealsBoard(): Promise<DealRow[]> {
     cursor = page.cursor;
     for (const it of page.items ?? []) {
       const cv = new Map((it.column_values ?? []).map((c) => [c.id, c.text ?? null]));
+      // Archivos del item (cotizaciones). PDFs primero; public_url es un enlace
+      // firmado de Monday (caduca en ~1h, pero se regenera en cada carga).
+      const archivos = (it.assets ?? [])
+        .filter((a): a is RawAsset & { name: string; public_url: string } => Boolean(a.name && a.public_url))
+        .map((a) => ({ nombre: a.name, url: a.public_url, extension: a.file_extension?.toLowerCase() ?? null }))
+        .sort((a, b) => Number(b.extension === ".pdf" || b.extension === "pdf") - Number(a.extension === ".pdf" || a.extension === "pdf"));
       out.push({
         itemId: it.id,
         itemName: it.name,
@@ -117,7 +160,9 @@ export async function getDealsBoard(): Promise<DealRow[]> {
         valor: parseMonto(cv.get(COL_VALOR) ?? null) ?? parseMonto(cv.get(COL_VALOR_ALT) ?? null),
         fechaCierreEstimada: cv.get(COL_FECHA_CIERRE) || null,
         fechaCierreReal: cv.get(COL_FECHA_CIERRE_REAL) || null,
-        mesCierreLabel: cv.get(COL_MES_CIERRE) || null
+        mesCierreLabel: cv.get(COL_MES_CIERRE) || null,
+        mondayUrl: itemUrl(slug, BOARD_OPORTUNIDADES, it.id),
+        archivos
       });
     }
   } while (cursor);
