@@ -38,21 +38,21 @@ createRoot(document.getElementById('root')!).render(
           <Routes>
             {/* Panel principal con sidebar */}
             <Route element={<Layout />}>
-              <Route index element={<Dashboard />} />
-              {/* Pestañas solo para administradores */}
+              {/* Solo administradores (los vendedores se redirigen a Análisis IA) */}
+              <Route index element={<RequireAdmin><Dashboard /></RequireAdmin>} />
               <Route path="agents" element={<RequireAdmin><Agents /></RequireAdmin>} />
               <Route path="agents/:id" element={<RequireAdmin><AgentDetail /></RequireAdmin>} />
-              {/* Pestañas visibles para vendedores y administradores */}
+              {/* Vendedores y administradores */}
               <Route path="leads" element={<Leads />} />
               <Route path="prospeccion" element={<LeadScraper />} />
-              <Route path="call-intelligence" element={<CallIntelligenceList />} />
-              <Route path="call-intelligence/:id" element={<CallIntelligence />} />
               <Route path="seguimiento" element={<NextBestAction />} />
-              <Route path="pipeline" element={<Pipeline />} />
-              <Route path="asistente" element={<Assistant />} />
-              <Route path="coaching" element={<RequireAdmin><Coaching /></RequireAdmin>} />
               <Route path="entrenamiento" element={<Training />} />
-              {/* Pestañas solo para administradores */}
+              {/* Solo administradores */}
+              <Route path="call-intelligence" element={<RequireAdmin><CallIntelligenceList /></RequireAdmin>} />
+              <Route path="call-intelligence/:id" element={<RequireAdmin><CallIntelligence /></RequireAdmin>} />
+              <Route path="pipeline" element={<RequireAdmin><Pipeline /></RequireAdmin>} />
+              <Route path="asistente" element={<RequireAdmin><Assistant /></RequireAdmin>} />
+              <Route path="coaching" element={<RequireAdmin><Coaching /></RequireAdmin>} />
               <Route path="logs" element={<RequireAdmin><Logs /></RequireAdmin>} />
               <Route path="settings" element={<RequireAdmin><Settings /></RequireAdmin>} />
             </Route>

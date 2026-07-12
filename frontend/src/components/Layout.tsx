@@ -7,15 +7,18 @@ import { useRole } from "../lib/useRole";
 import { Logo } from "./Logo";
 import type { HealthResponse } from "../types";
 
+// Vendedores ven SOLO: Análisis IA, Prospección, Seguimiento y Entrenamiento.
+// El resto es adminOnly. (El rol es del SDK de Monday `is_admin`; override en
+// dev con ?role=admin|sales. Las rutas también están guardadas — ver main.tsx.)
 const navItems: { to: string; label: string; icon: LucideIcon; end?: boolean; adminOnly: boolean }[] = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, adminOnly: false },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true, adminOnly: true },
   { to: "/agents", label: "Agentes", icon: Bot, adminOnly: true },
   { to: "/leads", label: "Análisis IA", icon: Sparkles, adminOnly: false },
   { to: "/prospeccion", label: "Prospección", icon: Radar, adminOnly: false },
-  { to: "/call-intelligence", label: "Call Intelligence", icon: Phone, adminOnly: false },
+  { to: "/call-intelligence", label: "Call Intelligence", icon: Phone, adminOnly: true },
   { to: "/seguimiento", label: "Seguimiento", icon: ListChecks, adminOnly: false },
-  { to: "/pipeline", label: "Pipeline", icon: TrendingUp, adminOnly: false },
-  { to: "/asistente", label: "Asistente", icon: MessageSquare, adminOnly: false },
+  { to: "/pipeline", label: "Pipeline", icon: TrendingUp, adminOnly: true },
+  { to: "/asistente", label: "Asistente", icon: MessageSquare, adminOnly: true },
   { to: "/coaching", label: "Coaching", icon: GraduationCap, adminOnly: true },
   { to: "/entrenamiento", label: "Entrenamiento", icon: BookOpen, adminOnly: false },
   { to: "/logs", label: "Bitácora", icon: ScrollText, adminOnly: true },
