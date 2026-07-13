@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Sparkles, RefreshCw, ExternalLink, FileText, Truck, CheckCircle2 } from "lucide-react";
 import { api } from "../../lib/api";
 import type { LeadsResponse, LeadSummary, LeadAnalysis } from "../../types";
+import { useMondayActivity, PrincipalPanel, ActualizacionesPanel, ArchivosPanel } from "../../components/MondayExtraTabs";
 
 // ===========================================================================
 //  Board View para Monday.com — lista de leads + panel de resumen.
@@ -140,11 +141,12 @@ function ResumenIA({ data }: { data: LeadAnalysis }) {
   );
 }
 
-function DetailPanel({ itemId }: { itemId: string }) {
+function DetailPanel({ itemId, region }: { itemId: string; region: LeadSummary["region"] | null }) {
   const [data, setData] = useState<LeadAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("Análisis IA");
+  const { activity, loading: loadingActivity } = useMondayActivity(itemId);
 
   useEffect(() => {
     setLoading(true);
@@ -185,15 +187,17 @@ function DetailPanel({ itemId }: { itemId: string }) {
         {!loading && !error && data && (
           <>
             {tab === "Principal" && (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <MiniCard label="Contacto" value={data.itemName} />
-                <MiniCard label="Empresa" value={lead?.razonSocial ?? "—"} />
-                <MiniCard label="Email" value={lead?.email ?? "—"} />
-                <MiniCard label="RFC" value={lead?.rfc ?? "—"} />
-              </div>
+              <PrincipalPanel
+                itemName={data.itemName}
+                email={lead?.email}
+                telefono={lead?.telefono}
+                rfc={lead?.rfc}
+                razonSocial={lead?.razonSocial}
+                region={region}
+              />
             )}
-            {tab === "Actualizaciones" && <p className="py-10 text-center text-sm text-text-muted">Las actualizaciones del item aparecerán aquí.</p>}
-            {tab === "Archivos" && <p className="py-10 text-center text-sm text-text-muted">Sin archivos adjuntos.</p>}
+            {tab === "Actualizaciones" && <ActualizacionesPanel activity={activity} loading={loadingActivity} />}
+            {tab === "Archivos" && <ArchivosPanel activity={activity} loading={loadingActivity} />}
             {tab === "Análisis IA" && <ResumenIA data={data} />}
           </>
         )}
@@ -264,7 +268,7 @@ export function MondayBoardView() {
                 {filtered.length === 0 && <p className="py-6 text-center text-sm text-text-muted">Sin resultados.</p>}
               </div>
             </div>
-            {selected ? <DetailPanel itemId={selected} /> : (
+            {selected ? <DetailPanel itemId={selected} region={leads.find((l) => l.itemId === selected)?.region ?? null} /> : (
               <div className="rounded-xl border border-border bg-surface p-16 text-center text-sm text-text-muted">Selecciona un lead para ver su análisis.</div>
             )}
           </div>

@@ -195,7 +195,7 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
     title: result.duplicado ? "Lead duplicado detectado" : "Lead calificado",
     detail: result.resumen + (result.duplicado ? ` · Duplicado de ${result.duplicadoRef}` : ""),
     reference: formatReference(event.item.itemId, event.item.itemName),
-    payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono },
+    payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono, razonSocial: input.razonSocial },
     durationMs: Date.now() - start
   });
 
@@ -204,7 +204,8 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
     await saveLeadAnalysis(input.itemId, input.itemName, result, {
       email: input.email,
       telefono: input.telefono,
-      rfc: input.rfc
+      rfc: input.rfc,
+      razonSocial: input.razonSocial
     });
   } catch (err) {
     console.error("[domain] no se pudo guardar lead_analyses:", err instanceof Error ? err.message : err);

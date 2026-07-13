@@ -104,6 +104,9 @@ export interface LeadAnalysis {
   call: CallAnalysisData | null;
 }
 
+export const REGIONES = ["Noreste", "Norte", "Occidente", "Bajío", "Centro", "Sureste", "Otra"] as const;
+export type Region = (typeof REGIONES)[number];
+
 export interface LeadSummary {
   itemId: string;
   itemName: string;
@@ -115,6 +118,26 @@ export interface LeadSummary {
   vehiculo: string | null;
   estado: string;
   updatedAt: string | null;
+  region: Region;
+}
+
+export interface MondayUpdate {
+  id: string;
+  body: string;
+  createdAt: string | null;
+  autor: string | null;
+}
+
+export interface MondayFile {
+  nombre: string;
+  url: string;
+  extension: string | null;
+}
+
+export interface MondayActivity {
+  enabled: boolean;
+  updates: MondayUpdate[];
+  files: MondayFile[];
 }
 
 export interface LeadsResponse {

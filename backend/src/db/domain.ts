@@ -122,6 +122,7 @@ export interface LeadAnalysisRow {
   email: string | null;
   telefono: string | null;
   rfc: string | null;
+  razon_social: string | null;
   lead_payload: string | null;
   form_payload: string | null;
   analyzed_at: string;
@@ -132,15 +133,15 @@ export async function saveLeadAnalysis(
   itemId: string,
   itemName: string,
   lead: LeadEnrichmentOutput,
-  contacto: { email?: string | null; telefono?: string | null; rfc?: string | null },
+  contacto: { email?: string | null; telefono?: string | null; rfc?: string | null; razonSocial?: string | null },
   analyzedAt?: string
 ): Promise<void> {
   const now = new Date().toISOString();
   await db.run(
     `INSERT INTO lead_analyses
-       (item_id, item_name, score, prioridad, riesgo, duplicado, email, telefono, rfc,
+       (item_id, item_name, score, prioridad, riesgo, duplicado, email, telefono, rfc, razon_social,
         lead_payload, analyzed_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(item_id) DO UPDATE SET
        item_name = excluded.item_name,
        score = excluded.score,
@@ -150,6 +151,7 @@ export async function saveLeadAnalysis(
        email = COALESCE(excluded.email, lead_analyses.email),
        telefono = COALESCE(excluded.telefono, lead_analyses.telefono),
        rfc = COALESCE(excluded.rfc, lead_analyses.rfc),
+       razon_social = COALESCE(excluded.razon_social, lead_analyses.razon_social),
        lead_payload = excluded.lead_payload,
        analyzed_at = excluded.analyzed_at,
        updated_at = excluded.updated_at`,
@@ -163,6 +165,7 @@ export async function saveLeadAnalysis(
       contacto.email ?? null,
       contacto.telefono ?? null,
       contacto.rfc ?? null,
+      contacto.razonSocial ?? null,
       JSON.stringify(lead),
       analyzedAt ?? now,
       now
@@ -226,10 +229,16 @@ export async function backfillLeadAnalyses(): Promise<number> {
   for (const r of rows) {
     const { itemId, itemName } = parseReference(r.reference);
     if (r.agent_id === "lead_enrichment") {
-      // El orquestador loguea { ...analisis, email, rfc, telefono }.
-      const p = safeParseJson<LeadEnrichmentOutput & { email?: string; telefono?: string; rfc?: string }>(r.payload);
+      // El orquestador loguea { ...analisis, email, rfc, telefono, razonSocial }.
+      const p = safeParseJson<LeadEnrichmentOutput & { email?: string; telefono?: string; rfc?: string; razonSocial?: string }>(r.payload);
       if (!p || typeof p.score !== "number") continue;
-      await saveLeadAnalysis(itemId, itemName, p, { email: p.email, telefono: p.telefono, rfc: p.rfc }, r.timestamp);
+      await saveLeadAnalysis(
+        itemId,
+        itemName,
+        p,
+        { email: p.email, telefono: p.telefono, rfc: p.rfc, razonSocial: p.razonSocial },
+        r.timestamp
+      );
       migradas++;
     } else {
       const p = safeParseJson<FormAnalysisOutput>(r.payload);

@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { api } from "../lib/api";
-import type { LeadAnalysis, LeadSummary, LeadsResponse, CompanyResearch, ScoreFactor } from "../types";
+import type { LeadAnalysis, LeadSummary, LeadsResponse, CompanyResearch, ScoreFactor, Region } from "../types";
+import { REGIONES } from "../types";
+import { useMondayActivity, PrincipalPanel, ActualizacionesPanel, ArchivosPanel } from "../components/MondayExtraTabs";
 
 const RIESGO_STYLES: Record<string, string> = {
   bajo: "bg-success/15 text-success",
@@ -26,9 +28,28 @@ export function Leads() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Filtros
+  const [region, setRegion] = useState<Region | "">("");
+  const [minScore, setMinScore] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState(""); // debounced
+
+  // Sync del tablero (red de seguridad si el webhook nativo no está registrado)
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const loadList = useCallback(async () => {
     try {
-      const res = await api.getLeads();
+      const res = await api.getLeads({
+        region: region || null,
+        minScore: minScore ? Number(minScore) : null,
+        search
+      });
       setData(res);
       setError(null);
       setSelected((prev) => prev ?? res.leads[0]?.itemId ?? null);
@@ -37,7 +58,7 @@ export function Leads() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [region, minScore, search]);
 
   useEffect(() => {
     loadList();
@@ -56,10 +77,40 @@ export function Leads() {
       .finally(() => setLoadingDetail(false));
   }, [selected]);
 
+  async function handleSync() {
+    setSyncing(true);
+    setSyncMsg(null);
+    try {
+      await api.syncLeadsBoard();
+      // El sync corre en segundo plano (puede tardar); se consulta el estado hasta que termine.
+      for (;;) {
+        const s = await api.getLeadsSyncStatus();
+        if (!s.running) {
+          if (s.error) setSyncMsg(`Error: ${s.error}`);
+          else if (s.result) {
+            setSyncMsg(
+              s.result.analizados > 0
+                ? `✓ ${s.result.analizados} lead(s) nuevo(s) analizado(s) (${s.result.yaAnalizados} ya estaban al día).`
+                : `Sin leads nuevos — ${s.result.yaAnalizados} ya estaban analizados de ${s.result.leidos} en el tablero.`
+            );
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      await loadList();
+    } catch (err) {
+      setSyncMsg(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <div className="text-text-muted">Cargando análisis IA...</div>;
 
   const leads = data?.leads ?? [];
   const stats = data?.stats;
+  const selectedSummary = leads.find((l) => l.itemId === selected) ?? null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -70,13 +121,29 @@ export function Leads() {
             Vista que verían los vendedores embebida en cada item de Monday
           </p>
         </div>
-        <button
-          onClick={loadList}
-          className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-muted hover:bg-black/[0.04] hover:text-text"
-        >
-          ↻ Actualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            title="Revisa el tablero de Monday y analiza los leads nuevos que no llegaron por webhook"
+            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent/20 disabled:opacity-60"
+          >
+            {syncing ? "Sincronizando…" : "⇅ Sincronizar tablero"}
+          </button>
+          <button
+            onClick={loadList}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm text-text-muted hover:bg-black/[0.04] hover:text-text"
+          >
+            ↻ Actualizar
+          </button>
+        </div>
       </header>
+
+      {syncMsg && (
+        <div className="rounded-lg border border-accent/30 bg-accent/[0.06] px-4 py-2 text-sm text-text">
+          {syncMsg}
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-danger/30 bg-danger/10 px-4 py-2 text-sm text-danger">
@@ -93,10 +160,56 @@ export function Leads() {
         </div>
       )}
 
+      {/* Filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          placeholder="Buscar por nombre o vehículo…"
+          className="h-9 min-w-[220px] rounded-lg border border-border bg-surface px-3 text-sm placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+        <select
+          value={region}
+          onChange={(e) => setRegion(e.target.value as Region | "")}
+          className="h-9 rounded-lg border border-border bg-surface px-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        >
+          <option value="">Todas las regiones</option>
+          {REGIONES.map((r) => (
+            <option key={r} value={r}>{r}</option>
+          ))}
+        </select>
+        <select
+          value={minScore}
+          onChange={(e) => setMinScore(e.target.value)}
+          className="h-9 rounded-lg border border-border bg-surface px-2 text-sm focus:outline-none focus:ring-1 focus:ring-accent"
+        >
+          <option value="">Cualquier score</option>
+          <option value="70">Score ≥ 70</option>
+          <option value="50">Score ≥ 50</option>
+          <option value="30">Score ≥ 30</option>
+        </select>
+        {(region || minScore || search) && (
+          <button
+            onClick={() => { setRegion(""); setMinScore(""); setSearchInput(""); }}
+            className="text-sm text-text-muted hover:text-text"
+          >
+            Limpiar filtros
+          </button>
+        )}
+      </div>
+
       {leads.length === 0 ? (
         <div className="rounded-xl border border-border bg-surface p-10 text-center text-text-muted">
-          Aún no hay leads analizados. Ve al <span className="text-accent">Dashboard</span> y usa
-          <span className="text-accent"> “Simular lead”</span> para generar uno.
+          {region || minScore || search
+            ? "Ningún lead coincide con estos filtros."
+            : (
+              <>
+                Aún no hay leads analizados. Ve al <span className="text-accent">Dashboard</span> y usa
+                <span className="text-accent"> “Simular lead”</span> para generar uno, o usa “Sincronizar tablero”
+                si ya tienes leads creados en Monday.
+              </>
+            )}
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-[300px_1fr]">
@@ -119,7 +232,7 @@ export function Leads() {
                 Cargando...
               </div>
             ) : (
-              <ItemView analysis={analysis} />
+              <ItemView analysis={analysis} region={selectedSummary?.region ?? null} />
             )}
           </div>
         </div>
@@ -156,14 +269,22 @@ function LeadRow({ lead, active, onClick }: { lead: LeadSummary; active: boolean
         {lead.duplicado && (
           <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-danger/15 text-danger">Duplicado</span>
         )}
-        <span className="text-[11px] text-text-muted">{lead.estado}</span>
+        {lead.region && lead.region !== "Otra" && (
+          <span className="rounded px-1.5 py-0.5 text-[11px] font-medium bg-black/[0.06] text-text-muted">📍 {lead.region}</span>
+        )}
+        <span className="ml-auto text-[11px] text-text-muted">{lead.estado}</span>
       </div>
     </button>
   );
 }
 
-function ItemView({ analysis }: { analysis: LeadAnalysis }) {
+const TABS = ["Principal", "Actualizaciones", "Análisis IA", "Archivos"] as const;
+type Tab = (typeof TABS)[number];
+
+function ItemView({ analysis, region }: { analysis: LeadAnalysis; region: Region | null }) {
   const { lead, form, call } = analysis;
+  const [tab, setTab] = useState<Tab>("Análisis IA");
+  const { activity, loading: loadingActivity } = useMondayActivity(analysis.itemId);
   const initials = analysis.itemName
     .split(" ")
     .slice(0, 2)
@@ -204,21 +325,48 @@ function ItemView({ analysis }: { analysis: LeadAnalysis }) {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border bg-black/[0.02] px-3">
-        {["Principal", "Actualizaciones", "✦ Análisis IA", "Archivos"].map((t) => (
-          <div
+        {TABS.map((t) => (
+          <button
             key={t}
-            className={`px-4 py-3 text-[13px] ${
-              t.includes("Análisis")
+            onClick={() => setTab(t)}
+            className={`px-4 py-3 text-[13px] transition-colors ${
+              tab === t
                 ? "border-b-2 border-accent font-semibold text-accent"
-                : "text-text-muted"
+                : "text-text-muted hover:text-text"
             }`}
           >
-            {t}
-          </div>
+            {t === "Análisis IA" ? "✦ Análisis IA" : t}
+          </button>
         ))}
       </div>
 
+      {tab === "Principal" && (
+        <div className="p-5">
+          <PrincipalPanel
+            itemName={analysis.itemName}
+            email={lead?.email}
+            telefono={lead?.telefono}
+            rfc={lead?.rfc}
+            razonSocial={lead?.razonSocial}
+            region={region}
+          />
+        </div>
+      )}
+
+      {tab === "Actualizaciones" && (
+        <div className="p-5">
+          <ActualizacionesPanel activity={activity} loading={loadingActivity} />
+        </div>
+      )}
+
+      {tab === "Archivos" && (
+        <div className="p-5">
+          <ArchivosPanel activity={activity} loading={loadingActivity} />
+        </div>
+      )}
+
       {/* Body */}
+      {tab === "Análisis IA" && (
       <div className="flex flex-col gap-4 p-5">
         {/* Métricas */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -368,6 +516,7 @@ function ItemView({ analysis }: { analysis: LeadAnalysis }) {
           </Block>
         )}
       </div>
+      )}
 
       {/* Footer */}
       <div className="flex items-center justify-between border-t border-border bg-black/[0.02] px-5 py-3 text-xs text-text-muted">

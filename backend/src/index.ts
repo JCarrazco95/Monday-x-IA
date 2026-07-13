@@ -28,7 +28,8 @@ import { seed } from "./db/seed.js";
 import { runNextBestActionAgent } from "./agents/nextBestActionAgent.js";
 import { usageSummary } from "./lib/usage.js";
 import { syncCallsBoard } from "./lib/aircallIngest.js";
-import { callsBoardConfigured } from "./lib/monday.js";
+import { callsBoardConfigured, leadsBoardConfigured } from "./lib/monday.js";
+import { syncLeadsBoard } from "./lib/leadsSync.js";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -121,7 +122,30 @@ async function start() {
     warnIfAuthDisabled();
     scheduleNextBestAction();
     scheduleCallsSync();
+    scheduleLeadsSync();
   });
+}
+
+// "Cron" interno para sincronizar el tablero de Leads: red de seguridad si el
+// webhook nativo de Monday (routes/webhooks.ts) no está registrado o no llega
+// (dev local, o el trigger nunca se configuró en el board). Si
+// LEADS_SYNC_CRON_HOURS está definido, corre syncLeadsBoard() automáticamente.
+// Idempotente por `lead_analyses.item_id` (nunca re-analiza).
+function scheduleLeadsSync() {
+  const hours = Number(process.env.LEADS_SYNC_CRON_HOURS);
+  if (!hours || hours <= 0 || !leadsBoardConfigured) return;
+  const intervalMs = hours * 3_600_000;
+  const tick = async () => {
+    try {
+      const r = await syncLeadsBoard();
+      if (r.analizados > 0) console.log(`   Leads sync: ${r.analizados} lead(s) nuevo(s) analizado(s).`);
+    } catch (err) {
+      console.error("   Leads sync error:", err instanceof Error ? err.message : err);
+    }
+  };
+  setTimeout(tick, 20_000); // primera corrida ~20s tras arrancar
+  setInterval(tick, intervalMs).unref();
+  console.log(`   Leads sync cron: cada ${hours}h\n`);
 }
 
 // "Cron" interno para sincronizar el tablero de llamadas de Aircall: si

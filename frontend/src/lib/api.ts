@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
 
 const BASE = "/api";
 
@@ -118,8 +118,25 @@ export const api = {
       { method: "POST", body: JSON.stringify(data) }
     ),
 
-  getLeads: () => request<LeadsResponse>("/leads"),
+  getLeads: (opts: { region?: Region | null; minScore?: number | null; search?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.region) qs.set("region", opts.region);
+    if (opts.minScore) qs.set("minScore", String(opts.minScore));
+    if (opts.search) qs.set("search", opts.search);
+    const query = qs.toString();
+    return request<LeadsResponse>(`/leads${query ? `?${query}` : ""}`);
+  },
   getLeadAnalysis: (itemId: string) => request<LeadAnalysis>(`/leads/${itemId}`),
+  getLeadMondayActivity: (itemId: string) => request<MondayActivity>(`/leads/${encodeURIComponent(itemId)}/monday-activity`),
+
+  // Sync del tablero de Leads (red de seguridad del webhook nativo): asíncrono,
+  // igual que el de llamadas — el POST responde 202 y el avance se consulta aparte.
+  syncLeadsBoard: () => request<{ started: boolean; startedAt: string }>(`/leads/sync-board`, { method: "POST" }),
+  getLeadsSyncStatus: () =>
+    request<{
+      running: boolean; startedAt: string | null; finishedAt: string | null; error: string | null;
+      result: { leidos: number; analizados: number; yaAnalizados: number; errores: string[] } | null;
+    }>(`/leads/sync-status`),
 
   // Historial de llamadas (Aircall) de un cliente por teléfono.
   getCalls: (phone: string) => request<CallsResponse>(`/calls?phone=${encodeURIComponent(phone)}`),

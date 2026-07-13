@@ -221,6 +221,110 @@ export async function getCallsBoardItems(limit = 200): Promise<CallBoardItem[]> 
   return mapped;
 }
 
+// ===========================================================================
+//  Tablero de Leads — lectura para el sync (fallback del webhook nativo).
+// ===========================================================================
+const LEADS_BOARD_ID = process.env.MONDAY_BOARD_ID_LEADS;
+export const leadsBoardConfigured = Boolean(LEADS_BOARD_ID);
+
+export interface LeadBoardItem {
+  itemId: string;
+  itemName: string;
+  createdAt: string | null;
+  columns: MondayColumnValue[];
+}
+type MondayColumnValue = { id: string; title: string; text: string };
+
+/** Lee todos los items del tablero de Leads con sus columnas (para detectar los nuevos). */
+export async function getLeadsBoardItems(limit = 200): Promise<LeadBoardItem[]> {
+  if (isMondayMockMode || !LEADS_BOARD_ID) return [];
+  const query = `
+    query ($ids: [ID!], $limit: Int!) {
+      boards (ids: $ids) {
+        items_page (limit: $limit) {
+          items {
+            id
+            name
+            created_at
+            column_values { id text column { title } }
+          }
+        }
+      }
+    }
+  `;
+  type Raw = { id: string; name: string; created_at?: string; column_values?: Array<{ id: string; text?: string; column?: { title?: string } }> };
+  const data = await mondayRequest<{ boards?: Array<{ items_page?: { items?: Raw[] } }> }>(query, {
+    ids: [LEADS_BOARD_ID],
+    limit
+  });
+  const items = data?.boards?.[0]?.items_page?.items ?? [];
+  return items.map((it) => ({
+    itemId: it.id,
+    itemName: it.name,
+    createdAt: it.created_at ?? null,
+    columns: (it.column_values ?? []).map((c) => ({ id: c.id, title: c.column?.title ?? "", text: c.text ?? "" }))
+  }));
+}
+
+export interface MondayUpdate {
+  id: string;
+  body: string;
+  createdAt: string | null;
+  autor: string | null;
+}
+
+/** Lee las "Actualizaciones" (comentarios) nativas de un item — solo lectura. */
+export async function getItemUpdates(itemId: string): Promise<MondayUpdate[]> {
+  if (isMondayMockMode) return [];
+  const query = `
+    query ($ids: [ID!]) {
+      items (ids: $ids) {
+        updates {
+          id
+          text_body
+          body
+          created_at
+          creator { name }
+        }
+      }
+    }
+  `;
+  type RawUpdate = { id: string; text_body?: string; body?: string; created_at?: string; creator?: { name?: string } };
+  const data = await mondayRequest<{ items?: Array<{ updates?: RawUpdate[] }> }>(query, { ids: [itemId] });
+  const updates = data?.items?.[0]?.updates ?? [];
+  return updates.map((u) => ({
+    id: u.id,
+    // `text_body` (plano) si viene; si no, `body` (HTML) despojado de tags — nunca se manda HTML crudo al cliente.
+    body: (u.text_body ?? (u.body ?? "").replace(/<[^>]*>/g, " ")).replace(/\s+/g, " ").trim(),
+    createdAt: u.created_at ?? null,
+    autor: u.creator?.name ?? null
+  }));
+}
+
+export interface MondayFile {
+  nombre: string;
+  url: string;
+  extension: string | null;
+}
+
+/** Lee los archivos adjuntos (assets) de un item — solo lectura. */
+export async function getItemFiles(itemId: string): Promise<MondayFile[]> {
+  if (isMondayMockMode) return [];
+  const query = `
+    query ($ids: [ID!]) {
+      items (ids: $ids) {
+        assets { name public_url file_extension }
+      }
+    }
+  `;
+  type RawAsset = { name?: string; public_url?: string; file_extension?: string };
+  const data = await mondayRequest<{ items?: Array<{ assets?: RawAsset[] }> }>(query, { ids: [itemId] });
+  const assets = data?.items?.[0]?.assets ?? [];
+  return assets
+    .filter((a): a is RawAsset & { name: string; public_url: string } => Boolean(a.name && a.public_url))
+    .map((a) => ({ nombre: a.name, url: a.public_url, extension: a.file_extension?.toLowerCase() ?? null }));
+}
+
 export async function updateMondayColumn(opts: {
   boardId: string;
   itemId: string;

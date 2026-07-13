@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS lead_analyses (
   email        TEXT,
   telefono     TEXT,
   rfc          TEXT,
+  razon_social TEXT,
   lead_payload TEXT,
   form_payload TEXT,
   analyzed_at  TEXT NOT NULL,

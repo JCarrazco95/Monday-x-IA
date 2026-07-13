@@ -37,7 +37,8 @@ export async function initDb(): Promise<void> {
  */
 async function softMigrations(): Promise<void> {
   const alters = [
-    "ALTER TABLE courses ADD COLUMN quiz TEXT" // fase 2 del entrenamiento
+    "ALTER TABLE courses ADD COLUMN quiz TEXT", // fase 2 del entrenamiento
+    "ALTER TABLE lead_analyses ADD COLUMN razon_social TEXT" // fix: razón social nunca se persistía
   ];
   for (const sql of alters) {
     try {
