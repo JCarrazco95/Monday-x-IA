@@ -5,10 +5,12 @@ La BD tiene el **mismo esquema lógico en SQLite y Postgres**
 (`AUTOINCREMENT` en SQLite / `SERIAL` en Postgres). Timestamps y JSON se guardan
 como TEXT generados desde la app (formato idéntico en ambos motores).
 
-> **Importante:** no existe una tabla de "análisis". Los resultados de los agentes
-> viven en `logs.payload` (JSON) y se **reconstruyen** por consulta. La tabla
-> `logs` funciona a la vez como auditoría, base de datos y cola. Ver
-> [02 · A.3](02-escalabilidad-roadmap.md) para la migración recomendada a tablas de dominio.
+> **Actualizado:** la migración A.3 ya está completa (fases 1-3). `call_analyses`
+> y `lead_analyses` son hoy el camino de **lectura** principal (Call
+> Intelligence, Leads, Coaching, NBA, Forecast estimado, Reporte ejecutivo);
+> `logs` quedó como **auditoría/bitácora pura**, con un único fallback legítimo
+> por item para recuperar transcripciones de análisis anteriores a la
+> migración. Ver [02 · A.3](02-escalabilidad-roadmap.md) para el detalle de cada fase.
 
 ## Tabla `agents`
 
@@ -111,3 +113,41 @@ backfill automático al arrancar si está vacía (`db/domain.ts`).
 | `fuente` | TEXT | ia / demo / fallback |
 | `payload` | TEXT (JSON) | `CallIntelligenceOutput` completo |
 | `analyzed_at` (índice) / `updated_at` | TEXT ISO | |
+
+## Tabla `lead_analyses` (dominio, A.3 fase 2)
+
+Último análisis de cada lead — enriquecimiento **y** formulario, mergeados por
+`item_id` (columnas separadas para no pisar uno con el otro si llegan en
+momentos distintos). Write-through + backfill igual que `call_analyses`
+(`db/domain.ts`). Reemplaza el dedupe por `LIKE` sobre `logs.payload` (M1 de
+[01](01-analisis-tecnico.md)) por lookup indexado en `email`/`rfc`.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `item_id` | TEXT UNIQUE | id del item de Monday |
+| `item_name` | TEXT | nombre del lead |
+| `score` | INTEGER (índice indirecto vía `email`/`rfc`) | score 0-100 del Lead Enrichment |
+| `prioridad` / `riesgo` | TEXT | caliente/tibia/fría · alto/medio/bajo |
+| `duplicado` | INTEGER (0/1) | marcado por `findDuplicateLead` |
+| `email` / `telefono` / `rfc` | TEXT (índice) | usados para dedupe y búsqueda |
+| `lead_payload` | TEXT (JSON) | `LeadEnrichmentOutput` completo |
+| `form_payload` | TEXT (JSON) | `FormAnalysisOutput` completo (si existe) |
+| `analyzed_at` (índice) / `updated_at` | TEXT ISO | |
+
+## Tablas de Entrenamiento (LMS, C.8) — sin relación con `logs`/dominio de análisis
+
+Contenido y progreso del módulo **Entrenamiento**; no involucran IA. Sembradas
+una sola vez desde código (`db/trainingSeed.ts`) si `courses` está vacía;
+`POST /api/training/reseed` las actualiza conservando progreso/quiz por
+coincidencia de título.
+
+| Tabla | Columnas clave | Notas |
+|---|---|---|
+| `courses` | `titulo`, `descripcion`, `etapa_sandler`, `orden`, `publicado`, `quiz` (JSON `QuizQuestion[]`) | Un curso por etapa/tema Sandler |
+| `lessons` | `course_id` (FK), `titulo`, `contenido` (Markdown), `video_url?`, `etapa_sandler`, `duracion_min`, `orden` | Lección individual dentro de un curso |
+| `lesson_progress` | `lesson_id` (FK), `vendedor`, `completed_at`, UNIQUE(`lesson_id`,`vendedor`) | Idempotente vía `ON CONFLICT DO NOTHING` |
+| `quiz_results` | `course_id` (FK), `vendedor`, `score`, `total`, `aprobado`, UNIQUE(`course_id`,`vendedor`) | Se conserva el **mejor intento**; aprueba con ≥80% |
+
+`GET /api/training/recomendaciones` cruza estas tablas con `call_analyses`
+(etapa Sandler más débil real del vendedor) para armar "Tu ruta recomendada".
+Ver [04 · Flujo 3](04-arquitectura.md#flujo-3--entrenamiento-lms-y-su-lazo-con-coaching).

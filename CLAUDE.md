@@ -19,7 +19,11 @@ Monorepo en `maxirent-monday/`:
 
 - **backend/** — Node 22 (ESM, NodeNext, imports con `.js`), Express, TypeScript.
   - DB: capa **async con dos drivers** (`db/`): SQLite (`node:sqlite`) en dev local; **Postgres** (`pg`) en prod si hay `DATABASE_URL`. Interfaz única `db.query/queryOne/run` con placeholders `?` (el driver PG los traduce a `$n`). Llamar `initDb()` en el arranque (lo hace `index.ts`). SQL portable: timestamps/JSON como TEXT generados en JS; `INSERT … RETURNING id`; `CAST(... AS INTEGER)` en agregados.
-  - DB: bitácora `logs` (cada agente deja su `payload` JSON). No hay tabla de análisis: se reconstruye desde `logs`.
+  - DB: bitácora `logs` (cada agente deja su `payload` JSON) — hoy es **auditoría pura**. Las lecturas reales
+    salen de las tablas de dominio (`db/domain.ts`, A.3 completo): `call_analyses` y `lead_analyses`, una fila
+    "última versión" por item con columnas indexadas (telefono/vendedor/scores, email/rfc) + el payload JSON
+    completo. Write-through desde el orquestador + backfill automático al arrancar si están vacías. Además
+    `courses/lessons/lesson_progress/quiz_results` para el módulo Entrenamiento (sin relación con `logs`).
   - IA con **router de proveedor** (`lib/provider.ts`): `AI_PROVIDER` fuerza claude|gemini|demo; si no, autodetecta por API key. `demo` = sin red, usa mocks.
   - Integraciones **defensivas**: si falla la red o falta credencial, devuelven null/[] (nunca rompen).
 - **frontend/** — React + Vite + Tailwind v4 (`@theme` en `index.css`), React Router, lucide-react, recharts, framer-motion.
@@ -82,23 +86,35 @@ Monorepo en `maxirent-monday/`:
   (columnas vía Writer Agent, comentario vía `postMondayComment`, archivos opcionales).
 - Las pestañas Principal/Actualizaciones/Archivos del board-view de demo son solo "cáscara" visual.
 - Rol admin/vendedor: del SDK de Monday (`me { is_admin }`); override en dev con `?role=admin|sales`.
+  Desde el 12 jul (`e2e6763`) un vendedor solo ve Análisis IA/Prospección/Seguimiento/Entrenamiento
+  en el sidebar y sus rutas guardadas (`Layout.tsx` navItems `adminOnly`, `main.tsx` `<RequireAdmin>`).
+  **Esto es SOLO frontend**: el backend no valida rol, solo el `API_KEY` compartido
+  (`requireApiKey`, `index.ts:79`) — un vendedor puede llamar `/api/coaching`, `/api/forecast`,
+  `/api/logs*` directo y ver lo que la UI le esconde. Pendiente: `requireRole('admin')` server-side
+  (ver `docs/01-analisis-tecnico.md` hallazgo I9).
 
 ## 7. Estado actual
-- ✅ **Seguridad/robustez endurecidas** (ver `docs/11-correcciones.md`): auth por API key (`API_KEY` → header `x-api-key`; frontend `VITE_API_KEY`), CORS restringido (`CORS_ORIGINS`) + helmet, rate limiting (`lib/rateLimit.ts`), PII enmascarada en la bitácora (`lib/security.ts`), webhooks con comparación timing-safe, Postgres con CA opcional, idempotencia del Writer (tabla `monday_writes`), telemetría de tokens (`GET /api/usage`), prompt caching + caché de análisis de llamada, y pruebas Vitest (`npm test`). El parseo de `reference` vive en `lib/references.ts` (antes duplicado). `lead_scraper` ya está sembrado en `agents`.
+- ✅ **Seguridad/robustez endurecidas** (ver `docs/11-correcciones.md`): auth por API key (`API_KEY` → header `x-api-key`; frontend `VITE_API_KEY`), CORS restringido (`CORS_ORIGINS`) + helmet, rate limiting (`lib/rateLimit.ts`), PII enmascarada en la bitácora (`lib/security.ts`), webhooks con comparación timing-safe, Postgres con CA opcional, idempotencia del Writer (tabla `monday_writes`), telemetría de tokens (`GET /api/usage`), prompt caching + caché de análisis de llamada, y pruebas Vitest (`npm test`, 20+ specs). El parseo de `reference` vive en `lib/references.ts` (antes duplicado). `lead_scraper` ya está sembrado en `agents`.
+  **⚠️ Gap vigente (no cubierto por lo anterior):** la separación admin/vendedor es solo de UI, ver §6 y `docs/01-analisis-tecnico.md` I9.
 - ✅ Backend y frontend compilan limpio; `mondaySDK.ts` y `Pipeline.tsx` sin errores de tipo propios (quedan solo los `.ts` internos de `monday-sdk-js`, ver §10).
-- ✅ Call Intelligence completo (4 pasadas, 5 secciones, historial por lead, board=todo / item=por teléfono).
+- ✅ Call Intelligence completo (2 pasadas de IA, 5 secciones, historial por lead, board=todo / item=por teléfono), con diarización Vendedor/Cliente en la transcripción (Deepgram) y transcripción visible en el detalle.
+- ✅ **Tablas de dominio A.3 completas (fases 1-3)**: `call_analyses` + `lead_analyses` (`db/domain.ts`) son el camino de lectura de Call Intelligence/Leads/Coaching/NBA/Forecast estimado/Reporte ejecutivo; `logs` queda como auditoría pura. Backfill automático al arrancar si están vacías + `POST /api/admin/backfill-vendedor` manual.
+- ✅ **Identidad de vendedor + desarrollo del vendedor (roadmap C.0-C.8, ver `docs/02-escalabilidad-roadmap.md`)**: coaching por vendedor, tendencias, ranking/insignias por etapa Sandler (C.3), biblioteca de mejores llamadas (C.5), reporte ejecutivo bajo demanda (C.7), y **Entrenamiento (LMS, C.8)** — 3 cursos/14 lecciones en español, quiz calificado en servidor, "Tu ruta recomendada" por etapa débil real, lección sugerida en el comentario de coaching a Monday, panel de adopción+correlación. Sin costo de IA. Rutas `routes/training.ts`, tablas `courses/lessons/lesson_progress/quiz_results`.
+- ✅ **Pipeline**: forecast en vivo desde Monday trae TODAS las oportunidades abiertas + filtro por grupo + link directo al item + botón a la cotización PDF ya adjunta (no se genera PDF, solo se enlaza).
+- ✅ **Prospección honesta**: la fuente `gov` (licitaciones) muestra aviso explícito de modo demo desde que su API pública fue discontinuada (`GOV_API_URL` ya no aplica sin config explícita).
 - ✅ Aircall ingesta + transcripción (plumbing; requiere credenciales reales para probar en vivo).
 - ✅ Deploy listo: `backend/Dockerfile`, `frontend/Dockerfile`+`nginx.conf.template`, `render.yaml`, `docs/DEPLOY-RENDER.md`.
 - ✅ Guía Monday: `docs/DESPLIEGUE-MONDAY.md`.
 - ✅ Propuesta comercial: `Propuesta-MAXIRent-Plataforma-IA-Leads.docx` (revisar: aún menciona add-on Apollo, que se descartó).
 
 ## 8. Pendientes / próximos pasos
-- [ ] `git init` + commit + subir a GitHub (para deploy en Render).
+- [ ] **Autorización real por rol en el backend** — `requireRole('admin')` server-side para las rutas que la UI ya marca admin-only (`/coaching`, `/forecast`, `/logs*`, `PATCH /agents`, `/nba/run`, `/scraper/*`, `/admin/*`). Ver §6 y `docs/01-analisis-tecnico.md` I9.
 - [ ] Deploy backend+frontend en HTTPS (Render blueprint) y verificar `/api/health` = `mondayMode: live`.
 - [ ] Crear app en Monday Developers, registrar Board/Item View y el webhook de leads.
 - [ ] **Ajustar IDs de columnas reales** del tablero en `orchestratorAgent.ts` (objeto `columnUpdates`) y/o `MONDAY_COL_*` en `.env`.
 - [ ] (Opcional) limpiar la propuesta .docx (quitar Apollo) / actualizar pricing.
 - [ ] (Opcional) arreglar de raíz los tipos de `src/lib/mondaySDK.ts`.
+- [ ] Escalabilidad 10×-100×/multi-tenant: cola de trabajos + multi-tenant + sesión real de Monday por usuario (ver `docs/02-escalabilidad-roadmap.md` A.1/A.2).
 
 ## 9. Comandos
 ```

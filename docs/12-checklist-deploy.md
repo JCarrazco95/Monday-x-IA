@@ -107,6 +107,9 @@ Sin esto, el Writer no escribe nada útil en Monday.
 
 ---
 
-**Siguiente fase** al terminar esto: identidad del vendedor por llamada
-(desbloquea coaching por vendedor, rankings y biblioteca de mejores llamadas) —
-ver [02 · Escalabilidad y roadmap](02-escalabilidad-roadmap.md).
+**Siguiente fase** al terminar esto: identidad del vendedor por llamada,
+coaching/rankings/biblioteca/Entrenamiento y las tablas de dominio (A.3) ya
+están **hechos** (ver [02 · Escalabilidad y roadmap](02-escalabilidad-roadmap.md)).
+Lo que queda abierto: cerrar el hallazgo **I9** (autorización por rol en el
+backend, no solo en la UI — ver [01](01-analisis-tecnico.md)), y la
+escalabilidad 10×–100×/multi-tenant (cola de trabajos + multi-tenant).

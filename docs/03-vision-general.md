@@ -19,6 +19,10 @@ Automatiza tres momentos del proceso de venta:
    levanta alertas: compromisos vencidos, leads calientes enfriándose, llamadas en
    riesgo, y las escribe de vuelta a Monday para que las automatizaciones nativas
    notifiquen al vendedor.
+4. **Desarrollo del vendedor** — ranking/insignias por etapa Sandler dominada,
+   biblioteca de mejores llamadas y un módulo de **Entrenamiento** (cursos +
+   quiz) que recomienda lecciones según la etapa Sandler más débil real de
+   cada quien, sin costo de IA.
 
 Todo queda registrado en una **bitácora auditable** y se visualiza en un **panel de
 control web** (dashboard, agentes, Call Intelligence, coaching, pipeline, asistente).
@@ -29,8 +33,8 @@ control web** (dashboard, agentes, Call Intelligence, coaching, pipeline, asiste
 |-----|----------|------------------|
 | **Vendedor** | Prioriza mal los leads; olvida compromisos; no sabe por qué pierde llamadas | Score y acción recomendada por lead; alertas de seguimiento; coaching accionable tras cada llamada |
 | **Gerente de ventas** | No tiene visibilidad del desempeño ni del pipeline | Coaching a nivel equipo, pipeline ponderado por probabilidad, tendencias |
-| **Dirección** | Decisiones sin datos | KPIs, forecast, y (roadmap) reportes ejecutivos e inteligencia de negocio |
-| **Nuevo vendedor** | Curva de aprendizaje lenta | (Roadmap) biblioteca de mejores llamadas, rúbricas Sandler/Challenger |
+| **Dirección** | Decisiones sin datos | KPIs, forecast, reporte ejecutivo bajo demanda; (roadmap) inteligencia de negocio predictiva |
+| **Nuevo vendedor** | Curva de aprendizaje lenta | Biblioteca de mejores llamadas, ranking/insignias por etapa Sandler, y módulo **Entrenamiento** (LMS) con ruta recomendada según su etapa más débil real |
 
 ## Cómo se usa
 

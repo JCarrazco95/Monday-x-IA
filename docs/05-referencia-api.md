@@ -11,8 +11,15 @@ API queda abierta. Además hay rate limiting por IP (general, IA y webhooks).
 Índice: [Salud](#salud) · [Agentes](#agentes) · [Bitácora](#bitácora) ·
 [Orquestador](#orquestador) · [Leads](#leads) · [Webhooks](#webhooks) ·
 [Call Intelligence](#call-intelligence) · [Next Best Action](#next-best-action) ·
-[Coaching](#coaching) · [Forecast](#forecast) · [Asistente](#asistente) ·
-[Monday](#monday-utilidades) · [Scraper](#scraper--prospección)
+[Coaching](#coaching) · [Entrenamiento](#entrenamiento--lms) · [Forecast](#forecast) ·
+[Asistente](#asistente) · [Monday](#monday-utilidades) ·
+[Scraper](#scraper--prospección)
+
+> **Nota sobre autorización por rol:** el header `x-api-key` autentica la
+> aplicación, no distingue admin de vendedor. La restricción de qué pestañas ve
+> un "vendedor" (Coaching, Forecast, Bitácora, `PATCH /agents`, `/nba/run`,
+> `/scraper/*`, `/admin/*` son admin-only en la UI) es **solo de frontend** —
+> ver hallazgo vigente [01 · I9](01-analisis-tecnico.md#-i9--la-separación-adminvendedor-no-se-aplica-en-el-backend-vigente).
 
 ---
 
@@ -32,6 +39,17 @@ Además de `?phone=`, acepta: `vendedor=` (contiene, sin acentos), `banda=rojo|a
 (sobre la banda global), `desde=YYYY-MM-DD`, `hasta=YYYY-MM-DD`, `q=` (texto sobre
 prospecto/resumen/vendedor/id) y `minGlobal=NN`. Los `stats` se calculan sobre el
 conjunto filtrado.
+
+> **`prospecto`**: si Aircall no trae un contacto con nombre, el nombre crudo cae al
+> número de teléfono; en ese caso se busca el teléfono en `lead_analyses` (tabla de
+> dominio, indexada) y se usa el nombre del lead si hay coincidencia
+> (`resolveProspecto` en `routes/calls.ts`). Aplica también en el detalle y en
+> `/api/calls/biblioteca`.
+>
+> **Diarización Vendedor/Cliente**: tanto la transcripción de Aircall AI como la de
+> Deepgram etiquetan hablantes con la heurística de quién CONTESTA primero según la
+> dirección de la llamada (`labelUtterances` en `lib/transcription.ts`, compartida
+> por ambos proveedores). Sin dirección conocida usa "Hablante 1/2"; nunca un "?".
 
 ### `GET /api/calls/biblioteca?min=75`
 C.5 — "Mejores llamadas" para entrenamiento: llamadas con score global ≥ `min`
@@ -63,6 +81,12 @@ Borra esos registros para poder re-analizar con IA real. Requiere
 `{"confirm": true}` en el body (400 sin él). `{"sims": false}` conserva las
 simulaciones y borra solo demo/fallback. También libera las firmas de
 idempotencia (`monday_writes`) de los items afectados.
+
+### `POST /api/admin/backfill-vendedor`
+Rellena `vendedorNombre` en análisis de llamadas viejos que no lo tenían
+(buscando el `user` de Aircall por `callId`) y **re-ejecuta el backfill
+completo** de `call_analyses` desde `logs` para que la tabla de dominio quede
+al día. No incremental: re-escanea todo el histórico.
 
 ### `GET /api/usage`
 Telemetría de consumo de IA (tokens) acumulada desde el arranque, por modelo +
@@ -237,6 +261,46 @@ tendencia mensual.
 
 ---
 
+## Entrenamiento / LMS
+
+Módulo sin IA (contenido estático + progreso). Ver [08 · Modelo de datos](08-modelo-datos.md)
+y [04 · Flujo 3](04-arquitectura.md#flujo-3--entrenamiento-lms-y-su-lazo-con-coaching).
+
+### `GET /api/training/courses?vendedor=&todos=`
+Cursos publicados con sus lecciones, progreso del `vendedor` dado y si ya
+aprobó el quiz. `todos=true` (editor admin) incluye no publicados.
+
+### `GET /api/training/lessons/:id`
+Contenido completo de una lección (Markdown, `video_url`, etapa Sandler).
+
+### `POST /api/training/lessons/:id/complete`
+Body `{ vendedor }`. Marca la lección como completada (idempotente).
+
+### `GET /api/training/courses/:id/quiz`
+Preguntas del quiz **sin** las respuestas correctas.
+
+### `POST /api/training/courses/:id/quiz`
+Body `{ vendedor, respuestas }`. Califica en servidor (80% para aprobar) y
+conserva el mejor intento.
+
+### `GET /api/training/recomendaciones?vendedor=`
+"Tu ruta recomendada": lecciones para la etapa Sandler más débil **real** del
+vendedor, calculada sobre sus llamadas ya analizadas (`call_analyses`).
+
+### `GET /api/training/adopcion`
+Métricas de gerencia: avance/quiz por vendedor (incluye quien no ha empezado)
+y correlación de score por etapa **antes vs. después** de la primera lección
+tomada. Panel "Adopción del entrenamiento" en Coaching.
+
+### `POST/PATCH/DELETE /api/training/courses[/:id]`, `POST /courses/:id/lessons`, `PATCH/DELETE /lessons/:id`
+CRUD de administración de contenido (crear/editar/publicar/borrar cursos y lecciones).
+
+### `POST /api/training/reseed`
+Body `{ confirm: true }`. Reemplaza el contenido sembrado por código con la
+versión actual, re-vinculando progreso/quiz existentes por título.
+
+---
+
 ## Forecast
 
 ### `GET /api/forecast`
@@ -250,6 +314,13 @@ declara su origen en `fuente`:
   (por fecha real de cierre) y `objetivos` (board de Objetivos, mejor esfuerzo —
   requiere permisos de visualización del board). Si Monday falla responde **502**
   (nunca sustituye datos reales por estimaciones sin avisar).
+  - `oportunidades[]` trae **todas** las oportunidades abiertas (no solo top N),
+    cada una con `mondayUrl` (link directo al item) y, si el item tiene un PDF
+    adjunto, `cotizacion: {nombre, url}` (el `public_url` de Monday — no se
+    genera ningún PDF, solo se enlaza el archivo ya adjunto).
+  - `grupos[]` lista los grupos del board para filtrar. El frontend
+    (`Pipeline.tsx`) añade un selector de grupo + búsqueda de texto y hace
+    clic-para-abrir en Monday / botón "PDF" por fila.
 - **`estimado`** (sin token, demo): heurística previa desde la bitácora —
   `FORECAST_TICKET_BASE × factor(score)`, probabilidad por llamada/prioridad.
 
@@ -286,7 +357,15 @@ Chequeo de salud de la conexión con Lusha (sin gastar créditos ni exponer la k
 
 ### `POST /api/scraper/search`
 PREVIEW de prospectos (no escribe). Body `{ source, sector, ciudad?, limite?, page? }`.
-Marca duplicados. Devuelve `{ fuente, demo, total, nuevos, duplicados, prospects[] }`.
+Marca duplicados. Devuelve `{ fuente, demo, total, nuevos, duplicados, prospects[], aviso? }`.
+
+> **Honestidad del modo demo (fuente `gov`):** la API pública de Contrataciones
+> Abiertas/CompraNet que alimentaba la fuente `gov` fue discontinuada; sin
+> `GOV_API_URL` configurada explícitamente, `demo:true` y `aviso` explican que
+> los resultados son de demostración. El frontend (`LeadScraper.tsx`) muestra
+> `(demo)` en el selector de fuente y una franja de advertencia **"⚠️
+> Resultados de DEMOSTRACIÓN — no son empresas reales"** cuando aplica, para
+> que un vendedor no las confunda con leads reales.
 
 ### `POST /api/scraper/import`
 Alta masiva: crea cada prospecto en Monday y dispara `lead_created` (enriquecimiento

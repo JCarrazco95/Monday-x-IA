@@ -31,6 +31,13 @@ Los hallazgos están priorizados por severidad. Cada uno referencia archivo y l�
 | M3 | 🟢 Mejora | Errores de tipo reales en `Pipeline.tsx` (typecheck falla) | `frontend/src/pages/Pipeline.tsx:3,115` |
 | M4 | 🟢 Mejora | Documentación desactualizada (MOCK, Apollo, "5 agentes") | `README.md`, `CLAUDE.md` |
 | M5 | 🟢 Mejora | Sin control ni telemetría de consumo de tokens | (transversal) |
+| I9 | 🟠 Importante (vigente) | Separación admin/vendedor es solo de UI; el backend no autoriza por rol | `frontend/src/main.tsx:42-57`, `frontend/src/components/RequireAdmin.tsx`, `backend/src/index.ts:79` |
+
+> **Nota de vigencia (revisión de seguimiento):** C1, C2, C3, I1, I2, I6, I7, I8 y M1-M5
+> de esta tabla **ya fueron corregidos** — ver [11 · Correcciones](11-correcciones.md) y
+> [10 · Estado actual](10-estado-actual.md). Se dejan documentados tal cual se
+> encontraron originalmente (auditoría histórica). **I9 es un hallazgo nuevo,
+> encontrado en esta revisión de seguimiento, y sigue sin resolver.**
 
 ---
 
@@ -179,6 +186,40 @@ desde el navegador de un usuario. Restringir a los dominios del frontend/Monday.
 `db/postgresDriver.ts:23`: `ssl: { rejectUnauthorized: false }` para hosts no
 locales. Acepta cualquier certificado → MITM posible sobre la conexión a la BD.
 Es lo habitual con Render, pero para un cliente real conviene fijar el CA.
+
+### 🟠 I9 — La separación admin/vendedor no se aplica en el backend (vigente)
+
+Desde el commit `e2e6763` (12 jul, "Vendedores: solo ven Análisis IA,
+Prospección, Seguimiento y Entrenamiento") la intención de negocio es clara: un
+vendedor **no** debe ver Coaching (desempeño de otros vendedores), Pipeline
+(montos y forecast) ni el Asistente/Bitácora. La implementación, sin embargo,
+es **enteramente de cliente**:
+
+- `frontend/src/components/Layout.tsx` marca cada ítem del menú con
+  `adminOnly: true/false` y filtra el sidebar en el navegador.
+- `frontend/src/main.tsx:42-57` envuelve las rutas admin en `<RequireAdmin>`
+  (`frontend/src/components/RequireAdmin.tsx`), que hace un `<Navigate>` si
+  `!isAdmin` — un redirect de React Router, no una barrera de datos.
+- El rol (`useRole` → `getMondayUser().me.is_admin`, o `?role=` en dev) nunca
+  viaja al backend, y el backend nunca lo pide: el único middleware de la API
+  (`backend/src/index.ts:79`, `requireApiKey`) verifica **una sola `API_KEY`
+  compartida por todo el despliegue**, igual para admin que para vendedor.
+
+**Impacto:** cualquier vendedor con acceso a la app (misma sesión/origen ya
+autenticado ante el proxy) puede abrir la consola del navegador y llamar
+directamente `fetch('/api/coaching')`, `fetch('/api/forecast')` o
+`fetch('/api/logs')` y recibir exactamente los datos que el commit del 12 de
+julio quiso ocultarle — desempeño y ranking de sus compañeros, montos del
+pipeline, bitácora completa. La UI oculta el botón; la API no lo sabe.
+
+**Recomendación:** el `x-api-key` actual autentica "la aplicación", no "el
+usuario". Para que la separación de roles sea real hace falta identidad de
+sesión por usuario (derivar el rol del SDK de Monday también en el backend, o
+un JWT propio con claim `role`) y aplicar un middleware `requireRole('admin')`
+en las rutas ya marcadas como admin-only en el frontend (`/coaching`,
+`/forecast`, `/logs*`, `/nba/run`, `/scraper/*`, `PATCH /agents/:id`,
+`/admin/*`). Es el mismo trabajo que ya pide A.2 del roadmap
+(autenticación/autorización reales) — ver [02 · A.2, punto 5](02-escalabilidad-roadmap.md).
 
 ### Manejo de secretos (correcto)
 

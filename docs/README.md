@@ -19,7 +19,7 @@ código fuente (backend, frontend, `call-intelligence/webhook-handler`) en modo 
 | [05 · Referencia de API](05-referencia-api.md) | Todos los endpoints con método, propósito y ejemplo request/response. | Dev / integraciones |
 | [06 · Instalación y despliegue](06-instalacion-despliegue.md) | Backend, frontend y webhook-handler en local; despliegue en Render. | Dev / DevOps |
 | [07 · Agentes](07-agentes.md) | Rol, modelo, entradas/salidas y relación con columnas de Monday de cada agente. | Dev / negocio |
-| [08 · Modelo de datos](08-modelo-datos.md) | Esquema de la BD (`agents`, `logs`, `company_intel`) y `esquema-salida.json`. | Dev |
+| [08 · Modelo de datos](08-modelo-datos.md) | Esquema de la BD: `agents`, `logs`, tablas de dominio (`call_analyses`, `lead_analyses`), Entrenamiento (`courses`/`lessons`/...), `company_intel` y `esquema-salida.json`. | Dev |
 | [09 · Variables de entorno](09-variables-entorno.md) | Tabla de cada variable, propósito y si es obligatoria u opcional (modo demo). | Dev / DevOps |
 | [10 · Estado actual vs. pendientes](10-estado-actual.md) | Qué está implementado, qué es demo, qué quedó fuera de alcance. | Todos |
 | [11 · Correcciones aplicadas](11-correcciones.md) | Resumen de los arreglos de seguridad, robustez, calidad y costo implementados sobre el análisis técnico. | Dev / dirección |

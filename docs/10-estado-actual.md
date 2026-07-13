@@ -20,7 +20,27 @@ registra y las páginas del panel cargan.
   sync del board de Aircall) — *plumbing* completo; requiere credenciales reales
   para probar en vivo.
 - ✅ **Prospección** con Google Places, licitaciones de gobierno, Lusha y
-  directorios (cada fuente cae a demo sin credencial).
+  directorios (cada fuente cae a demo sin credencial, con **aviso explícito**
+  en la UI cuando la fuente `gov` no tiene API real configurada — la API
+  pública que la alimentaba fue discontinuada).
+- ✅ **Entrenamiento (LMS)**: pestaña con 3 cursos / 14 lecciones originales en
+  español (Markdown + video), progreso y quiz por vendedor (calificado en
+  servidor, 80% aprueba), "Tu ruta recomendada" por etapa Sandler débil real,
+  lección sugerida en el comentario de coaching a Monday, y panel de adopción
+  + correlación para gerencia. Sin costo de IA (contenido estático). Ver
+  [04 · Flujo 3](04-arquitectura.md#flujo-3--entrenamiento-lms-y-su-lazo-con-coaching).
+- ✅ **Tablas de dominio (`call_analyses`/`lead_analyses`) completas** (A.3,
+  fases 1-3): Call Intelligence, Leads, Coaching, NBA, Forecast estimado y el
+  Reporte ejecutivo ya no reconstruyen `logs` en cada request. Ver
+  [08 · Modelo de datos](08-modelo-datos.md).
+- ✅ **Ranking de equipo e insignias** (C.3) y **Reporte ejecutivo bajo demanda**
+  (C.7) en Coaching. **Pipeline**: todas las oportunidades abiertas (no solo
+  top N), filtro por grupo, link directo a Monday y botón a la cotización PDF
+  ya adjunta en el item.
+- ✅ **Separación de vistas admin/vendedor** en el frontend (12 jul): un
+  vendedor solo ve Análisis IA, Prospección, Seguimiento y Entrenamiento.
+  ⚠️ **Solo es UI** — el backend no autoriza por rol, ver hallazgo vigente
+  [01 · I9](01-analisis-tecnico.md#-i9--la-separación-adminvendedor-no-se-aplica-en-el-backend-vigente).
 - ✅ **Deploy listo**: `backend/Dockerfile`, `frontend/Dockerfile` + Nginx,
   `render.yaml`, y guías `DEPLOY-RENDER.md` / `DESPLIEGUE-MONDAY.md`.
 - ✅ **Backend compila limpio** (`tsc`). **Frontend construye** (`vite build`).
@@ -87,7 +107,13 @@ registra y las páginas del panel cargan.
 **Pendiente:**
 
 - Quitar la mención a Apollo en la propuesta comercial (`.docx`).
-- Biblioteca de mejores llamadas por vendedor (desbloqueada por la Fase 3).
-- **Escalabilidad** (volumen 10×–100× o multi-cliente): cola de trabajos + tablas
-  de dominio + multi-tenant + validación de sesión de Monday por usuario — ver
-  [02](02-escalabilidad-roadmap.md).
+- **Autorización real por rol en el backend** (I9): la separación admin/vendedor
+  de la UI (12 jul) necesita un `requireRole('admin')` server-side — hoy un
+  vendedor puede llamar `/coaching`, `/forecast`, `/logs*` directo y ver lo que
+  la UI le oculta. Ver [01 · I9](01-analisis-tecnico.md#-i9--la-separación-adminvendedor-no-se-aplica-en-el-backend-vigente).
+- **Escalabilidad** (volumen 10×–100× o multi-cliente): cola de trabajos +
+  multi-tenant + validación de sesión de Monday por usuario (las tablas de
+  dominio de A.3 ya están hechas) — ver [02](02-escalabilidad-roadmap.md).
+- Reporte ejecutivo v2 (envío automático por cron + email/Slack, export PDF/.docx).
+- Integración de calendario/CRM para dar seguimiento a acciones recomendadas (C.6).
+- Alertas en tiempo real de etapa Sandler débil recurrente (C.4, extensión del NBA).

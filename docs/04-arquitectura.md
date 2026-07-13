@@ -92,6 +92,27 @@ flowchart LR
     G --> A
 ```
 
+## Flujo 3 — Entrenamiento (LMS) y su lazo con Coaching
+
+No es un agente (no hay IA de por medio): es contenido estático servido desde
+`courses`/`lessons` y personalizado con datos reales de `call_analyses`.
+
+```mermaid
+flowchart TD
+    CI["Call Intelligence Agent<br/>(análisis Sandler de una llamada)"] -->|"payload"| CA[(call_analyses)]
+    CA -->|"etapa Sandler más débil REAL"| REC["GET /api/training/recomendaciones<br/>Tu ruta recomendada"]
+    CA -->|"etapa débil de ESA llamada"| CC["lib/coachingComment.ts<br/>leccionParaEtapa()"]
+    CC -->|"📚 lección sugerida"| MC["Comentario de coaching<br/>en el item de Monday"]
+    CUR[("courses / lessons<br/>(sembrados en código, ES)")] --> REC
+    CUR --> CC
+    REC --> UI["Pestaña Entrenamiento<br/>(vendedor: cursos + progreso + quiz)"]
+    QZ["POST /api/training/courses/:id/quiz<br/>(calificación server-side, 80% aprueba)"] --> LP[(lesson_progress / quiz_results)]
+    LP --> ADOP["GET /api/training/adopcion<br/>panel Coaching admin: adopción + correlación"]
+```
+
+`POST /api/training/reseed` actualiza el contenido de código conservando el
+progreso/quiz existente (re-vincula por título de lección/curso).
+
 ## Decisiones de arquitectura (de `CLAUDE.md`)
 
 - En la vista embebida de Monday se muestran **solo Análisis IA + Call
@@ -99,7 +120,13 @@ flowchart LR
   se construyen, se **alimentan** (columnas vía Writer, comentario vía
   `postMondayComment`).
 - El rol admin/vendedor viene del SDK de Monday (`me { is_admin }`); en dev se
-  puede forzar con `?role=admin|sales`. **Nota:** este rol solo controla la UI; el
-  backend no lo valida (ver [01 · C1](01-analisis-tecnico.md)).
-- No hay tabla de análisis: el estado se **reconstruye desde `logs`**. Es la
-  decisión con mayor impacto en escalabilidad (ver [02](02-escalabilidad-roadmap.md)).
+  puede forzar con `?role=admin|sales`. Desde el 12 jul un vendedor solo ve
+  Análisis IA/Prospección/Seguimiento/Entrenamiento (`Layout.tsx`, `main.tsx`).
+  **Nota:** este rol solo controla la UI; el backend no lo valida — hallazgo
+  vigente [01 · I9](01-analisis-tecnico.md#-i9--la-separación-adminvendedor-no-se-aplica-en-el-backend-vigente).
+- **Ya no es cierto que "no haya tabla de análisis".** Desde A.3 (fases 1-3,
+  completas) `call_analyses` y `lead_analyses` son el camino de lectura
+  principal para Call Intelligence, Leads, Coaching, NBA, Forecast (modo
+  estimado) y el Reporte ejecutivo; `logs` quedó como bitácora/auditoría pura
+  (con un único fallback legítimo por item para recuperar transcripciones
+  viejas). Ver [02 · A.3](02-escalabilidad-roadmap.md) y [08 · Modelo de datos](08-modelo-datos.md).

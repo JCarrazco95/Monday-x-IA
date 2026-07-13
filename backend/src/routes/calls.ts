@@ -33,6 +33,44 @@ function normPhone(p?: string | null): string {
   return (p ?? "").replace(/[^0-9]/g, "").slice(-10);
 }
 
+/** ¿El texto es (casi) puro un número telefónico? (Aircall sin contacto con nombre). */
+export function looksLikePhone(s: string): boolean {
+  const trimmed = s.trim();
+  if (!trimmed) return false;
+  const digits = trimmed.replace(/[^0-9]/g, "");
+  if (digits.length < 7) return false;
+  // Sin el separador (espacios/+/-/paréntesis) casi todo son dígitos.
+  return digits.length >= trimmed.replace(/[\s()+-]/g, "").length;
+}
+
+/**
+ * Nombre del LEAD por teléfono (tabla de dominio `lead_analyses`, indexada).
+ * Cuando Aircall no trae un contacto con nombre, el prospecto de la llamada
+ * queda como el número crudo; si ese teléfono coincide con un lead ya
+ * calificado, se usa su nombre en vez del número.
+ */
+async function leadNamesByPhone(): Promise<Map<string, string>> {
+  const rows = await db.query<{ item_name: string; telefono: string | null }>(
+    `SELECT item_name, telefono FROM lead_analyses WHERE telefono IS NOT NULL`
+  );
+  const map = new Map<string, string>();
+  for (const r of rows) {
+    const key = normPhone(r.telefono);
+    if (key.length >= 7 && !map.has(key)) map.set(key, r.item_name);
+  }
+  return map;
+}
+
+/** Prospecto a mostrar: nombre del lead si el que teníamos era solo el teléfono. */
+export function resolveProspecto(itemName: string, telefono: string | null | undefined, leadNames: Map<string, string>): string {
+  const base = prospecto(itemName);
+  if (telefono && looksLikePhone(base)) {
+    const nombre = leadNames.get(normPhone(telefono));
+    if (nombre) return nombre;
+  }
+  return base;
+}
+
 function isoUtc(ts: string | null): string | null {
   if (!ts) return null;
   return ts.includes("T") ? ts : ts.replace(" ", "T") + "Z";
@@ -53,7 +91,7 @@ async function listAnalyzedRows(): Promise<AnalyzedRow[]> {
   );
 }
 
-function toListItem(row: AnalyzedRow) {
+function toListItem(row: AnalyzedRow, leadNames: Map<string, string>) {
   const { item_id: itemId, item_name: itemName } = row;
   let call: CallIntelligenceOutput;
   try {
@@ -75,7 +113,7 @@ function toListItem(row: AnalyzedRow) {
   return {
     itemId,
     idLlamada: `#${itemId}`,
-    prospecto: prospecto(itemName),
+    prospecto: resolveProspecto(itemName, call.telefono, leadNames),
     vendedor: call.vendedorNombre ?? null,
     fecha: isoUtc(row.analyzed_at),
     sentimiento: call.sentimiento ?? null,
@@ -99,8 +137,9 @@ callsRouter.get("/analyzed", async (req, res) => {
   try {
     const Q = req.query as Record<string, string | undefined>;
     const phone = normPhone(Q.phone);
+    const leadNames = await leadNamesByPhone();
     let items = (await listAnalyzedRows())
-      .map(toListItem)
+      .map((r) => toListItem(r, leadNames))
       .filter((x): x is NonNullable<typeof x> => x !== null);
     if (phone.length >= 7) items = items.filter((i) => normPhone(i.telefono) === phone);
 
@@ -172,6 +211,7 @@ callsRouter.get("/biblioteca", async (req, res) => {
         ORDER BY COALESCE(global_score, sandler_score, 0) DESC`,
       [min]
     );
+    const leadNames = await leadNamesByPhone();
     const mejores = [];
     for (const row of rows) {
       let call: CallIntelligenceOutput;
@@ -180,7 +220,7 @@ callsRouter.get("/biblioteca", async (req, res) => {
       if (score < min) continue;
       mejores.push({
         itemId: row.item_id,
-        prospecto: prospecto(row.item_name),
+        prospecto: resolveProspecto(row.item_name, call.telefono, leadNames),
         vendedor: call.vendedorNombre ?? null,
         fecha: isoUtc(row.analyzed_at),
         globalScore: Math.round(score),
@@ -232,10 +272,11 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
       }
     }
 
+    const leadNames = await leadNamesByPhone();
     res.json({
       itemId,
       idLlamada: `#${itemId}`,
-      prospecto: prospecto(row.item_name),
+      prospecto: resolveProspecto(row.item_name, call.telefono, leadNames),
       itemName: row.item_name,
       fecha: isoUtc(row.analyzed_at),
       call

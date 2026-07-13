@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Compass, Phone, RefreshCw } from "lucide-react";
+import { Compass, Phone, RefreshCw, ExternalLink } from "lucide-react";
 import { api } from "../lib/api";
 import type { AnalyzedCallListItem, AnalyzedCallsResponse, Banda } from "../types";
 
@@ -24,6 +24,16 @@ const SENT_CHIP: Record<string, string> = {
   negativo: "bg-danger/10 text-danger"
 };
 const SENT_LABEL: Record<string, string> = { positivo: "Positivo", neutro: "Neutro", negativo: "Negativo" };
+
+// Deep link a la llamada en el dashboard de Aircall. Solo aplica a llamadas
+// ingeridas por ID de Aircall (itemId = "aircall-<id>"); las de transcripción
+// pegada ("call-<hash>") o por URL ("url-<hash>") no tienen equivalente en
+// Aircall. Patrón de URL verificado con el equipo; si Aircall lo cambia,
+// ajustar aquí (un solo lugar).
+function aircallCallUrl(itemId: string): string | null {
+  const m = itemId.match(/^aircall-(\d+)$/);
+  return m ? `https://dashboard.aircall.io/calls/${m[1]}` : null;
+}
 
 function fmt(iso?: string | null) {
   if (!iso) return "—";
@@ -403,14 +413,37 @@ export function CallIntelligenceList() {
 
         {!loading &&
           !error &&
-          filtered.map((c: AnalyzedCallListItem) => (
-            <button
-              key={c.itemId}
-              onClick={() => navigate(`/call-intelligence/${c.itemId}`)}
-              className="grid w-full grid-cols-[1fr_1.4fr_1fr_1.1fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
-            >
-              <div className="font-mono text-xs text-accent">{c.idLlamada}</div>
-              <div className="truncate font-medium">{c.prospecto}</div>
+          filtered.map((c: AnalyzedCallListItem) => {
+            const aircallUrl = aircallCallUrl(c.itemId);
+            return (
+              <div
+                key={c.itemId}
+                role="button"
+                tabIndex={0}
+                onClick={() => navigate(`/call-intelligence/${c.itemId}`)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    navigate(`/call-intelligence/${c.itemId}`);
+                  }
+                }}
+                className="grid w-full cursor-pointer grid-cols-[1fr_1.4fr_1fr_1.1fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
+              >
+                {aircallUrl ? (
+                  <a
+                    href={aircallUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Abrir la llamada en Aircall (pestaña nueva)"
+                    className="inline-flex w-fit items-center gap-1 font-mono text-xs text-accent hover:underline"
+                  >
+                    {c.idLlamada} <ExternalLink size={11} className="shrink-0" />
+                  </a>
+                ) : (
+                  <div className="font-mono text-xs text-accent">{c.idLlamada}</div>
+                )}
+                <div className="truncate font-medium">{c.prospecto}</div>
               <div className="truncate text-xs text-text-muted">{c.vendedor ?? "—"}</div>
               <div className="text-xs text-text-muted">{fmt(c.fecha)}</div>
               <ScoreBar score={c.sandlerScore} banda={c.sandlerBanda} />
@@ -432,8 +465,9 @@ export function CallIntelligenceList() {
                   <span className="text-text-muted">—</span>
                 )}
               </div>
-            </button>
-          ))}
+              </div>
+            );
+          })}
       </div>
 
       {!loading && !error && filtered.length > 0 && (

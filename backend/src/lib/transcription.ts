@@ -30,14 +30,24 @@ interface DeepgramUtterance {
   transcript?: string;
 }
 
-/** Etiquetas por hablante según quién contesta primero (ver cabecera). */
-function speakerLabels(utterances: DeepgramUtterance[], direction?: string | null): Map<number, string> {
-  const orden: number[] = [];
+/**
+ * Etiqueta utterances diarizadas como Vendedor/Cliente (heurística de quién
+ * CONTESTA primero según la dirección de la llamada) o "Hablante N" si no se
+ * puede determinar. Compartida entre Deepgram (aquí) y Aircall AI
+ * (`lib/aircall.ts`) para no repetir la lógica — y para que NUNCA se
+ * cuele un "?" cuando el hablante no viene identificado (antes ocurría en
+ * el fallback de Aircall AI, que usaba el id crudo sin esta heurística).
+ */
+export function labelUtterances(
+  utterances: { speaker?: string | number | null; text?: string | null }[],
+  direction?: string | null
+): string {
+  const orden: (string | number)[] = [];
   for (const u of utterances) {
-    const s = u.speaker ?? 0;
+    const s = u.speaker ?? "u";
     if (!orden.includes(s)) orden.push(s);
   }
-  const labels = new Map<number, string>();
+  const labels = new Map<string | number, string>();
   if (orden.length === 2 && (direction === "inbound" || direction === "outbound")) {
     // Saliente: contesta el cliente. Entrante: contesta el vendedor.
     const primero = direction === "outbound" ? "Cliente" : "Vendedor";
@@ -45,24 +55,26 @@ function speakerLabels(utterances: DeepgramUtterance[], direction?: string | nul
     labels.set(orden[0], primero);
     labels.set(orden[1], segundo);
   } else {
-    orden.forEach((s, i) => labels.set(s, `Hablante ${i + 1}`));
+    orden.forEach((s, i) => labels.set(s, orden.length > 1 ? `Hablante ${i + 1}` : "Hablante"));
   }
-  return labels;
-}
-
-/** Une utterances consecutivas del mismo hablante en una sola línea. */
-function formatUtterances(utterances: DeepgramUtterance[], direction?: string | null): string {
-  const labels = speakerLabels(utterances, direction);
-  const lines: { speaker: number; text: string }[] = [];
+  const lines: { speaker: string | number; text: string }[] = [];
   for (const u of utterances) {
-    const text = u.transcript?.trim();
+    const text = u.text?.trim();
     if (!text) continue;
-    const speaker = u.speaker ?? 0;
+    const speaker = u.speaker ?? "u";
     const last = lines[lines.length - 1];
     if (last && last.speaker === speaker) last.text += ` ${text}`;
     else lines.push({ speaker, text });
   }
   return lines.map((l) => `${labels.get(l.speaker) ?? "Hablante"}: ${l.text}`).join("\n");
+}
+
+/** Une utterances consecutivas del mismo hablante en una sola línea. */
+function formatUtterances(utterances: DeepgramUtterance[], direction?: string | null): string {
+  return labelUtterances(
+    utterances.map((u) => ({ speaker: u.speaker, text: u.transcript })),
+    direction
+  );
 }
 
 /**

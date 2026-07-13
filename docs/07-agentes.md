@@ -128,3 +128,11 @@ usa una función heurística (`mockFn`) sin red.
 | NBA (alta prio) | `requiere_atencion` |
 
 Todas requieren su ID real en `MONDAY_COLUMN_MAP` para escribirse en producción.
+
+---
+
+> **Nota:** el módulo **Entrenamiento** (LMS, pestaña `/entrenamiento`) **no es
+> un agente** — es contenido estático (`routes/training.ts`) sin IA de por
+> medio, que sí lee `call_analyses` para recomendar lecciones por la etapa
+> Sandler más débil real del vendedor. Ver [04 · Flujo 3](04-arquitectura.md#flujo-3--entrenamiento-lms-y-su-lazo-con-coaching)
+> y [08 · Modelo de datos](08-modelo-datos.md).

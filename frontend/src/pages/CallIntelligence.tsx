@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone } from "lucide-react";
+import { ArrowLeft, Phone, ExternalLink } from "lucide-react";
 import { api } from "../lib/api";
 import { CallAnalysisTabs } from "../components/CallAnalysisTabs";
 import type { AnalyzedCallDetail } from "../types";
@@ -9,6 +9,13 @@ import type { AnalyzedCallDetail } from "../types";
 //  Call Intelligence — detalle de una llamada (EN VIVO).
 //  Reutiliza <CallAnalysisTabs/> (Llamada/Vendedor/Sandler/Challenger/Analiticas).
 // ===========================================================================
+
+// Deep link a la llamada en el dashboard de Aircall (ver mismo helper en
+// CallIntelligenceList.tsx — solo aplica a itemId "aircall-<id>").
+function aircallCallUrl(itemId: string): string | null {
+  const m = itemId.match(/^aircall-(\d+)$/);
+  return m ? `https://dashboard.aircall.io/calls/${m[1]}` : null;
+}
 
 function fmt(iso?: string | null) {
   if (!iso) return "—";
@@ -45,7 +52,22 @@ export function CallIntelligence() {
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-2 text-white"><Phone size={20} /></div>
             <div>
               <h1 className="text-lg font-bold">{data.prospecto}</h1>
-              <p className="text-sm text-text-muted"><span className="font-mono text-accent">{data.idLlamada}</span> · {fmt(data.fecha)}</p>
+              <p className="text-sm text-text-muted">
+                {aircallCallUrl(data.itemId) ? (
+                  <a
+                    href={aircallCallUrl(data.itemId)!}
+                    target="_blank"
+                    rel="noreferrer"
+                    title="Abrir la llamada en Aircall (pestaña nueva)"
+                    className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
+                  >
+                    {data.idLlamada} <ExternalLink size={11} className="shrink-0" />
+                  </a>
+                ) : (
+                  <span className="font-mono text-accent">{data.idLlamada}</span>
+                )}
+                {" "}· {fmt(data.fecha)}
+              </p>
             </div>
           </div>
           <CallAnalysisTabs call={data.call} />
