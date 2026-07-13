@@ -164,6 +164,17 @@ async function processFormSubmitted(event: OrchestratorEvent): Promise<MondayWri
   };
 }
 
+// Guard de idempotencia para "lead_created": el mismo item puede llegar por
+// más de un camino casi al mismo tiempo (Prospección crea el item Y dispara el
+// evento directo; Monday detecta la creación Y llama al webhook) o repetido
+// (Monday reintenta la entrega del webhook si no responde rápido). Sin esto,
+// cada llegada relanzaba el análisis completo con IA desde cero y el ÚLTIMO en
+// terminar ganaba el guardado — pisando un análisis con datos ricos (ej. de
+// Prospección: razón social, sitio web) con uno pobre derivado de columnas de
+// Monday vacías. `leadCreatedInFlight` cubre la carrera entre llamadas
+// concurrentes; el check en `lead_analyses` cubre reintentos ya completados.
+const leadCreatedInFlight = new Set<string>();
+
 async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWriteInput> {
   const p = event.payload as Record<string, string>;
   const input: LeadEnrichmentInput = {
@@ -176,89 +187,115 @@ async function processLeadCreated(event: OrchestratorEvent): Promise<MondayWrite
     rfc: p.rfc
   };
 
-  if ((await getAgentStatus(LEAD_AGENT)) !== "active") {
+  if (leadCreatedInFlight.has(input.itemId)) {
     logActivity({
       agentId: LEAD_AGENT,
       type: "warning",
-      title: "Agente pausado — lead no calificado",
+      title: "Lead ya en proceso — evento duplicado ignorado",
+      reference: formatReference(event.item.itemId, event.item.itemName)
+    });
+    return { itemId: input.itemId, itemName: input.itemName };
+  }
+  const yaAnalizado = await db.queryOne<{ item_id: string }>(
+    `SELECT item_id FROM lead_analyses WHERE item_id = ?`,
+    [input.itemId]
+  );
+  if (yaAnalizado) {
+    logActivity({
+      agentId: LEAD_AGENT,
+      type: "info",
+      title: "Lead ya analizado — evento repetido ignorado (posible reintento del webhook)",
       reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { itemId: input.itemId, itemName: input.itemName };
   }
 
-  const start = Date.now();
-  const result = await runLeadEnrichmentAgent(input);
-
-  logActivity({
-    agentId: LEAD_AGENT,
-    type: result.duplicado ? "warning" : "success",
-    title: result.duplicado ? "Lead duplicado detectado" : "Lead calificado",
-    detail: result.resumen + (result.duplicado ? ` · Duplicado de ${result.duplicadoRef}` : ""),
-    reference: formatReference(event.item.itemId, event.item.itemName),
-    payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono, razonSocial: input.razonSocial },
-    durationMs: Date.now() - start
-  });
-
-  // Write-through a la tabla de dominio (A.3 fase 2). Nunca rompe el flujo.
+  leadCreatedInFlight.add(input.itemId);
   try {
-    await saveLeadAnalysis(input.itemId, input.itemName, result, {
-      email: input.email,
-      telefono: input.telefono,
-      rfc: input.rfc,
-      razonSocial: input.razonSocial
+    if ((await getAgentStatus(LEAD_AGENT)) !== "active") {
+      logActivity({
+        agentId: LEAD_AGENT,
+        type: "warning",
+        title: "Agente pausado — lead no calificado",
+        reference: formatReference(event.item.itemId, event.item.itemName)
+      });
+      return { itemId: input.itemId, itemName: input.itemName };
+    }
+
+    const start = Date.now();
+    const result = await runLeadEnrichmentAgent(input);
+
+    logActivity({
+      agentId: LEAD_AGENT,
+      type: result.duplicado ? "warning" : "success",
+      title: result.duplicado ? "Lead duplicado detectado" : "Lead calificado",
+      detail: result.resumen + (result.duplicado ? ` · Duplicado de ${result.duplicadoRef}` : ""),
+      reference: formatReference(event.item.itemId, event.item.itemName),
+      payload: { ...result, email: input.email, rfc: input.rfc, telefono: input.telefono, razonSocial: input.razonSocial },
+      durationMs: Date.now() - start
     });
-  } catch (err) {
-    console.error("[domain] no se pudo guardar lead_analyses:", err instanceof Error ? err.message : err);
-  }
 
-  const r = result.research;
-  const columnUpdates: Record<string, unknown> = {
-    score_lead: result.score,
-    prioridad: result.prioridad,
-    riesgo: result.riesgo,
-    perfil_empresa: result.perfilEmpresa,
-    accion_recomendada: result.accionRecomendada,
-    posible_duplicado: result.duplicado ? "Sí" : "No"
-  };
-  if (r) {
-    columnUpdates.sectores = r.sectores.join(", ");
-    columnUpdates.renta_competencia = r.rentaOtrasMarcas.detectado ? "Sí" : "No";
-    columnUpdates.contratos_gobierno = r.gobierno.tieneContratos ? "Sí" : "No";
-    if (r.necesidadVehicular) columnUpdates.necesidad_vehicular = r.necesidadVehicular;
-  }
+    // Write-through a la tabla de dominio (A.3 fase 2). Nunca rompe el flujo.
+    try {
+      await saveLeadAnalysis(input.itemId, input.itemName, result, {
+        email: input.email,
+        telefono: input.telefono,
+        rfc: input.rfc,
+        razonSocial: input.razonSocial
+      });
+    } catch (err) {
+      console.error("[domain] no se pudo guardar lead_analyses:", err instanceof Error ? err.message : err);
+    }
 
-  return {
-    itemId: input.itemId,
-    itemName: input.itemName,
-    columnUpdates,
-    comment: buildLeadComment(result)
-  };
+    const r = result.research;
+    const columnUpdates: Record<string, unknown> = {
+      score_lead: result.score,
+      prioridad: result.prioridad,
+      riesgo: result.riesgo,
+      perfil_empresa: result.perfilEmpresa,
+      accion_recomendada: result.accionRecomendada,
+      posible_duplicado: result.duplicado ? "Sí" : "No"
+    };
+    if (r) {
+      columnUpdates.sectores = r.sectores.join(", ");
+      columnUpdates.renta_competencia = r.rentaOtrasMarcas.detectado ? "Sí" : "No";
+      columnUpdates.contratos_gobierno = r.gobierno.tieneContratos ? "Sí" : "No";
+      if (r.necesidadVehicular) columnUpdates.necesidad_vehicular = r.necesidadVehicular;
+    }
+
+    return {
+      itemId: input.itemId,
+      itemName: input.itemName,
+      columnUpdates,
+      comment: buildLeadComment(result, input)
+    };
+  } finally {
+    leadCreatedInFlight.delete(input.itemId);
+  }
 }
 
-function buildLeadComment(result: import("./types.js").LeadEnrichmentOutput): string {
+/**
+ * Resumen EJECUTIVO para el comentario de Monday (aparece en "Actualizaciones").
+ * El análisis completo (desglose, playbook, preguntas de descubrimiento,
+ * investigación a fondo de la empresa, fuentes) vive en la pestaña Análisis IA
+ * del panel — este comentario apunta ahí en vez de duplicar todo el contenido.
+ */
+function buildLeadComment(
+  result: import("./types.js").LeadEnrichmentOutput,
+  input: LeadEnrichmentInput
+): string {
   const lines: string[] = [];
+  const empresa = input.razonSocial ? input.razonSocial : "Sin razón social (persona física)";
   lines.push(`🤖 Calificación de lead — Score ${result.score}/100 · prioridad ${result.prioridad} · riesgo ${result.riesgo}`);
+  lines.push(`🏢 ${empresa}`);
   lines.push(result.resumen);
-  if (result.scoreBreakdown?.length) {
-    lines.push(`\n📊 Desglose del score:\n${result.scoreBreakdown.map((f) => `- ${f.factor}: ${f.puntos}/${f.max} — ${f.justificacion}`).join("\n")}`);
-  }
-  if (result.preguntasDiscovery?.length) lines.push(`\n❓ Preguntas para la 1a llamada:\n- ${result.preguntasDiscovery.join("\n- ")}`);
-  if (result.siguientesPasos?.length) lines.push(`\n🧭 Siguientes pasos:\n- ${result.siguientesPasos.join("\n- ")}`);
-  if (result.riesgosComerciales?.length) lines.push(`\n🚩 Riesgos a vigilar:\n- ${result.riesgosComerciales.join("\n- ")}`);
+
   const r = result.research;
-  if (r) {
-    if (r.sectores?.length) lines.push(`\n🏢 Sector(es): ${r.sectores.join(", ")}`);
-    if (r.debilidades?.length) lines.push(`⚠️ Debilidades: ${r.debilidades.join("; ")}`);
-    if (r.oportunidadesMaxirent?.length) lines.push(`✅ Qué le resolvemos: ${r.oportunidadesMaxirent.join("; ")}`);
-    if (r.necesidadVehicular) lines.push(`🚚 Flota sugerida: ${r.necesidadVehicular}`);
-    if (r.rentaOtrasMarcas?.detectado)
-      lines.push(`🏁 Renta con competencia: ${r.rentaOtrasMarcas.detalle ?? (r.rentaOtrasMarcas.competidores ?? []).join(", ")}`);
-    if (r.gobierno?.tieneContratos) lines.push(`🏛️ Gobierno/licitaciones: ${r.gobierno.detalle ?? "Sí"}`);
-    if (r.argumentarioVenta?.length) lines.push(`\n💬 Argumentario:\n- ${r.argumentarioVenta.join("\n- ")}`);
-    if (r.fuentes?.length) lines.push(`\n🔗 Fuentes:\n${r.fuentes.map((f) => `- ${f.titulo}: ${f.url}`).join("\n")}`);
-    lines.push(`\n(confianza: ${r.confianza}${result.fuenteAnalisis ? ` · fuente: ${result.fuenteAnalisis}` : ""}${result.conocimientoPrevio ? " · con conocimiento previo" : ""})`);
-  }
-  lines.push(`\nAcción recomendada: ${result.accionRecomendada}`);
+  if (r?.sectores?.length) lines.push(`Sector(es): ${r.sectores.join(", ")}`);
+  if (r?.necesidadVehicular) lines.push(`🚚 Flota sugerida: ${r.necesidadVehicular}`);
+
+  lines.push(`\n⚡ Acción recomendada: ${result.accionRecomendada}`);
+  lines.push(`\n📋 Análisis completo de ${empresa} (desglose del score, playbook de venta, preguntas de descubrimiento, investigación a fondo de la empresa y fuentes) en la pestaña **Análisis IA** del panel MAXIRent.`);
   return lines.join("\n");
 }
 

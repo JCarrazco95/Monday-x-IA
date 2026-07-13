@@ -53,6 +53,15 @@ webhooksRouter.post("/monday", async (req, res) => {
   const itemName = (ev.pulseName ?? ev.itemName ?? `Item ${itemId}`) as string;
   if (!itemId) return res.status(200).json({ ignored: "sin itemId" });
 
+  // Se responde de inmediato: el análisis completo (columnas + IA + escritura
+  // a Monday) puede tardar decenas de segundos, más de lo que Monday espera
+  // para el ack del webhook. Si no se responde rápido, Monday reintenta la
+  // MISMA entrega (se vio en producción: hasta 5 reintentos de 60s para el
+  // mismo lead, cada uno relanzando otro análisis completo). La idempotencia
+  // de "lead_created" vive en el orquestador (processLeadCreated), así que
+  // reintentos duplicados llegan pero no vuelven a analizar.
+  res.status(200).json({ ok: true, recibido: true, itemId });
+
   try {
     const item = await getMondayItem(itemId);
     const cols: MondayCol[] = item?.columns ?? [];
@@ -66,15 +75,19 @@ webhooksRouter.post("/monday", async (req, res) => {
       reference: `#${itemId} · ${itemName}`
     });
 
-    const result = await handleOrchestratorEvent({
+    await handleOrchestratorEvent({
       eventType: "lead_created",
       item: { itemId, itemName },
       payload
     });
-
-    res.json({ ok: true, analizada: true, itemId, result });
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    logActivity({
+      agentId: "orchestrator",
+      type: "error",
+      title: "Webhook: no se pudo analizar el lead",
+      detail: err instanceof Error ? err.message : String(err),
+      reference: `#${itemId} · ${itemName}`
+    });
   }
 });
 
