@@ -117,8 +117,11 @@ export async function geminiResearch(opts: {
         maxOutputTokens: MAX_OUTPUT_TOKENS
       }
     }), "gemini research");
-  } catch {
-    // La búsqueda web no está disponible → conocimiento del modelo.
+  } catch (err) {
+    // La búsqueda web (Google Search grounding) falló → cae al conocimiento del
+    // modelo. Antes este catch tragaba el error en silencio; ahora queda
+    // logueado para poder diagnosticar por qué un lead sale sin investigación.
+    console.error("[geminiResearch] Google Search grounding falló, usando solo conocimiento del modelo:", err instanceof Error ? err.message : err);
     usedWeb = false;
     response = await withRetry(() => ai.models.generateContent({
       model,
@@ -145,6 +148,10 @@ export async function geminiResearch(opts: {
   const sources = Array.from(map.entries())
     .slice(0, 12)
     .map(([url, titulo]) => ({ url, titulo }));
+
+  if (usedWeb && sources.length === 0) {
+    console.warn("[geminiResearch] se pidió Google Search grounding pero no volvió ningún grounding chunk (el modelo no buscó o no encontró nada útil).");
+  }
 
   return { text, sources, usedWeb: usedWeb && sources.length > 0 };
 }

@@ -243,9 +243,15 @@ export async function runLeadEnrichmentAgent(
       researchNotes = res.text;
       webSources = res.sources;
       fuenteAnalisis = res.usedWeb ? "web" : "modelo";
-    } catch {
+    } catch (err) {
+      // No debe tumbar el análisis del lead, pero antes este catch tragaba el
+      // error sin dejar rastro — no había forma de saber por qué un lead
+      // terminaba sin investigación. Ahora queda logueado.
+      console.error(`[leadEnrichment] webResearch falló para "${input.razonSocial}":`, err instanceof Error ? err.message : err);
       researchNotes = "";
     }
+  } else {
+    console.warn(`[leadEnrichment] sin razón social para "${input.nombre}" — se omite la investigación web (regla: solo se investiga con razón social).`);
   }
 
   const aiResult = await structuredCompletion<Omit<LeadEnrichmentOutput, "duplicado" | "duplicadoRef">>({

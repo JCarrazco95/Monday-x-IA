@@ -136,14 +136,18 @@ export async function webResearch(opts: {
       ...baseParams,
       tools: [
         {
-          type: "web_search_20250305",
+          type: "web_search_20260209",
           name: "web_search",
           max_uses: opts.maxSearches ?? 5
         } as unknown as Anthropic.Tool
       ]
     }), "claude webResearch");
-  } catch {
-    // La herramienta de búsqueda web no está disponible → conocimiento del modelo
+  } catch (err) {
+    // La herramienta de búsqueda web falló (no disponible en el plan, error de
+    // la API, etc.) → cae al conocimiento del modelo. Se loguea el motivo real
+    // porque antes este catch lo tragaba en silencio y no había forma de saber
+    // por qué un lead salía con fuenteAnalisis:"modelo" en vez de "web".
+    console.error("[webResearch] la búsqueda web falló, usando solo conocimiento del modelo:", err instanceof Error ? err.message : err);
     usedWeb = false;
     response = await withRetry(() => anthropic.messages.create(baseParams), "claude webResearch (sin web)");
   }
@@ -155,6 +159,10 @@ export async function webResearch(opts: {
     .join("\n");
 
   const sources = extractSources(response.content);
+
+  if (usedWeb && sources.length === 0) {
+    console.warn("[webResearch] la herramienta de búsqueda se invocó pero no citó fuentes (el modelo decidió no buscar o no encontró nada útil).");
+  }
 
   return { text, sources, usedWeb: usedWeb && sources.length > 0 };
 }
