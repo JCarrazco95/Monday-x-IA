@@ -141,6 +141,17 @@ callsRouter.get("/analyzed", async (req, res) => {
     let items = (await listAnalyzedRows())
       .map((r) => toListItem(r, leadNames))
       .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    // Buzones de voz / llamadas no contestadas (la IA no tiene conversación que
+    // evaluar y devuelve score 0): se OCULTAN de la lista por completo, no solo
+    // de los promedios — no aportan nada a un vendedor o gerente revisando
+    // llamadas. `noEvaluables` se calcula ANTES de los demás filtros para que
+    // refleje el total oculto, no el recorte de una búsqueda concreta. El
+    // detalle (`/analyzed/:itemId`) sigue siendo accesible por link directo.
+    const totalConBuzones = items.length;
+    items = items.filter((i) => i.sandlerScore > 0);
+    const noEvaluables = totalConBuzones - items.length;
+
     if (phone.length >= 7) items = items.filter((i) => normPhone(i.telefono) === phone);
 
     // --- Filtros de búsqueda ---
@@ -174,21 +185,19 @@ callsRouter.get("/analyzed", async (req, res) => {
       items = items.filter((i) => i.temas.some((x) => norm(x).includes(t)));
     }
     const avg = (arr: number[]) => (arr.length ? Math.round(arr.reduce((s, n) => s + n, 0) / arr.length) : 0);
-    // "No evaluables": buzones de voz, audio sin conversación, transcripción
-    // inservible → la IA devuelve score 0. Se LISTAN (para visibilidad) pero se
-    // EXCLUYEN de promedios y semáforos, que miden calidad de venta real.
-    const evaluables = items.filter((i) => i.sandlerScore > 0);
-    const challengerScores = evaluables.map((i) => i.challengerScore).filter((n): n is number => n !== null);
-    const globalScores = evaluables.map((i) => i.globalScore).filter((n): n is number => n !== null);
+    // Buzones/no contestadas ya se excluyeron arriba (noEvaluables): `items`
+    // aquí ya es solo llamadas evaluables, no hace falta re-filtrar.
+    const challengerScores = items.map((i) => i.challengerScore).filter((n): n is number => n !== null);
+    const globalScores = items.map((i) => i.globalScore).filter((n): n is number => n !== null);
     res.json({
       stats: {
         total: items.length,
-        noEvaluables: items.length - evaluables.length,
-        sandlerPromedio: avg(evaluables.map((i) => i.sandlerScore)),
+        noEvaluables,
+        sandlerPromedio: avg(items.map((i) => i.sandlerScore)),
         challengerPromedio: avg(challengerScores),
         globalPromedio: avg(globalScores),
-        verdes: evaluables.filter((i) => (i.globalBanda ?? i.challengerBanda) === "verde").length,
-        rojas: evaluables.filter((i) => (i.globalBanda ?? i.challengerBanda) === "rojo").length
+        verdes: items.filter((i) => (i.globalBanda ?? i.challengerBanda) === "verde").length,
+        rojas: items.filter((i) => (i.globalBanda ?? i.challengerBanda) === "rojo").length
       },
       calls: items
     });
