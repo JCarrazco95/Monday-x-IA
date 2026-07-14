@@ -194,11 +194,13 @@ export const api = {
     }>(`/calls/sync-aircall-status`),
 
   // Actividad reciente (contestadas y no) directo de Aircall, sin analizar.
+  // `evaluable`: true = aparece en /analyzed; false = analizada pero sin
+  // conversación real (oculta a propósito); null = aún no se analiza.
   getCallActivity: (since?: string) =>
     request<{
       enabled: boolean;
       total: number;
-      calls: { itemId: string; telefono: string | null; agente: string | null; direccion: string; fecha: string | null; duracionSeg: number; contestada: boolean; analizada: boolean }[];
+      calls: { itemId: string; telefono: string | null; agente: string | null; direccion: string; fecha: string | null; duracionSeg: number; contestada: boolean; analizada: boolean; evaluable: boolean | null }[];
     }>(`/calls/actividad${since ? `?since=${encodeURIComponent(since)}` : ""}`),
 
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).

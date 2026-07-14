@@ -375,8 +375,8 @@ export function CallIntelligenceList() {
                   {activityFiltered.map((r) => (
                     <tr
                       key={r.itemId}
-                      onClick={() => r.analizada && navigate(`/call-intelligence/${r.itemId}`)}
-                      className={`border-b border-border/50 last:border-0 ${r.analizada ? "cursor-pointer hover:bg-black/[0.02]" : ""}`}
+                      onClick={() => r.evaluable === true && navigate(`/call-intelligence/${r.itemId}`)}
+                      className={`border-b border-border/50 last:border-0 ${r.evaluable === true ? "cursor-pointer hover:bg-black/[0.02]" : ""}`}
                     >
                       <td className="py-1.5 text-text-muted">{fmt(r.fecha)}</td>
                       <td className="py-1.5">{r.telefono ?? "—"}</td>
@@ -384,8 +384,15 @@ export function CallIntelligenceList() {
                       <td className="py-1.5">
                         {!r.contestada ? (
                           <span className="rounded-full bg-border px-2 py-0.5 text-[10px] font-medium text-text-muted">No contestada</span>
-                        ) : r.analizada ? (
+                        ) : r.evaluable === true ? (
                           <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">Analizada</span>
+                        ) : r.evaluable === false ? (
+                          <span
+                            title="La IA la analizó pero no hubo conversación real (buzón de voz, colgada, etc.) — no aparece en la lista principal"
+                            className="rounded-full bg-border px-2 py-0.5 text-[10px] font-medium text-text-muted"
+                          >
+                            Sin conversación
+                          </span>
                         ) : (
                           <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">Pendiente</span>
                         )}

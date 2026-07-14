@@ -367,29 +367,41 @@ callsRouter.get("/actividad", async (req, res) => {
     const calls = await listRecentCalls({ sinceUnix });
 
     const itemIds = calls.map((c) => `aircall-${c.id}`);
-    const analizadas = new Set<string>();
+    // sandler_score > 0 distingue una llamada con conversación real de una que
+    // Aircall marca "contestada" (la línea se levantó) pero la IA determinó
+    // que no hubo interacción real (buzón de voz, colgada de inmediato, etc.)
+    // — esas quedan analizadas pero OCULTAS de la lista principal a propósito
+    // (ver /analyzed). Sin distinguirlas aquí, este panel decía "Analizada"
+    // para llamadas que luego no aparecían abajo, generando confusión.
+    const evaluable = new Map<string, boolean>();
     if (itemIds.length) {
       const placeholders = itemIds.map(() => "?").join(",");
-      const rows = await db.query<{ item_id: string }>(
-        `SELECT item_id FROM call_analyses WHERE item_id IN (${placeholders})`,
+      const rows = await db.query<{ item_id: string; sandler_score: number | null }>(
+        `SELECT item_id, sandler_score FROM call_analyses WHERE item_id IN (${placeholders})`,
         itemIds
       );
-      rows.forEach((r) => analizadas.add(r.item_id));
+      rows.forEach((r) => evaluable.set(r.item_id, (r.sandler_score ?? 0) > 0));
     }
 
     res.json({
       enabled: true,
       total: calls.length,
-      calls: calls.map((c) => ({
-        itemId: `aircall-${c.id}`,
-        telefono: c.numero,
-        agente: c.usuario,
-        direccion: c.direction,
-        fecha: c.startedAt,
-        duracionSeg: c.durationSec,
-        contestada: c.answered,
-        analizada: analizadas.has(`aircall-${c.id}`)
-      }))
+      calls: calls.map((c) => {
+        const itemId = `aircall-${c.id}`;
+        return {
+          itemId,
+          telefono: c.numero,
+          agente: c.usuario,
+          direccion: c.direction,
+          fecha: c.startedAt,
+          duracionSeg: c.durationSec,
+          contestada: c.answered,
+          analizada: evaluable.has(itemId),
+          // true = aparece en la lista principal; false = analizada pero sin
+          // conversación real (oculta); null = aún no se analiza.
+          evaluable: evaluable.has(itemId) ? evaluable.get(itemId)! : null
+        };
+      })
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
