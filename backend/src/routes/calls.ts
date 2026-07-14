@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { listCallsByPhone, aircallEnabled, getAircallCall } from "../lib/aircall.js";
+import { listCallsByPhone, aircallEnabled, getAircallCall, getAircallTranscriptRaw } from "../lib/aircall.js";
 import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
 import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
@@ -291,6 +291,17 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
       fecha: isoUtc(row.analyzed_at),
       call
     });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// GET /api/calls/aircall-debug/:callId/transcription -> DIAGNÓSTICO temporal:
+//   JSON crudo de Aircall AI para inspeccionar el formato real de "utterances"
+//   (se sospecha que el parseo asume un campo que Aircall ya no usa).
+callsRouter.get("/aircall-debug/:callId/transcription", async (req, res) => {
+  try {
+    res.json(await getAircallTranscriptRaw(req.params.callId));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
