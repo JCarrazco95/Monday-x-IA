@@ -97,6 +97,52 @@ export function CallIntelligenceList() {
   const [ingesting, setIngesting] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Actividad reciente de Aircall (contestadas y no) — directo de la API, sin
+  // depender del tablero de llamadas en Monday (desactualizado desde marzo).
+  const [activity, setActivity] = useState<Awaited<ReturnType<typeof api.getCallActivity>> | null>(null);
+  const [activityFilter, setActivityFilter] = useState<"todas" | "contestadas" | "no_contestadas">("todas");
+  const [syncingAircall, setSyncingAircall] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+
+  const loadActivity = () => { api.getCallActivity().then(setActivity).catch(() => setActivity(null)); };
+  useEffect(loadActivity, []);
+
+  async function handleSyncAircall() {
+    setSyncingAircall(true);
+    setSyncMsg(null);
+    try {
+      await api.syncAircall();
+      for (;;) {
+        const s = await api.getAircallSyncStatus();
+        if (!s.running) {
+          if (s.error) setSyncMsg(`Error: ${s.error}`);
+          else if (s.result) {
+            setSyncMsg(
+              s.result.analizadas > 0
+                ? `✓ ${s.result.analizadas} llamada(s) nueva(s) analizada(s) (${s.result.noContestadas} no contestadas, ${s.result.yaAnalizadas} ya estaban).`
+                : `Sin llamadas nuevas por analizar de ${s.result.leidas} encontradas (${s.result.noContestadas} no contestadas, ${s.result.yaAnalizadas} ya estaban).`
+            );
+          }
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      load();
+      loadActivity();
+    } catch (e) {
+      setSyncMsg(e instanceof Error ? e.message : "Error al sincronizar.");
+    } finally {
+      setSyncingAircall(false);
+    }
+  }
+
+  const activityFiltered = useMemo(() => {
+    const rows = activity?.calls ?? [];
+    if (activityFilter === "contestadas") return rows.filter((r) => r.contestada);
+    if (activityFilter === "no_contestadas") return rows.filter((r) => !r.contestada);
+    return rows;
+  }, [activity, activityFilter]);
+
   const load = () => {
     setLoading(true);
     api
@@ -278,6 +324,80 @@ export function CallIntelligenceList() {
           </div>
         )}
       </div>
+
+      {/* Actividad reciente de Aircall (contestadas y no) — directo de la API,
+          no del tablero de Monday (desactualizado desde marzo). */}
+      {activity?.enabled && (
+        <div className="mb-5 rounded-2xl border border-border bg-surface p-4">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-text">
+              <Phone size={16} className="text-accent" /> Actividad de llamadas (últimas 48h)
+            </div>
+            <span className="text-xs text-text-muted">{activity.total} encontradas</span>
+            <div className="ml-auto flex items-center gap-2">
+              <select
+                value={activityFilter}
+                onChange={(e) => setActivityFilter(e.target.value as typeof activityFilter)}
+                className="h-8 rounded-lg border border-border bg-bg px-2 text-xs focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="todas">Todas</option>
+                <option value="contestadas">Contestadas</option>
+                <option value="no_contestadas">No contestadas</option>
+              </select>
+              <button
+                onClick={handleSyncAircall}
+                disabled={syncingAircall}
+                title="Trae y analiza las llamadas nuevas directo de Aircall (sin esperar al cron)"
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-60"
+              >
+                <RefreshCw size={12} className={syncingAircall ? "animate-spin" : ""} />
+                {syncingAircall ? "Sincronizando…" : "Sincronizar ahora"}
+              </button>
+            </div>
+          </div>
+
+          {syncMsg && <div className="mb-2 rounded-lg bg-accent/[0.06] px-3 py-1.5 text-xs text-text">{syncMsg}</div>}
+
+          {activityFiltered.length === 0 ? (
+            <p className="py-4 text-center text-xs text-text-muted">Sin llamadas en este filtro.</p>
+          ) : (
+            <div className="max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-surface text-text-muted">
+                  <tr className="border-b border-border">
+                    <th className="py-1.5 text-left font-medium">Hora</th>
+                    <th className="py-1.5 text-left font-medium">Teléfono</th>
+                    <th className="py-1.5 text-left font-medium">Agente</th>
+                    <th className="py-1.5 text-left font-medium">Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activityFiltered.map((r) => (
+                    <tr
+                      key={r.itemId}
+                      onClick={() => r.analizada && navigate(`/call-intelligence/${r.itemId}`)}
+                      className={`border-b border-border/50 last:border-0 ${r.analizada ? "cursor-pointer hover:bg-black/[0.02]" : ""}`}
+                    >
+                      <td className="py-1.5 text-text-muted">{fmt(r.fecha)}</td>
+                      <td className="py-1.5">{r.telefono ?? "—"}</td>
+                      <td className="py-1.5 text-text-muted">{r.agente ?? "—"}</td>
+                      <td className="py-1.5">
+                        {!r.contestada ? (
+                          <span className="rounded-full bg-border px-2 py-0.5 text-[10px] font-medium text-text-muted">No contestada</span>
+                        ) : r.analizada ? (
+                          <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">Analizada</span>
+                        ) : (
+                          <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">Pendiente</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="mb-5 grid grid-cols-2 gap-4 lg:grid-cols-5">
         <StatCard label="Llamadas analizadas" value={s?.total ?? 0} sub="ultimos analisis" />

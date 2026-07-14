@@ -69,6 +69,50 @@ export async function listCallsByPhone(phone?: string | null): Promise<CallRecor
   }
 }
 
+/**
+ * Lista TODAS las llamadas de la cuenta desde `sinceUnix` (paginado), sin
+ * depender del tablero de Aircall en Monday — que se dejó de actualizar
+ * (visto en producción: sin items nuevos desde marzo, aunque sí hay llamadas
+ * reales todos los días). La API de Aircall es la fuente de verdad; el
+ * tablero de Monday es solo un espejo de una integración de terceros que
+ * puede fallar sin que nos enteremos.
+ */
+export async function listRecentCalls(opts: { sinceUnix: number; maxPages?: number }): Promise<CallRecord[]> {
+  if (!AIRCALL_ENABLED) return [];
+  const auth = "Basic " + Buffer.from(`${AIRCALL_API_ID}:${AIRCALL_API_TOKEN}`).toString("base64");
+  const maxPages = opts.maxPages ?? 10;
+  const out: CallRecord[] = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    const url = `${AIRCALL_BASE}/calls?from=${opts.sinceUnix}&order=desc&per_page=50&page=${page}`;
+    try {
+      const res = await fetch(url, {
+        headers: { Authorization: auth, Accept: "application/json" },
+        signal: AbortSignal.timeout(AIRCALL_TIMEOUT_MS)
+      });
+      if (!res.ok) break;
+      const json = (await res.json()) as { calls?: AircallCall[]; meta?: { next_page_link?: string | null } };
+      const calls = json.calls ?? [];
+      if (!calls.length) break;
+      out.push(
+        ...calls.map((c) => ({
+          id: String(c.id ?? ""),
+          direction: c.direction ?? "outbound",
+          answered: Boolean(c.answered_at) || c.status === "answered" || (c.duration ?? 0) > 0,
+          startedAt: c.started_at ? new Date(c.started_at * 1000).toISOString() : null,
+          durationSec: c.duration ?? 0,
+          numero: c.raw_digits ?? null,
+          usuario: c.user?.name ?? null
+        }))
+      );
+      if (!json.meta?.next_page_link) break;
+    } catch {
+      break;
+    }
+  }
+  return out;
+}
+
 // ----- Ingesta de una llamada concreta (para el webhook de Aircall) -----
 export interface AircallCallDetail {
   id: string;

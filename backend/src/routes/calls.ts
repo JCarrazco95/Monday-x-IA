@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { listCallsByPhone, aircallEnabled, getAircallCall } from "../lib/aircall.js";
-import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
+import { listCallsByPhone, aircallEnabled, getAircallCall, listRecentCalls } from "../lib/aircall.js";
+import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard, syncAircallDirect } from "../lib/aircallIngest.js";
 import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
 
@@ -353,6 +353,49 @@ callsRouter.get("/board", async (_req, res) => {
   }
 });
 
+// GET /api/calls/actividad[?since=ISO] -> TODAS las llamadas (contestadas y no)
+//   directo de la API de Aircall, sin analizar ni gastar IA — solo lectura.
+//   Permite ver qué pasó aunque una llamada no se haya analizado (no
+//   contestada, o aún pendiente). Sin ?since, mira las últimas 48h.
+callsRouter.get("/actividad", async (req, res) => {
+  try {
+    if (!aircallEnabled) {
+      return res.json({ enabled: false, total: 0, calls: [] });
+    }
+    const since = typeof req.query.since === "string" && req.query.since.trim() ? req.query.since.trim() : null;
+    const sinceUnix = since ? Math.floor(new Date(since).getTime() / 1000) : Math.floor(Date.now() / 1000) - 48 * 3600;
+    const calls = await listRecentCalls({ sinceUnix });
+
+    const itemIds = calls.map((c) => `aircall-${c.id}`);
+    const analizadas = new Set<string>();
+    if (itemIds.length) {
+      const placeholders = itemIds.map(() => "?").join(",");
+      const rows = await db.query<{ item_id: string }>(
+        `SELECT item_id FROM call_analyses WHERE item_id IN (${placeholders})`,
+        itemIds
+      );
+      rows.forEach((r) => analizadas.add(r.item_id));
+    }
+
+    res.json({
+      enabled: true,
+      total: calls.length,
+      calls: calls.map((c) => ({
+        itemId: `aircall-${c.id}`,
+        telefono: c.numero,
+        agente: c.usuario,
+        direccion: c.direction,
+        fecha: c.startedAt,
+        duracionSeg: c.durationSec,
+        contestada: c.answered,
+        analizada: analizadas.has(`aircall-${c.id}`)
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Sincronización del tablero de Aircall — ASÍNCRONA.
 //
@@ -400,6 +443,51 @@ callsRouter.post("/sync-board", (req, res) => {
 
 // GET /api/calls/sync-status -> estado/resultado de la última sincronización.
 callsRouter.get("/sync-status", (_req, res) => res.json(syncState));
+
+// ---------------------------------------------------------------------------
+// Sincronización DIRECTA contra la API de Aircall (no el tablero de Monday).
+// Fuente confiable: no depende de la integración nativa Aircall→Monday, que
+// dejó de recibir items nuevos hace meses sin que nadie lo notara. Mismo
+// patrón asíncrono 202 que /sync-board.
+// ---------------------------------------------------------------------------
+interface AircallSyncState {
+  running: boolean;
+  startedAt: string | null;
+  finishedAt: string | null;
+  result: Awaited<ReturnType<typeof syncAircallDirect>> | null;
+  error: string | null;
+}
+const aircallSyncState: AircallSyncState = { running: false, startedAt: null, finishedAt: null, result: null, error: null };
+
+// POST /api/calls/sync-aircall -> inicia la sincronización directa (202) o 409 si ya corre.
+//   Body opcional: { max } (tope de llamadas a analizar) y { since } (ISO, ej. "2026-07-01").
+callsRouter.post("/sync-aircall", (req, res) => {
+  const { max, since } = (req.body ?? {}) as { max?: number; since?: string };
+  if (aircallSyncState.running) {
+    return res.status(409).json({ running: true, startedAt: aircallSyncState.startedAt, error: "Ya hay una sincronización en curso." });
+  }
+  aircallSyncState.running = true;
+  aircallSyncState.startedAt = new Date().toISOString();
+  aircallSyncState.finishedAt = null;
+  aircallSyncState.result = null;
+  aircallSyncState.error = null;
+
+  void syncAircallDirect({
+    max: typeof max === "number" && max > 0 ? max : undefined,
+    sinceISO: typeof since === "string" && since.trim() ? since.trim() : undefined
+  })
+    .then((r) => { aircallSyncState.result = r; })
+    .catch((err) => { aircallSyncState.error = err instanceof Error ? err.message : String(err); })
+    .finally(() => {
+      aircallSyncState.running = false;
+      aircallSyncState.finishedAt = new Date().toISOString();
+    });
+
+  res.status(202).json({ started: true, startedAt: aircallSyncState.startedAt, status: "GET /api/calls/sync-aircall-status" });
+});
+
+// GET /api/calls/sync-aircall-status -> estado/resultado de la última sincronización directa.
+callsRouter.get("/sync-aircall-status", (_req, res) => res.json(aircallSyncState));
 
 // POST /api/calls/analyze-transcript -> analiza una transcripción YA EXISTENTE
 //   (pegada o traída de otro sistema), sin re-transcribir. Body:

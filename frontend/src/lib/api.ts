@@ -183,6 +183,24 @@ export const api = {
       result: { leidas: number; analizadas: number; yaAnalizadas: number; sinFuente: number; errores: { itemName: string; motivo: string }[] } | null;
     }>(`/calls/sync-status`),
 
+  // Sincronización DIRECTA contra la API de Aircall (no el tablero de Monday,
+  // que dejó de recibir items nuevos hace meses). Mismo patrón asíncrono 202.
+  syncAircall: (opts: { max?: number; since?: string } = {}) =>
+    request<{ started: boolean; startedAt: string }>(`/calls/sync-aircall`, { method: "POST", body: JSON.stringify(opts) }),
+  getAircallSyncStatus: () =>
+    request<{
+      running: boolean; startedAt: string | null; finishedAt: string | null; error: string | null;
+      result: { leidas: number; analizadas: number; yaAnalizadas: number; noContestadas: number; errores: { itemName: string; motivo: string }[] } | null;
+    }>(`/calls/sync-aircall-status`),
+
+  // Actividad reciente (contestadas y no) directo de Aircall, sin analizar.
+  getCallActivity: (since?: string) =>
+    request<{
+      enabled: boolean;
+      total: number;
+      calls: { itemId: string; telefono: string | null; agente: string | null; direccion: string; fecha: string | null; duracionSeg: number; contestada: boolean; analizada: boolean }[];
+    }>(`/calls/actividad${since ? `?since=${encodeURIComponent(since)}` : ""}`),
+
   // Next Best Action (seguimiento): vista previa (no escribe) y ejecución (escribe en Monday).
   getNextBestActions: () => request<NextBestActionReport>("/nba"),
   runNextBestActions: () => request<NextBestActionReport>("/nba/run", { method: "POST" }),

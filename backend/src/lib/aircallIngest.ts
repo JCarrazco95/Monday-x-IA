@@ -17,7 +17,7 @@ import { runMondayWriterAgent } from "../agents/mondayWriterAgent.js";
 import { buildCoachingComment, etapaDebilDeLlamada } from "./coachingComment.js";
 import { logActivity } from "./activityLog.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
-import { getAircallCall, getAircallTranscript, aircallEnabled } from "./aircall.js";
+import { getAircallCall, getAircallTranscript, aircallEnabled, listRecentCalls } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
 import { itemIdOf } from "./references.js";
@@ -235,6 +235,11 @@ const CALLS_SYNC_MAX = Number(process.env.CALLS_SYNC_MAX ?? 25);
 // "De aquí en adelante": solo se analizan llamadas iniciadas en/después de esta
 // fecha ISO. Configúralo (p. ej. 2026-07-03) para ignorar el histórico.
 const CALLS_SYNC_SINCE = process.env.CALLS_SYNC_SINCE;
+// Pausa entre cada llamada analizada (mismo motivo que LEADS_SYNC_DELAY_MS):
+// espaciar las llamadas a la IA para no reventar el límite por minuto del
+// proveedor cuando llegan varias llamadas juntas.
+const CALLS_SYNC_DELAY_MS = Math.max(0, Number(process.env.CALLS_SYNC_DELAY_MS ?? 3000));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** Último análisis guardado para un itemId (desde la bitácora). */
 async function latestAnalysis(itemId: string): Promise<CallIntelligenceOutput | null> {
@@ -377,6 +382,79 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
     title: "Sincronización del tablero de llamadas (Aircall)",
     detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.noContestadas} no contestadas · ${out.errores.length} con error`,
     reference: `calls-sync`
+  });
+
+  return out;
+}
+
+export interface AircallSyncResult {
+  leidas: number;
+  analizadas: number;
+  yaAnalizadas: number;
+  noContestadas: number;
+  errores: { itemName: string; motivo: string }[];
+}
+
+/**
+ * Red de seguridad REAL (reemplaza a syncCallsBoard como fuente confiable):
+ * lista las llamadas directo de la API de Aircall en vez del tablero de
+ * Monday, que dejó de recibir items nuevos hace meses sin que nadie lo
+ * notara. Analiza (2 pasadas de IA) solo las contestadas y aún no
+ * analizadas; las no contestadas se registran pero no gastan IA
+ * (ingestAircallCall ya filtra esto). `sinceISO` acota qué tan atrás mirar
+ * (ej. "2026-07-01" para ignorar todo lo previo a julio).
+ */
+export async function syncAircallDirect(opts: { max?: number; sinceISO?: string } = {}): Promise<AircallSyncResult> {
+  const out: AircallSyncResult = { leidas: 0, analizadas: 0, yaAnalizadas: 0, noContestadas: 0, errores: [] };
+  if (!aircallEnabled) {
+    throw new Error("Falta AIRCALL_API_ID/AIRCALL_API_TOKEN.");
+  }
+
+  const max = Math.max(1, opts.max ?? CALLS_SYNC_MAX);
+  const sinceISO = opts.sinceISO ?? CALLS_SYNC_SINCE;
+  // Sin corte configurado: mira las últimas 48h (suficiente para no perder
+  // llamadas entre corridas del cron, sin reprocesar meses de histórico).
+  const sinceUnix = sinceISO
+    ? Math.floor(new Date(sinceISO).getTime() / 1000)
+    : Math.floor(Date.now() / 1000) - 48 * 3600;
+
+  const calls = await listRecentCalls({ sinceUnix });
+  out.leidas = calls.length;
+  const analyzed = await analyzedCallItemIds();
+
+  let procesadas = 0;
+  for (const c of calls) {
+    if (out.analizadas >= max) break;
+    const itemId = `aircall-${c.id}`;
+    if (analyzed.has(itemId)) {
+      out.yaAnalizadas++;
+      continue;
+    }
+
+    if (procesadas > 0 && CALLS_SYNC_DELAY_MS > 0) await sleep(CALLS_SYNC_DELAY_MS);
+    procesadas++;
+
+    try {
+      const res = await ingestAircallCall(c.id);
+      if (res.analizada) {
+        out.analizadas++;
+        if (res.itemId) analyzed.add(res.itemId);
+      } else if (res.noContestada) {
+        out.noContestadas++;
+      } else {
+        out.errores.push({ itemName: c.numero ?? String(c.id), motivo: res.motivo ?? "No se pudo analizar." });
+      }
+    } catch (err) {
+      out.errores.push({ itemName: c.numero ?? String(c.id), motivo: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  logActivity({
+    agentId: "call_intelligence",
+    type: out.errores.length ? "warning" : "success",
+    title: "Sincronización directa de llamadas (API Aircall)",
+    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.noContestadas} no contestadas · ${out.errores.length} con error`,
+    reference: "calls-sync-aircall"
   });
 
   return out;

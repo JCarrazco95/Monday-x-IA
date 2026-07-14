@@ -27,9 +27,10 @@ import { initDb, dbKind, db } from "./db/index.js";
 import { seed } from "./db/seed.js";
 import { runNextBestActionAgent } from "./agents/nextBestActionAgent.js";
 import { usageSummary } from "./lib/usage.js";
-import { syncCallsBoard } from "./lib/aircallIngest.js";
-import { callsBoardConfigured, leadsBoardConfigured } from "./lib/monday.js";
+import { syncAircallDirect } from "./lib/aircallIngest.js";
+import { leadsBoardConfigured } from "./lib/monday.js";
 import { syncLeadsBoard } from "./lib/leadsSync.js";
+import { aircallEnabled } from "./lib/aircall.js";
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 4000;
@@ -148,17 +149,20 @@ function scheduleLeadsSync() {
   console.log(`   Leads sync cron: cada ${hours}h\n`);
 }
 
-// "Cron" interno para sincronizar el tablero de llamadas de Aircall: si
-// CALLS_SYNC_CRON_HOURS está definido (p. ej. 1 = cada hora, 0.5 = 30 min),
-// corre syncCallsBoard() automáticamente. Respeta CALLS_SYNC_SINCE (solo lo
-// nuevo) y CALLS_SYNC_MAX (tope por corrida). Idempotente: no re-analiza.
+// "Cron" interno para sincronizar llamadas de Aircall: si CALLS_SYNC_CRON_HOURS
+// está definido (p. ej. 1 = cada hora, 0.5 = 30 min), corre syncAircallDirect()
+// automáticamente — consulta la API de Aircall directamente en vez del tablero
+// de llamadas en Monday (esa integración nativa dejó de recibir items nuevos
+// hace meses sin que nadie lo notara; la API es la fuente de verdad). Respeta
+// CALLS_SYNC_SINCE (solo lo nuevo) y CALLS_SYNC_MAX (tope por corrida).
+// Idempotente: no re-analiza.
 function scheduleCallsSync() {
   const hours = Number(process.env.CALLS_SYNC_CRON_HOURS);
-  if (!hours || hours <= 0 || !callsBoardConfigured) return;
+  if (!hours || hours <= 0 || !aircallEnabled) return;
   const intervalMs = hours * 3_600_000;
   const tick = async () => {
     try {
-      const r = await syncCallsBoard();
+      const r = await syncAircallDirect();
       if (r.analizadas > 0) console.log(`   Calls sync: ${r.analizadas} llamada(s) nueva(s) analizada(s).`);
     } catch (err) {
       console.error("   Calls sync error:", err instanceof Error ? err.message : err);
