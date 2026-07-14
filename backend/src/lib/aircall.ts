@@ -9,8 +9,6 @@
 //  "conecta Aircall". El botón de marcar (tel:) funciona igual sin la API.
 // ===========================================================================
 
-import { labelUtterances } from "./transcription.js";
-
 const AIRCALL_BASE = process.env.AIRCALL_API_URL ?? "https://api.aircall.io/v1";
 const AIRCALL_API_ID = process.env.AIRCALL_API_ID;
 const AIRCALL_API_TOKEN = process.env.AIRCALL_API_TOKEN;
@@ -141,15 +139,29 @@ export async function getAircallTranscriptRaw(id: string | number): Promise<unkn
 }
 
 /**
- * Transcripcion de Aircall AI (si la cuenta tiene el add-on). Devuelve texto o
- * null. `direction` (de `getAircallCall`) permite etiquetar Vendedor/Cliente
- * con la misma heurística que Deepgram (`lib/transcription.ts`), en vez de
- * mostrar el `speaker_id` crudo — que caía en "?" cuando Aircall no lo trae.
+ * Etiqueta las utterances de Aircall AI usando su propio campo
+ * `participant_type` ("internal" = quien atiende, nuestro Vendedor;
+ * "external" = el cliente en la otra línea) — a diferencia de Deepgram,
+ * Aircall YA sabe quién es quién, no hace falta adivinar por orden/dirección.
+ * (Antes se asumía un campo `speaker_id` que la API real no trae — cada
+ * utterance quedaba con speaker `undefined` y todo colapsaba en un solo
+ * "Hablante", ver diagnóstico contra la API real.)
  */
-export async function getAircallTranscript(
-  id: string | number,
-  direction?: string | null
-): Promise<string | null> {
+function formatAircallUtterances(utterances: { participant_type?: string; text?: string }[]): string {
+  const lines: { label: string; text: string }[] = [];
+  for (const u of utterances) {
+    const text = u.text?.trim();
+    if (!text) continue;
+    const label = u.participant_type === "internal" ? "Vendedor" : u.participant_type === "external" ? "Cliente" : "Hablante";
+    const last = lines[lines.length - 1];
+    if (last && last.label === label) last.text += ` ${text}`;
+    else lines.push({ label, text });
+  }
+  return lines.map((l) => `${l.label}: ${l.text}`).join("\n");
+}
+
+/** Transcripcion de Aircall AI (si la cuenta tiene el add-on). Devuelve texto o null. */
+export async function getAircallTranscript(id: string | number): Promise<string | null> {
   if (!AIRCALL_ENABLED || !id) return null;
   try {
     const res = await fetch(`${AIRCALL_BASE}/calls/${id}/transcription`, {
@@ -158,16 +170,13 @@ export async function getAircallTranscript(
     });
     if (!res.ok) return null;
     const json = (await res.json()) as {
-      transcription?: { content?: { utterances?: { speaker_id?: string; text?: string }[] } | string };
+      transcription?: { content?: { utterances?: { participant_type?: string; text?: string }[] } | string };
     };
     const content = json.transcription?.content;
     if (typeof content === "string") return content;
     const utt = content?.utterances;
     if (Array.isArray(utt) && utt.length) {
-      return labelUtterances(
-        utt.map((u) => ({ speaker: u.speaker_id, text: u.text })),
-        direction
-      );
+      return formatAircallUtterances(utt);
     }
     return null;
   } catch {

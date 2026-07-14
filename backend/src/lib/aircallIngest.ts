@@ -85,10 +85,11 @@ export async function ingestAircallCall(
     };
   }
 
-  // Transcripción: override > Aircall AI > Deepgram sobre la grabación.
+  // Transcripción: override > Aircall AI (ya etiqueta Vendedor/Cliente por
+  // participant_type) > Deepgram sobre la grabación (aquí sí hace falta la
+  // dirección para adivinar quién es quién).
   let transcript: string | null = opts.transcriptOverride ?? null;
-  if (!transcript && aircallEnabled) transcript = await getAircallTranscript(callId, detail?.direction ?? null);
-  // La dirección permite etiquetar Vendedor/Cliente en la diarización.
+  if (!transcript && aircallEnabled) transcript = await getAircallTranscript(callId);
   if (!transcript) transcript = await transcribeRecording(recordingUrl, { direction: detail?.direction ?? null });
 
   const itemId = `aircall-${callId}`;
