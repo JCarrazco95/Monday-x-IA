@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
-import { listCallsByPhone, aircallEnabled } from "../lib/aircall.js";
+import { listCallsByPhone, aircallEnabled, getAircallCall } from "../lib/aircall.js";
 import { ingestAircallCall, ingestCallFromUrl, ingestCallFromTranscript, syncCallsBoard } from "../lib/aircallIngest.js";
 import { getCallsBoardItems, callsBoardConfigured } from "../lib/monday.js";
 import type { CallIntelligenceOutput } from "../agents/types.js";
@@ -291,6 +291,33 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
       fecha: isoUtc(row.analyzed_at),
       call
     });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// GET /api/calls/:itemId/audio -> URL de reproducción VIGENTE de la grabación.
+//   Aircall firma sus URLs de grabación con expiración corta (~1h) — la que
+//   se guardó al analizar sirvió para transcribir en su momento, pero ya
+//   expiró para cuando alguien la quiere escuchar después. Para llamadas
+//   "aircall-<id>" se pide una fresca a la API en cada request; para otras
+//   fuentes (URL directa) se usa la guardada tal cual.
+callsRouter.get("/:itemId/audio", async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const m = itemId.match(/^aircall-(\d+)$/);
+    if (m) {
+      const detail = await getAircallCall(m[1]);
+      if (detail?.recordingUrl) return res.json({ url: detail.recordingUrl });
+      return res.status(404).json({ error: "Aircall no devolvió una grabación para esta llamada." });
+    }
+    const row = await db.queryOne<{ payload: string }>(
+      `SELECT payload FROM call_analyses WHERE item_id = ?`,
+      [itemId]
+    );
+    const call = row ? (JSON.parse(row.payload) as CallIntelligenceOutput) : null;
+    if (call?.audioUrl) return res.json({ url: call.audioUrl });
+    res.status(404).json({ error: "Esta llamada no tiene grabación disponible." });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

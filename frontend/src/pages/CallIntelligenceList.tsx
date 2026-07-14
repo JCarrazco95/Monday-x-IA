@@ -25,15 +25,22 @@ const SENT_CHIP: Record<string, string> = {
 };
 const SENT_LABEL: Record<string, string> = { positivo: "Positivo", neutro: "Neutro", negativo: "Negativo" };
 
-// Grabación de la llamada en Aircall. Solo aplica a llamadas ingeridas por ID
-// de Aircall (itemId = "aircall-<id>"); las de transcripción pegada
-// ("call-<hash>") o por URL ("url-<hash>") no tienen equivalente en Aircall.
-// Mismo patrón que usa el backend server-side para transcribir con Deepgram
-// (aircallIngest.ts) — a diferencia del dashboard de Aircall (dashboard.aircall.io),
-// esta URL es la grabación real y no requiere sesión iniciada.
-function aircallCallUrl(itemId: string): string | null {
-  const m = itemId.match(/^aircall-(\d+)$/);
-  return m ? `https://assets.aircall.io/calls/${m[1]}/recording` : null;
+// Solo las llamadas ingeridas por ID de Aircall (itemId = "aircall-<id>")
+// tienen grabación reproducible; las de transcripción pegada ("call-<hash>")
+// o por URL ("url-<hash>") no. La URL de grabación de Aircall va firmada y
+// expira (~1h), así que no se puede precalcular: se pide fresca al backend
+// (GET /calls/:itemId/audio) en el momento del clic.
+function isAircallCall(itemId: string): boolean {
+  return /^aircall-\d+$/.test(itemId);
+}
+
+async function openRecording(itemId: string) {
+  try {
+    const { url } = await api.getCallAudioUrl(itemId);
+    window.open(url, "_blank", "noreferrer");
+  } catch {
+    window.alert("No se pudo obtener la grabación de esta llamada.");
+  }
 }
 
 function fmt(iso?: string | null) {
@@ -415,7 +422,6 @@ export function CallIntelligenceList() {
         {!loading &&
           !error &&
           filtered.map((c: AnalyzedCallListItem) => {
-            const aircallUrl = aircallCallUrl(c.itemId);
             return (
               <div
                 key={c.itemId}
@@ -430,17 +436,15 @@ export function CallIntelligenceList() {
                 }}
                 className="grid w-full cursor-pointer grid-cols-[1fr_1.4fr_1fr_1.1fr_0.9fr_0.9fr_0.9fr_0.8fr] items-center gap-2 border-b border-border px-5 py-3.5 text-left text-sm transition-colors last:border-0 hover:bg-black/[0.02]"
               >
-                {aircallUrl ? (
-                  <a
-                    href={aircallUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => e.stopPropagation()}
+                {isAircallCall(c.itemId) ? (
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); void openRecording(c.itemId); }}
                     title="Escuchar la grabación (pestaña nueva)"
                     className="inline-flex w-fit items-center gap-1 font-mono text-xs text-accent hover:underline"
                   >
                     {c.idLlamada} <ExternalLink size={11} className="shrink-0" />
-                  </a>
+                  </button>
                 ) : (
                   <div className="font-mono text-xs text-accent">{c.idLlamada}</div>
                 )}

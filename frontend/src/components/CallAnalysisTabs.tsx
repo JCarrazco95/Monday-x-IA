@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Phone, Sparkles, BarChart3, Layers, Target, User, FileText, AlertTriangle, ThumbsUp, Quote, TrendingUp } from "lucide-react";
+import { api } from "../lib/api";
 import type { CallAnalysisData, Banda, UpsellAnalysis, UpsellTipo } from "../types";
 
 // ===========================================================================
@@ -122,9 +123,17 @@ function TranscripcionCard({ transcript, audioUrl }: { transcript?: string | nul
 }
 
 // ─── LLAMADA (analisis profundo) ──
-function LlamadaView({ call }: { call: CallAnalysisData }) {
+function LlamadaView({ call, itemId }: { call: CallAnalysisData; itemId?: string }) {
   const dp = call.analisisProfundo;
-  const transcripcion = <TranscripcionCard transcript={call.transcript} audioUrl={call.audioUrl} />;
+  // Las URLs de grabación que guarda Aircall expiran (~1h) — se pide una
+  // vigente en cada visita en vez de usar la guardada en el análisis.
+  const [audioUrl, setAudioUrl] = useState<string | null | undefined>(call.audioUrl);
+  useEffect(() => {
+    setAudioUrl(call.audioUrl);
+    if (!itemId) return;
+    api.getCallAudioUrl(itemId).then((r) => setAudioUrl(r.url)).catch(() => {});
+  }, [itemId, call.audioUrl]);
+  const transcripcion = <TranscripcionCard transcript={call.transcript} audioUrl={audioUrl} />;
   const upsell = call.oportunidades ? <OportunidadesCard op={call.oportunidades} /> : null;
   if (!dp) {
     return (
@@ -428,7 +437,7 @@ const TABS = ["llamada", "vendedor", "sandler", "challenger", "analiticas"] as c
 type CallTab = typeof TABS[number];
 const TAB_LABEL: Record<CallTab, string> = { llamada: "Llamada", vendedor: "Vendedor", sandler: "Sandler", challenger: "Challenger", analiticas: "Analiticas" };
 
-export function CallAnalysisTabs({ call }: { call: CallAnalysisData }) {
+export function CallAnalysisTabs({ call, itemId }: { call: CallAnalysisData; itemId?: string }) {
   const [tab, setTab] = useState<CallTab>("llamada");
   return (
     <div>
@@ -440,7 +449,7 @@ export function CallAnalysisTabs({ call }: { call: CallAnalysisData }) {
           </button>
         ))}
       </div>
-      {tab === "llamada" && <LlamadaView call={call} />}
+      {tab === "llamada" && <LlamadaView call={call} itemId={itemId} />}
       {tab === "vendedor" && <VendedorView v={call.vendedor} />}
       {tab === "sandler" && <SandlerView call={call} />}
       {tab === "challenger" && <ChallengerView ch={call.challenger} />}

@@ -144,6 +144,8 @@ export const api = {
   // Llamadas analizadas (Sandler + Challenger) para la página Call Intelligence.
   getAnalyzedCalls: (phone?: string) => request<AnalyzedCallsResponse>(`/calls/analyzed${phone ? `?phone=${encodeURIComponent(phone)}` : ""}`),
   getAnalyzedCall: (itemId: string) => request<AnalyzedCallDetail>(`/calls/analyzed/${encodeURIComponent(itemId)}`),
+  // URL de reproducción VIGENTE de la grabación (las de Aircall expiran ~1h).
+  getCallAudioUrl: (itemId: string) => request<{ url: string }>(`/calls/${encodeURIComponent(itemId)}/audio`),
 
   // Trae una llamada de Aircall por su ID (grabación + transcripción) y la analiza.
   ingestAircallCall: (callId: string, opts: { transcript?: string; telefono?: string } = {}) =>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { ArrowLeft, Phone, ExternalLink } from "lucide-react";
+import { ArrowLeft, Phone } from "lucide-react";
 import { api } from "../lib/api";
 import { CallAnalysisTabs } from "../components/CallAnalysisTabs";
 import type { AnalyzedCallDetail } from "../types";
@@ -46,24 +46,12 @@ export function CallIntelligence() {
             <div>
               <h1 className="text-lg font-bold">{data.prospecto}</h1>
               <p className="text-sm text-text-muted">
-                {data.call.audioUrl ? (
-                  <a
-                    href={data.call.audioUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="Escuchar la grabación (pestaña nueva)"
-                    className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
-                  >
-                    {data.idLlamada} <ExternalLink size={11} className="shrink-0" />
-                  </a>
-                ) : (
-                  <span className="font-mono text-accent">{data.idLlamada}</span>
-                )}
-                {" "}· {fmt(data.fecha)}
+                <span className="font-mono text-accent">{data.idLlamada}</span>
+                {" "}· {fmt(data.fecha)} · <span className="text-text-muted">escucha la grabación abajo ↓</span>
               </p>
             </div>
           </div>
-          <CallAnalysisTabs call={data.call} />
+          <CallAnalysisTabs call={data.call} itemId={data.itemId} />
         </>
       )}
     </div>

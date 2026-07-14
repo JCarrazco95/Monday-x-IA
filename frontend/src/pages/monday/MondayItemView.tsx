@@ -300,7 +300,7 @@ function CallLog({ telefono }: { telefono?: string | null }) {
 
 const G_BAND: Record<string, string> = { verde: "text-success", amarillo: "text-warning", rojo: "text-danger" };
 
-function CallHistory({ telefono, fallback }: { telefono: string | null; fallback: CallAnalysisData | null }) {
+function CallHistory({ telefono, fallback, fallbackItemId }: { telefono: string | null; fallback: CallAnalysisData | null; fallbackItemId?: string }) {
   const [list, setList] = useState<AnalyzedCallListItem[]>([]);
   const [sel, setSel] = useState<string | null>(null);
   const [selCall, setSelCall] = useState<CallAnalysisData | null>(null);
@@ -325,7 +325,7 @@ function CallHistory({ telefono, fallback }: { telefono: string | null; fallback
   // Sin historial por telefono → usa la llamada de este item (fallback).
   if (list.length === 0) {
     return fallback
-      ? <CallAnalysisTabs call={fallback} />
+      ? <CallAnalysisTabs call={fallback} itemId={fallbackItemId} />
       : <p className="rounded-xl border border-border bg-surface p-6 text-center text-[13px] text-text-muted">Aún no hay análisis de llamada para este lead. Usa el botón “Llamar” para contactarlo.</p>;
   }
 
@@ -351,7 +351,7 @@ function CallHistory({ telefono, fallback }: { telefono: string | null; fallback
         </div>
       </div>
       {current
-        ? <CallAnalysisTabs call={current} />
+        ? <CallAnalysisTabs call={current} itemId={sel ?? undefined} />
         : <p className="rounded-xl border border-border bg-surface p-6 text-center text-[13px] text-text-muted">Cargando análisis…</p>}
     </div>
   );
@@ -583,7 +583,7 @@ export function AnalysisBody({ a }: { a: LeadAnalysis }) {
       {tab === "call" && (
       <div className="flex flex-col gap-4">
         <CallLog telefono={lead?.telefono ?? call?.telefono ?? null} />
-        <CallHistory telefono={lead?.telefono ?? call?.telefono ?? null} fallback={call} />
+        <CallHistory telefono={lead?.telefono ?? call?.telefono ?? null} fallback={call} fallbackItemId={a.itemId} />
       </div>
       )}
 
