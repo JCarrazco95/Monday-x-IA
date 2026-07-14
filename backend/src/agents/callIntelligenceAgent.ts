@@ -497,7 +497,8 @@ export async function runCallIntelligenceAgent(
     return {
       ...cached,
       vendedorNombre: cached.vendedorNombre ?? input.vendedor ?? null,
-      transcript: cached.transcript ?? input.transcript ?? null
+      transcript: cached.transcript ?? input.transcript ?? null,
+      audioUrl: cached.audioUrl ?? input.audioUrl ?? null
     };
   }
 
@@ -546,6 +547,7 @@ export async function runCallIntelligenceAgent(
     telefono: input.telefono ?? null,
     vendedorNombre: input.vendedor ?? null,
     transcript: input.transcript || null,
+    audioUrl: input.audioUrl || null,
     challenger,
     integrado,
     vendedor: coachOps.vendedor,

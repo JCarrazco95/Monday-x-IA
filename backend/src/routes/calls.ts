@@ -263,10 +263,10 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
 
     const call = JSON.parse(row.payload) as CallIntelligenceOutput;
 
-    // Llamadas analizadas ANTES de que el análisis guardara la transcripción:
-    // se recupera del evento que registró el orquestador en la bitácora
-    // (payload = OrchestratorEvent con payload.transcript). Solo lectura.
-    if (!call.transcript) {
+    // Llamadas analizadas ANTES de que el análisis guardara transcripción/audio:
+    // se recuperan del evento que registró el orquestador en la bitácora
+    // (payload = OrchestratorEvent con payload.transcript/audioUrl). Solo lectura.
+    if (!call.transcript || !call.audioUrl) {
       const evt = await db.queryOne<{ payload: string }>(
         `SELECT payload FROM logs
           WHERE agent_id = 'orchestrator' AND reference LIKE ? AND payload LIKE '%"transcript"%'
@@ -275,8 +275,9 @@ callsRouter.get("/analyzed/:itemId", async (req, res) => {
       );
       if (evt?.payload) {
         try {
-          const parsed = JSON.parse(evt.payload) as { payload?: { transcript?: string } };
-          if (parsed?.payload?.transcript) call.transcript = parsed.payload.transcript;
+          const parsed = JSON.parse(evt.payload) as { payload?: { transcript?: string; audioUrl?: string } };
+          if (!call.transcript && parsed?.payload?.transcript) call.transcript = parsed.payload.transcript;
+          if (!call.audioUrl && parsed?.payload?.audioUrl) call.audioUrl = parsed.payload.audioUrl;
         } catch { /* payload corrupto: se omite */ }
       }
     }

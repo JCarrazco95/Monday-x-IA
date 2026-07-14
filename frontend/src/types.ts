@@ -466,6 +466,8 @@ export interface CallAnalysisData {
   telefono?: string | null;
   /** Transcripción completa de la llamada (Deepgram/Aircall/pegada). */
   transcript?: string | null;
+  /** URL de la grabación (Aircall/Deepgram) para reproducirla. */
+  audioUrl?: string | null;
   sentimiento: string | null;
   probabilidadCierre: string | null;
   vehiculosMencionados: string[];

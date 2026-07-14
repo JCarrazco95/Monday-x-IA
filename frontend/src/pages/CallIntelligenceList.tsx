@@ -25,14 +25,15 @@ const SENT_CHIP: Record<string, string> = {
 };
 const SENT_LABEL: Record<string, string> = { positivo: "Positivo", neutro: "Neutro", negativo: "Negativo" };
 
-// Deep link a la llamada en el dashboard de Aircall. Solo aplica a llamadas
-// ingeridas por ID de Aircall (itemId = "aircall-<id>"); las de transcripción
-// pegada ("call-<hash>") o por URL ("url-<hash>") no tienen equivalente en
-// Aircall. Patrón de URL verificado con el equipo; si Aircall lo cambia,
-// ajustar aquí (un solo lugar).
+// Grabación de la llamada en Aircall. Solo aplica a llamadas ingeridas por ID
+// de Aircall (itemId = "aircall-<id>"); las de transcripción pegada
+// ("call-<hash>") o por URL ("url-<hash>") no tienen equivalente en Aircall.
+// Mismo patrón que usa el backend server-side para transcribir con Deepgram
+// (aircallIngest.ts) — a diferencia del dashboard de Aircall (dashboard.aircall.io),
+// esta URL es la grabación real y no requiere sesión iniciada.
 function aircallCallUrl(itemId: string): string | null {
   const m = itemId.match(/^aircall-(\d+)$/);
-  return m ? `https://dashboard.aircall.io/calls/${m[1]}` : null;
+  return m ? `https://assets.aircall.io/calls/${m[1]}/recording` : null;
 }
 
 function fmt(iso?: string | null) {
@@ -435,7 +436,7 @@ export function CallIntelligenceList() {
                     target="_blank"
                     rel="noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    title="Abrir la llamada en Aircall (pestaña nueva)"
+                    title="Escuchar la grabación (pestaña nueva)"
                     className="inline-flex w-fit items-center gap-1 font-mono text-xs text-accent hover:underline"
                   >
                     {c.idLlamada} <ExternalLink size={11} className="shrink-0" />

@@ -236,6 +236,8 @@ export interface CallIntelligenceOutput {
   telefono?: string | null;
   /** Transcripción completa de la llamada (Deepgram/Aircall/pegada) para mostrarla en el detalle. */
   transcript?: string | null;
+  /** URL de la grabación (Aircall/Deepgram) para reproducirla en el detalle. */
+  audioUrl?: string | null;
   /** Identidad del vendedor que atendió (para coaching/tendencias POR vendedor).
    *  Ojo: `vendedor` (abajo) es el ANÁLISIS de coaching; este es el NOMBRE. */
   vendedorNombre?: string | null;

@@ -10,13 +10,6 @@ import type { AnalyzedCallDetail } from "../types";
 //  Reutiliza <CallAnalysisTabs/> (Llamada/Vendedor/Sandler/Challenger/Analiticas).
 // ===========================================================================
 
-// Deep link a la llamada en el dashboard de Aircall (ver mismo helper en
-// CallIntelligenceList.tsx — solo aplica a itemId "aircall-<id>").
-function aircallCallUrl(itemId: string): string | null {
-  const m = itemId.match(/^aircall-(\d+)$/);
-  return m ? `https://dashboard.aircall.io/calls/${m[1]}` : null;
-}
-
 function fmt(iso?: string | null) {
   if (!iso) return "—";
   const d = new Date(iso);
@@ -53,12 +46,12 @@ export function CallIntelligence() {
             <div>
               <h1 className="text-lg font-bold">{data.prospecto}</h1>
               <p className="text-sm text-text-muted">
-                {aircallCallUrl(data.itemId) ? (
+                {data.call.audioUrl ? (
                   <a
-                    href={aircallCallUrl(data.itemId)!}
+                    href={data.call.audioUrl}
                     target="_blank"
                     rel="noreferrer"
-                    title="Abrir la llamada en Aircall (pestaña nueva)"
+                    title="Escuchar la grabación (pestaña nueva)"
                     className="inline-flex items-center gap-1 font-mono text-accent hover:underline"
                   >
                     {data.idLlamada} <ExternalLink size={11} className="shrink-0" />
