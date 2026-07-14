@@ -131,20 +131,33 @@ webhooksRouter.post("/aircall", async (req, res) => {
     return res.status(200).json({ ignored: `evento sin procesar: ${event || "desconocido"}` });
   }
 
+  // Se responde de inmediato: el análisis de una llamada corre 2 pasadas de IA
+  // y puede tardar bastante más de lo que Aircall espera para el ack. Además
+  // Aircall dispara este webhook varias veces por CADA llamada real (ended,
+  // hung_up, transcription_available son eventos distintos del mismo ciclo de
+  // vida) — sin responder rápido, cualquier timeout sumaba reintentos sobre
+  // esos ya-de-por-sí múltiples disparos. La idempotencia real vive en
+  // processCallRecorded (orchestratorAgent), así que llegadas duplicadas no
+  // vuelven a analizar.
+  res.status(200).json({ ok: true, recibido: true, callId });
+
   try {
     const contactoHint =
       data.contact?.name ??
       ([data.contact?.first_name, data.contact?.last_name].filter(Boolean).join(" ") || null);
 
-    const out = await ingestAircallCall(callId, {
+    await ingestAircallCall(callId, {
       numeroHint: data.raw_digits ?? null,
       contactoHint,
       recordingHint: data.recording ?? null
     });
-
-    // Sin transcripción: respondemos 200 (no reintentar) con el motivo.
-    res.status(200).json(out);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    logActivity({
+      agentId: "call_intelligence",
+      type: "error",
+      title: "Webhook Aircall: no se pudo analizar la llamada",
+      detail: err instanceof Error ? err.message : String(err),
+      reference: `#aircall-${callId}`
+    });
   }
 });

@@ -11,6 +11,7 @@ import type {
   FormAnalysisInput,
   LeadEnrichmentInput,
   CallIntelligenceInput,
+  CallIntelligenceOutput,
   MondayWriteInput
 } from "./types.js";
 
@@ -299,6 +300,17 @@ function buildLeadComment(
   return lines.join("\n");
 }
 
+// Mismo problema que "lead_created" (ver `leadCreatedInFlight`): Aircall dispara
+// el webhook varias veces por CADA llamada real (call.ended, hung_up,
+// transcription_available son eventos DISTINTOS del ciclo de vida de la misma
+// llamada, y el filtro `interesa` en webhooks.ts los acepta todos), y cada uno
+// llamaba a `ingestAircallCall` → aquí, relanzando las 2 pasadas de IA desde
+// cero. Sin este guard, una sola llamada real podía consumir 2-4x su cuota de
+// IA — visto en producción como una ráfaga de 30+ fallos "IA no disponible"
+// en 20 minutos (cuota de Gemini agotada por llamadas redundantes, no por
+// volumen real).
+const callRecordedInFlight = new Set<string>();
+
 async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWriteInput> {
   const input: CallIntelligenceInput = {
     itemId: event.item.itemId,
@@ -309,37 +321,69 @@ async function processCallRecorded(event: OrchestratorEvent): Promise<MondayWrit
     vendedor: (event.payload.vendedor as string | undefined) ?? null
   };
 
-  if ((await getAgentStatus(CALL_AGENT)) !== "active") {
+  if (callRecordedInFlight.has(input.itemId)) {
     logActivity({
       agentId: CALL_AGENT,
       type: "warning",
-      title: "Agente pausado — llamada no analizada",
+      title: "Llamada ya en proceso — evento duplicado ignorado",
+      reference: formatReference(event.item.itemId, event.item.itemName)
+    });
+    return { itemId: input.itemId, itemName: input.itemName };
+  }
+  const yaAnalizada = await db.queryOne<{ item_id: string }>(
+    `SELECT item_id FROM call_analyses WHERE item_id = ?`,
+    [input.itemId]
+  );
+  if (yaAnalizada) {
+    logActivity({
+      agentId: CALL_AGENT,
+      type: "info",
+      title: "Llamada ya analizada — evento repetido ignorado (otro evento del ciclo de vida de Aircall)",
       reference: formatReference(event.item.itemId, event.item.itemName)
     });
     return { itemId: input.itemId, itemName: input.itemName };
   }
 
-  const start = Date.now();
-  const result = await runCallIntelligenceAgent(input);
-
-  logActivity({
-    agentId: CALL_AGENT,
-    type: "success",
-    title: "Llamada analizada",
-    detail: result.resumen,
-    reference: formatReference(event.item.itemId, event.item.itemName),
-    payload: result,
-    durationMs: Date.now() - start
-  });
-
-  // Write-through a la tabla de dominio (A.3): las lecturas de Call
-  // Intelligence salen de aquí, no de reconstruir logs. Nunca rompe el flujo.
+  callRecordedInFlight.add(input.itemId);
   try {
-    await saveCallAnalysis(input.itemId, input.itemName, result);
-  } catch (err) {
-    console.error("[domain] no se pudo guardar call_analyses:", err instanceof Error ? err.message : err);
-  }
+    if ((await getAgentStatus(CALL_AGENT)) !== "active") {
+      logActivity({
+        agentId: CALL_AGENT,
+        type: "warning",
+        title: "Agente pausado — llamada no analizada",
+        reference: formatReference(event.item.itemId, event.item.itemName)
+      });
+      return { itemId: input.itemId, itemName: input.itemName };
+    }
 
+    const start = Date.now();
+    const result = await runCallIntelligenceAgent(input);
+
+    logActivity({
+      agentId: CALL_AGENT,
+      type: "success",
+      title: "Llamada analizada",
+      detail: result.resumen,
+      reference: formatReference(event.item.itemId, event.item.itemName),
+      payload: result,
+      durationMs: Date.now() - start
+    });
+
+    // Write-through a la tabla de dominio (A.3): las lecturas de Call
+    // Intelligence salen de aquí, no de reconstruir logs. Nunca rompe el flujo.
+    try {
+      await saveCallAnalysis(input.itemId, input.itemName, result);
+    } catch (err) {
+      console.error("[domain] no se pudo guardar call_analyses:", err instanceof Error ? err.message : err);
+    }
+
+    return buildCallWriteInput(input, result);
+  } finally {
+    callRecordedInFlight.delete(input.itemId);
+  }
+}
+
+function buildCallWriteInput(input: CallIntelligenceInput, result: CallIntelligenceOutput): MondayWriteInput {
   const op = result.oportunidades;
   const columnUpdates: Record<string, unknown> = {
     sentimiento_llamada: result.sentimiento,
