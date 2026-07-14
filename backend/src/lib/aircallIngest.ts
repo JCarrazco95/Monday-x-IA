@@ -20,7 +20,6 @@ import type { CallIntelligenceOutput } from "../agents/types.js";
 import { getAircallCall, getAircallTranscript, aircallEnabled, listRecentCalls } from "./aircall.js";
 import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
-import { itemIdOf } from "./references.js";
 import { db } from "../db/index.js";
 
 export interface AircallIngestResult {
@@ -292,16 +291,22 @@ async function postCoachingToBoardItem(boardItemId: string, analysisItemId: stri
   }
 }
 
-/** itemIds de llamadas ya analizadas (desde la bitácora) para no repetir. */
+/**
+ * itemIds de llamadas REALMENTE analizadas (tabla de dominio call_analyses)
+ * para no repetir. Antes esto consultaba `logs` por cualquier entrada de
+ * call_intelligence con esa referencia — pero ingestAircallCall también
+ * loguea ahí para "no contestada", "sin transcripción" y errores, sin haber
+ * completado el análisis. Con eso, cualquier llamada que fallara UNA vez
+ * (Aircall AI aún sin procesar, Deepgram caído, etc.) quedaba marcada como
+ * "ya analizada" para siempre y el sync nunca la reintentaba — visto en
+ * producción: 281 llamadas atoradas en "ya estaban" con 0 en call_analyses.
+ */
 async function analyzedCallItemIds(): Promise<Set<string>> {
   const set = new Set<string>();
   try {
-    const rows = await db.query<{ reference: string }>(
-      `SELECT DISTINCT reference FROM logs WHERE agent_id = 'call_intelligence' AND reference IS NOT NULL`,
-      []
-    );
+    const rows = await db.query<{ item_id: string }>(`SELECT item_id FROM call_analyses`, []);
     for (const r of rows) {
-      if (r.reference) set.add(itemIdOf(r.reference));
+      if (r.item_id) set.add(r.item_id);
     }
   } catch { /* noop */ }
   return set;
