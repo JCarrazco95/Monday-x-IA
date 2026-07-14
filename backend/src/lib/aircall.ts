@@ -123,21 +123,6 @@ export async function getAircallCall(id: string | number): Promise<AircallCallDe
   }
 }
 
-/** Diagnóstico: JSON crudo de la transcripción de Aircall AI, sin parsear. */
-export async function getAircallTranscriptRaw(id: string | number): Promise<unknown> {
-  if (!AIRCALL_ENABLED || !id) return { error: "Aircall no configurado o falta id" };
-  const res = await fetch(`${AIRCALL_BASE}/calls/${id}/transcription`, {
-    headers: { Authorization: authHeader(), Accept: "application/json" },
-    signal: AbortSignal.timeout(AIRCALL_TIMEOUT_MS)
-  });
-  const text = await res.text();
-  try {
-    return { status: res.status, body: JSON.parse(text) };
-  } catch {
-    return { status: res.status, body: text };
-  }
-}
-
 /**
  * Etiqueta las utterances de Aircall AI usando su propio campo
  * `participant_type` ("internal" = quien atiende, nuestro Vendedor;
