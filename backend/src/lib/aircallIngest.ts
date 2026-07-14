@@ -32,6 +32,9 @@ export interface AircallIngestResult {
   contacto?: string | null;
   /** Motivo si NO se analizó (sin credenciales, sin transcripción, etc.). */
   motivo?: string;
+  /** true si NO se analizó a propósito (buzón de voz/sin respuesta) — no es
+   *  un fallo, `syncCallsBoard` no debe intentar otra vía para esta llamada. */
+  noContestada?: boolean;
   result?: unknown;
 }
 
@@ -54,6 +57,33 @@ export async function ingestAircallCall(
   const numero = detail?.numero ?? opts.numeroHint ?? null;
   const contacto = detail?.contacto ?? opts.contactoHint ?? null;
   const recordingUrl = detail?.recordingUrl ?? opts.recordingHint ?? null;
+
+  // Buzón de voz / sin respuesta: no hay conversación real que analizar, y
+  // transcribir + correr las 2 pasadas de IA por cada una desperdicia cuota
+  // sin aportar nada al vendedor. Se omite ANTES de transcribir. Si se pasó
+  // una transcripción a mano (transcriptOverride), se respeta la intención
+  // explícita del usuario y no se filtra.
+  if (detail && !detail.answered && !opts.transcriptOverride) {
+    const itemIdNc = `aircall-${callId}`;
+    const itemNameNc = `Llamada — ${contacto ?? numero ?? `Aircall ${callId}`}`;
+    logActivity({
+      agentId: "call_intelligence",
+      type: "info",
+      title: "Llamada no contestada — se omite el análisis",
+      detail: "Buzón de voz o sin respuesta (sin answered_at en Aircall).",
+      reference: `#${itemIdNc} · ${itemNameNc}`
+    });
+    return {
+      ok: true,
+      analizada: false,
+      itemId: itemIdNc,
+      itemName: itemNameNc,
+      telefono: numero,
+      contacto,
+      motivo: "Llamada no contestada (buzón de voz / sin respuesta) — no se analiza.",
+      noContestada: true
+    };
+  }
 
   // Transcripción: override > Aircall AI > Deepgram sobre la grabación.
   let transcript: string | null = opts.transcriptOverride ?? null;
@@ -195,6 +225,7 @@ export interface CallsSyncResult {
   analizadas: number;
   yaAnalizadas: number;
   sinFuente: number;
+  noContestadas: number;
   errores: { itemName: string; motivo: string }[];
   detalle: { itemName: string; estado: string }[];
 }
@@ -271,7 +302,7 @@ async function analyzedCallItemIds(): Promise<Set<string>> {
 }
 
 export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } = {}): Promise<CallsSyncResult> {
-  const out: CallsSyncResult = { leidas: 0, analizadas: 0, yaAnalizadas: 0, sinFuente: 0, errores: [], detalle: [] };
+  const out: CallsSyncResult = { leidas: 0, analizadas: 0, yaAnalizadas: 0, sinFuente: 0, noContestadas: 0, errores: [], detalle: [] };
   if (!callsBoardConfigured) {
     throw new Error("Falta MONDAY_BOARD_ID_CALLS (tablero de llamadas de Aircall).");
   }
@@ -312,8 +343,10 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
     try {
       // 1) Por ID numérico de Aircall: trae su transcripción oficial (sin gastar Deepgram).
       let res = aircallId ? await ingestAircallCall(aircallId, { contactoHint: nombre }) : null;
-      // 2) Si no se logró y hay link a la grabación, transcribe el audio (Deepgram).
-      if ((!res || !res.analizada) && link) {
+      // 2) Si no se logró (y NO fue porque no contestaron — ahí no hay nada que
+      //    transcribir por otra vía) y hay link a la grabación, transcribe el
+      //    audio (Deepgram).
+      if ((!res || !res.analizada) && !res?.noContestada && link) {
         res = await ingestCallFromUrl({ url: link, contacto: nombre });
       }
       if (res?.analizada) {
@@ -325,6 +358,9 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
           await postCoachingToBoardItem(it.itemId, res.itemId, nombre);
         }
         out.detalle.push({ itemName: nombre, estado: "analizada" });
+      } else if (res?.noContestada) {
+        out.noContestadas++;
+        out.detalle.push({ itemName: nombre, estado: "no contestada" });
       } else {
         out.errores.push({ itemName: nombre, motivo: res?.motivo ?? "No se pudo obtener la transcripción." });
         out.detalle.push({ itemName: nombre, estado: "sin transcripción" });
@@ -338,7 +374,7 @@ export async function syncCallsBoard(opts: { max?: number; sinceISO?: string } =
     agentId: "call_intelligence",
     type: out.errores.length ? "warning" : "success",
     title: "Sincronización del tablero de llamadas (Aircall)",
-    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.errores.length} con error`,
+    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.noContestadas} no contestadas · ${out.errores.length} con error`,
     reference: `calls-sync`
   });
 

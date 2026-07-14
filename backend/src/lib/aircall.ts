@@ -81,6 +81,8 @@ export interface AircallCallDetail {
   startedAt: string | null;
   agente: string | null;
   recordingUrl: string | null;
+  /** Buzón de voz / sin respuesta si es false — no hay conversación que analizar. */
+  answered: boolean;
 }
 
 interface AircallCallFull extends AircallCall {
@@ -115,7 +117,8 @@ export async function getAircallCall(id: string | number): Promise<AircallCallDe
       durationSec: c.duration ?? 0,
       startedAt: c.started_at ? new Date(c.started_at * 1000).toISOString() : null,
       agente: c.user?.name ?? null,
-      recordingUrl: c.recording ?? null
+      recordingUrl: c.recording ?? null,
+      answered: Boolean(c.answered_at) || c.status === "answered" || (c.duration ?? 0) > 0
     };
   } catch {
     return null;
