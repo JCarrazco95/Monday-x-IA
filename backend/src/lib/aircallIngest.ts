@@ -454,11 +454,12 @@ export async function syncAircallDirect(opts: { max?: number; sinceISO?: string 
     }
   }
 
+  const muestraErrores = out.errores.slice(0, 3).map((e) => `${e.itemName}: ${e.motivo}`).join(" | ");
   logActivity({
     agentId: "call_intelligence",
     type: out.errores.length ? "warning" : "success",
     title: "Sincronización directa de llamadas (API Aircall)",
-    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.noContestadas} no contestadas · ${out.errores.length} con error`,
+    detail: `${out.leidas} leídas · ${out.analizadas} analizadas · ${out.yaAnalizadas} ya estaban · ${out.noContestadas} no contestadas · ${out.errores.length} con error${muestraErrores ? ` — ej: ${muestraErrores}` : ""}`,
     reference: "calls-sync-aircall"
   });
 
