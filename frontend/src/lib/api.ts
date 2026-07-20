@@ -128,6 +128,9 @@ export const api = {
   },
   getLeadAnalysis: (itemId: string) => request<LeadAnalysis>(`/leads/${itemId}`),
   getLeadMondayActivity: (itemId: string) => request<MondayActivity>(`/leads/${encodeURIComponent(itemId)}/monday-activity`),
+  // Borra el análisis IA de un lead (no toca el item en Monday). Vuelve a
+  // quedar elegible para un nuevo análisis.
+  deleteLeadAnalysis: (itemId: string) => request<{ deleted: boolean; itemId: string }>(`/leads/${encodeURIComponent(itemId)}`, { method: "DELETE" }),
 
   // Sync del tablero de Leads (red de seguridad del webhook nativo): asíncrono,
   // igual que el de llamadas — el POST responde 202 y el avance se consulta aparte.

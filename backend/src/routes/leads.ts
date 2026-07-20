@@ -225,6 +225,23 @@ leadsRouter.get("/:itemId", async (req, res) => {
   res.json(await buildAnalysis(row));
 });
 
+// DELETE /api/leads/:itemId → borra el análisis IA de un lead (tabla de
+//   dominio lead_analyses). No toca la bitácora (logs, auditoría) ni el item
+//   en Monday. Al borrar la fila, el lead vuelve a ser elegible para un
+//   nuevo análisis (lead_created ya no lo encuentra "ya analizado").
+leadsRouter.delete("/:itemId", async (req, res) => {
+  const { itemId } = req.params;
+  const row = await db.queryOne<{ item_id: string }>(
+    `SELECT item_id FROM lead_analyses WHERE item_id = ?`,
+    [itemId]
+  );
+  if (!row) {
+    return res.status(404).json({ error: "Lead no encontrado" });
+  }
+  await db.run(`DELETE FROM lead_analyses WHERE item_id = ?`, [itemId]);
+  res.json({ deleted: true, itemId });
+});
+
 // GET /api/leads/:itemId/monday-activity → "Actualizaciones" y "Archivos" nativos
 // del item en Monday (solo lectura; no se generan ni se suben archivos aquí).
 leadsRouter.get("/:itemId/monday-activity", async (req, res) => {

@@ -77,6 +77,19 @@ export function Leads() {
       .finally(() => setLoadingDetail(false));
   }, [selected]);
 
+  async function handleDelete(itemId: string, itemName: string) {
+    if (!window.confirm(`¿Borrar el análisis IA de "${itemName}"? El lead vuelve a quedar disponible para analizarse de nuevo. No se puede deshacer.`)) {
+      return;
+    }
+    try {
+      await api.deleteLeadAnalysis(itemId);
+      if (selected === itemId) setSelected(null);
+      await loadList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   async function handleSync() {
     setSyncing(true);
     setSyncMsg(null);
@@ -221,6 +234,7 @@ export function Leads() {
                 lead={l}
                 active={l.itemId === selected}
                 onClick={() => setSelected(l.itemId)}
+                onDelete={() => handleDelete(l.itemId, l.itemName)}
               />
             ))}
           </div>
@@ -241,19 +255,36 @@ export function Leads() {
   );
 }
 
-function LeadRow({ lead, active, onClick }: { lead: LeadSummary; active: boolean; onClick: () => void }) {
+function LeadRow({ lead, active, onClick, onDelete }: { lead: LeadSummary; active: boolean; onClick: () => void; onDelete: () => void }) {
   return (
-    <button
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
-      className={`flex flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className={`group flex cursor-pointer flex-col gap-1 rounded-lg border px-3 py-2.5 text-left transition-colors ${
         active ? "border-accent/60 bg-accent/10" : "border-border hover:bg-black/[0.03]"
       }`}
     >
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium">{lead.itemName}</span>
-        {typeof lead.score === "number" && (
-          <span className="text-sm font-semibold">{lead.score}</span>
-        )}
+        <div className="flex items-center gap-2">
+          {typeof lead.score === "number" && (
+            <span className="text-sm font-semibold">{lead.score}</span>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            title="Borrar este análisis"
+            className="rounded p-1 text-text-muted opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
+          >
+            🗑
+          </button>
+        </div>
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {lead.prioridad && (
@@ -274,7 +305,7 @@ function LeadRow({ lead, active, onClick }: { lead: LeadSummary; active: boolean
         )}
         <span className="ml-auto text-[11px] text-text-muted">{lead.estado}</span>
       </div>
-    </button>
+    </div>
   );
 }
 
