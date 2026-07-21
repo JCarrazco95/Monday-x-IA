@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
+import { mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -524,5 +525,20 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
+  }
+});
+
+// GET /api/forecast/columnas-debug -> DIAGNÓSTICO temporal: lista TODAS las
+// columnas del board de Oportunidades (id, título, tipo) para localizar la
+// columna real de "motivo de no compra" / pérdida.
+forecastRouter.get("/columnas-debug", async (_req, res) => {
+  try {
+    const data = await mondayRequest<{ boards?: Array<{ columns?: Array<{ id: string; title: string; type: string }> }> }>(
+      `query ($ids: [ID!]) { boards (ids: $ids) { columns { id title type } } }`,
+      { ids: [process.env.MONDAY_BOARD_ID_OPORTUNIDADES] }
+    );
+    res.json(data?.boards?.[0]?.columns ?? []);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
