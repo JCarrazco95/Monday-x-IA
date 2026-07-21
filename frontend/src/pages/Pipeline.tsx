@@ -71,6 +71,7 @@ export function Pipeline() {
   const [filtroGrupoC, setFiltroGrupoC] = useState("");
   const [buscarC, setBuscarC] = useState("");
   const [filtroEtapaC, setFiltroEtapaC] = useState<"" | "Ganado" | "Perdido">("");
+  const [filtroMotivoC, setFiltroMotivoC] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -131,6 +132,8 @@ export function Pipeline() {
     return base.filter((o) => {
       if (filtroGrupoC && o.grupo !== filtroGrupoC) return false;
       if (filtroEtapaC && o.etapa !== filtroEtapaC) return false;
+      // El dropdown de Monday puede traer varios motivos separados por coma.
+      if (filtroMotivoC && !(o.motivoPerdida ?? "").split(",").map((s) => s.trim()).includes(filtroMotivoC)) return false;
       if (!q) return true;
       return (
         o.itemName.toLowerCase().includes(q) ||
@@ -138,7 +141,7 @@ export function Pipeline() {
         (o.ejecutivo ?? "").toLowerCase().includes(q)
       );
     });
-  }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC]);
+  }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC, filtroMotivoC]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -409,6 +412,8 @@ export function Pipeline() {
           setFiltroGrupo={setFiltroGrupoC}
           filtroEtapa={filtroEtapaC}
           setFiltroEtapa={setFiltroEtapaC}
+          filtroMotivo={filtroMotivoC}
+          setFiltroMotivo={setFiltroMotivoC}
           buscar={buscarC}
           setBuscar={setBuscarC}
         />
@@ -418,7 +423,7 @@ export function Pipeline() {
 }
 
 function CerradasView({
-  data, loading, error, filtradas, filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, buscar, setBuscar
+  data, loading, error, filtradas, filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, filtroMotivo, setFiltroMotivo, buscar, setBuscar
 }: {
   data: ForecastCerradasReport | null;
   loading: boolean;
@@ -428,6 +433,8 @@ function CerradasView({
   setFiltroGrupo: (v: string) => void;
   filtroEtapa: "" | "Ganado" | "Perdido";
   setFiltroEtapa: (v: "" | "Ganado" | "Perdido") => void;
+  filtroMotivo: string;
+  setFiltroMotivo: (v: string) => void;
   buscar: string;
   setBuscar: (v: string) => void;
 }) {
@@ -542,22 +549,27 @@ function CerradasView({
         <div className="mt-4 rounded-xl border border-border bg-surface p-4">
           <h3 className="mb-1 text-sm font-semibold text-text">Motivos de pérdida</h3>
           <p className="mb-3 text-[11px] text-text-muted">
-            Del campo "Motivo de no compra*" en Monday, capturado por el vendedor al marcar una oportunidad como perdida.
+            Del campo "Motivo de no compra*" en Monday, capturado por el vendedor al marcar una oportunidad como perdida. Clic en un motivo filtra la tabla de abajo.
             {data.stats.perdidasSinMotivo > 0 && ` ${data.stats.perdidasSinMotivo} perdida(s) sin motivo capturado.`}
           </p>
           <div className="flex flex-col gap-2.5">
             {data.porMotivo.map((m) => {
               const max = Math.max(1, ...data.porMotivo.map((x) => x.count));
+              const activo = filtroMotivo === m.motivo;
               return (
-                <div key={m.motivo}>
+                <button
+                  key={m.motivo}
+                  onClick={() => setFiltroMotivo(activo ? "" : m.motivo)}
+                  className={`rounded-lg text-left transition-colors ${activo ? "bg-danger/[0.06]" : "hover:bg-black/[0.02]"}`}
+                >
                   <div className="mb-1 flex items-center justify-between text-[13px]">
-                    <span className="font-medium text-text">{m.motivo}</span>
+                    <span className={`font-medium ${activo ? "text-danger" : "text-text"}`}>{m.motivo}</span>
                     <span className="text-text-muted">{m.count} {m.count === 1 ? "caso" : "casos"} · {money(m.valor, moneda)}</span>
                   </div>
                   <div className="h-4 overflow-hidden rounded-md bg-black/[0.06]">
                     <div className="h-full rounded-md bg-danger transition-all" style={{ width: `${(m.count / max) * 100}%` }} />
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -594,6 +606,16 @@ function CerradasView({
               <option value="">Todos los grupos</option>
               {data.grupos.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
+            {data.porMotivo.length > 0 && (
+              <select
+                value={filtroMotivo}
+                onChange={(e) => setFiltroMotivo(e.target.value)}
+                className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+              >
+                <option value="">Todos los motivos de pérdida</option>
+                {data.porMotivo.map((m) => <option key={m.motivo} value={m.motivo}>{m.motivo} ({m.count})</option>)}
+              </select>
+            )}
           </div>
         </div>
         <div className="overflow-x-auto">
