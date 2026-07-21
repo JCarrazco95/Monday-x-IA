@@ -215,6 +215,93 @@ async function buildForecastFromMonday(now: Date) {
   };
 }
 
+// ───────────────────── Vista 2: GANADAS Y PERDIDAS (modo Monday) ─────────────────────
+//
+// getDealsBoard() ya trae TODOS los deals (el grupo del board manda sobre la
+// etapa para Ganado/Perdido, ver normalizarEtapa en mondayForecast.ts) —
+// buildForecastFromMonday solo usaba "Ganado" para 2 cifras agregadas
+// (ganadoMes/ganadoAnio) y nunca exponía la lista ni "Perdido". Esta vista
+// reutiliza esos mismos deals para el histórico de cierres reales.
+async function buildCerradas(now: Date) {
+  const deals = await getDealsBoard();
+  const cerradas = deals.filter((d) => d.etapa === "Ganado" || d.etapa === "Perdido");
+  const ganadas = cerradas.filter((d) => d.etapa === "Ganado");
+  const perdidas = cerradas.filter((d) => d.etapa === "Perdido");
+
+  const oportunidades = cerradas
+    .map((d) => {
+      const pdf = d.archivos.find((a) => a.extension === ".pdf" || a.extension === "pdf") ?? null;
+      return {
+        itemId: d.itemId,
+        itemName: d.itemName,
+        empresa: d.empresa,
+        ejecutivo: d.ejecutivo,
+        grupo: d.grupo || "Sin grupo",
+        etapa: d.etapa as "Ganado" | "Perdido",
+        valor: d.valor,
+        sinMonto: d.valor == null,
+        fechaCierreReal: d.fechaCierreReal,
+        mondayUrl: d.mondayUrl,
+        cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
+        archivos: d.archivos.length
+      };
+    })
+    .sort((a, b) => (b.fechaCierreReal ?? "").localeCompare(a.fechaCierreReal ?? ""));
+
+  const grupos = [...new Set(cerradas.map((d) => d.grupo || "Sin grupo"))];
+
+  const valorGanado = ganadas.reduce((s, d) => s + (d.valor ?? 0), 0);
+  const valorPerdido = perdidas.reduce((s, d) => s + (d.valor ?? 0), 0);
+  const totalCerradas = ganadas.length + perdidas.length;
+  const conMontoGanado = ganadas.filter((d) => d.valor != null);
+
+  // Por mes de cierre REAL (ganado vs perdido).
+  const mesMap = new Map<string, { mes: string; valorGanado: number; valorPerdido: number; countGanado: number; countPerdido: number }>();
+  for (const d of cerradas) {
+    if (!d.fechaCierreReal) continue;
+    const t = Date.parse(d.fechaCierreReal);
+    if (Number.isNaN(t)) continue;
+    const dt = new Date(t);
+    const key = monthKey(dt);
+    const cur = mesMap.get(key) ?? { mes: monthLabel(dt), valorGanado: 0, valorPerdido: 0, countGanado: 0, countPerdido: 0 };
+    if (d.etapa === "Ganado") { cur.valorGanado += d.valor ?? 0; cur.countGanado += 1; }
+    else { cur.valorPerdido += d.valor ?? 0; cur.countPerdido += 1; }
+    mesMap.set(key, cur);
+  }
+  const porMes = [...mesMap.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([, v]) => v);
+
+  // Por ejecutivo.
+  const ejecMap = new Map<string, { ejecutivo: string; ganadas: number; perdidas: number; valorGanado: number; valorPerdido: number }>();
+  for (const d of cerradas) {
+    const nombre = d.ejecutivo ?? "Sin asignar";
+    const cur = ejecMap.get(nombre) ?? { ejecutivo: nombre, ganadas: 0, perdidas: 0, valorGanado: 0, valorPerdido: 0 };
+    if (d.etapa === "Ganado") { cur.ganadas += 1; cur.valorGanado += d.valor ?? 0; }
+    else { cur.perdidas += 1; cur.valorPerdido += d.valor ?? 0; }
+    ejecMap.set(nombre, cur);
+  }
+  const porEjecutivo = [...ejecMap.values()].sort((a, b) => (b.valorGanado + b.valorPerdido) - (a.valorGanado + a.valorPerdido));
+
+  return {
+    fuente: "monday" as const,
+    grupos,
+    oportunidades,
+    supuestos: {
+      moneda: MONEDA,
+      nota: "Montos y etapas reales del board Oportunidades de Monday (grupos Ganado/Perdido). El mes usado es la fecha real de cierre, no la estimada."
+    },
+    stats: {
+      totalGanadas: ganadas.length,
+      totalPerdidas: perdidas.length,
+      valorGanado,
+      valorPerdido,
+      tasaCierre: totalCerradas ? Math.round((ganadas.length / totalCerradas) * 100) : 0,
+      ticketPromedioGanado: conMontoGanado.length ? Math.round(valorGanado / conMontoGanado.length) : 0
+    },
+    porMes,
+    porEjecutivo
+  };
+}
+
 // ──────────────────────── MODO DEMO (estimación por tablas de dominio) ────────────────────────
 
 type Etapa = "Calificado" | "Cotización" | "Negociación" | "Cierre probable" | "Descartado";
@@ -397,22 +484,45 @@ async function buildForecastEstimado(now: Date) {
   };
 }
 
+// Reusable en proceso (ej. por el Asesor Monday, sin pasar por HTTP): arma el
+// mismo reporte que sirve GET /api/forecast, live o estimado según config.
+export async function buildForecastReport(now: Date = new Date()) {
+  if (forecastMondayEnabled) {
+    // Modo live estricto: si Monday falla, se propaga el error; nunca se
+    // sustituyen los datos reales por una estimación sin avisar.
+    return buildForecastFromMonday(now);
+  }
+  return buildForecastEstimado(now);
+}
+
 // GET /api/forecast → pipeline ponderado + funnel + proyección por mes.
 forecastRouter.get("/", async (_req, res) => {
-  const now = new Date();
   try {
-    if (forecastMondayEnabled) {
-      // Modo live estricto: si Monday falla, se reporta el error; nunca se
-      // sustituyen los datos reales por una estimación sin avisar.
-      res.json(await buildForecastFromMonday(now));
-      return;
-    }
-    res.json(await buildForecastEstimado(now));
+    res.json(await buildForecastReport());
   } catch (err) {
     res.status(502).json({
       error: `No se pudo construir el forecast${forecastMondayEnabled ? " desde Monday" : ""}: ${
         err instanceof Error ? err.message : String(err)
       }`
+    });
+  }
+});
+
+// GET /api/forecast/cerradas → segunda vista: oportunidades GANADAS y PERDIDAS
+// (histórico de cierres reales, no el pipeline abierto). Solo disponible en
+// modo Monday: el modo demo (sin token) no tiene un concepto de "perdido" en
+// las tablas de dominio, solo leads/llamadas activos.
+forecastRouter.get("/cerradas", async (_req, res) => {
+  if (!forecastMondayEnabled) {
+    return res.status(501).json({
+      error: "La vista de Ganadas/Perdidas requiere datos reales de Monday (MONDAY_BOARD_ID_OPORTUNIDADES). En modo demo no hay concepto de 'perdido'."
+    });
+  }
+  try {
+    res.json(await buildCerradas(new Date()));
+  } catch (err) {
+    res.status(502).json({
+      error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
   }
 });

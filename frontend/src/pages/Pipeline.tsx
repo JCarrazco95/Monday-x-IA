@@ -4,7 +4,7 @@ import {
 } from "recharts";
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText } from "lucide-react";
 import { api } from "../lib/api";
-import type { ForecastReport } from "../types";
+import type { ForecastReport, ForecastCerradasReport } from "../types";
 
 // ===========================================================================
 //  Pipeline / Forecast — pipeline ponderado por probabilidad.
@@ -20,6 +20,8 @@ const ETAPA_COLOR: Record<string, string> = {
   "Negociando": "#1462b4",
   "Documentación": "#1fa971",
   "Sin etapa": "#64748b",
+  "Ganado": "#1fa971",
+  "Perdido": "#dc4c4c",
   // Etapas estimadas (modo demo).
   "Calificado": "#2e7fd1",
   "Cotización": "#1462b4",
@@ -53,12 +55,22 @@ function StatCard({ label, value, color, sub }: { label: string; value: React.Re
 }
 
 export function Pipeline() {
+  const [vista, setVista] = useState<"abierto" | "cerradas">("abierto");
+
   const [data, setData] = useState<ForecastReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Filtros de la tabla completa (modo Monday).
   const [filtroGrupo, setFiltroGrupo] = useState("");
   const [buscar, setBuscar] = useState("");
+
+  // Vista 2: ganadas/perdidas (histórico de cierres reales, solo modo Monday).
+  const [cerradas, setCerradas] = useState<ForecastCerradasReport | null>(null);
+  const [loadingCerradas, setLoadingCerradas] = useState(false);
+  const [errorCerradas, setErrorCerradas] = useState<string | null>(null);
+  const [filtroGrupoC, setFiltroGrupoC] = useState("");
+  const [buscarC, setBuscarC] = useState("");
+  const [filtroEtapaC, setFiltroEtapaC] = useState<"" | "Ganado" | "Perdido">("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,7 +84,23 @@ export function Pipeline() {
     }
   }, []);
 
+  const loadCerradas = useCallback(async () => {
+    setLoadingCerradas(true);
+    try {
+      setCerradas(await api.getForecastCerradas());
+      setErrorCerradas(null);
+    } catch (err) {
+      setErrorCerradas(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingCerradas(false);
+    }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
+  // Carga perezosa: la vista de cerradas solo pide datos la primera vez que se abre.
+  useEffect(() => {
+    if (vista === "cerradas" && !cerradas && !loadingCerradas) loadCerradas();
+  }, [vista, cerradas, loadingCerradas, loadCerradas]);
 
   const moneda = data?.supuestos.moneda ?? "MXN";
   const esMonday = data?.fuente === "monday";
@@ -97,6 +125,21 @@ export function Pipeline() {
     });
   }, [data, esMonday, filtroGrupo, buscar]);
 
+  const filtradasC = useMemo(() => {
+    const base = cerradas?.oportunidades ?? [];
+    const q = buscarC.trim().toLowerCase();
+    return base.filter((o) => {
+      if (filtroGrupoC && o.grupo !== filtroGrupoC) return false;
+      if (filtroEtapaC && o.etapa !== filtroEtapaC) return false;
+      if (!q) return true;
+      return (
+        o.itemName.toLowerCase().includes(q) ||
+        (o.empresa ?? "").toLowerCase().includes(q) ||
+        (o.ejecutivo ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC]);
+
   return (
     <div className="mx-auto max-w-6xl">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -118,14 +161,35 @@ export function Pipeline() {
           </p>
         </div>
         <button
-          onClick={load}
-          disabled={loading}
+          onClick={vista === "abierto" ? load : loadCerradas}
+          disabled={vista === "abierto" ? loading : loadingCerradas}
           className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-50"
         >
-          <RefreshCw size={16} className={loading ? "animate-spin" : ""} /> Actualizar
+          <RefreshCw size={16} className={(vista === "abierto" ? loading : loadingCerradas) ? "animate-spin" : ""} /> Actualizar
         </button>
       </div>
 
+      <div className="mb-5 flex gap-1 border-b border-border">
+        <button
+          onClick={() => setVista("abierto")}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            vista === "abierto" ? "border-accent text-accent" : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Pipeline abierto
+        </button>
+        <button
+          onClick={() => setVista("cerradas")}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            vista === "cerradas" ? "border-accent text-accent" : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Ganadas y Perdidas
+        </button>
+      </div>
+
+      {vista === "abierto" && (
+      <>
       {error && <div className="mb-4 rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>}
 
       {loading ? (
@@ -332,6 +396,239 @@ export function Pipeline() {
           </div>
         </>
       )}
+      </>
+      )}
+
+      {vista === "cerradas" && (
+        <CerradasView
+          data={cerradas}
+          loading={loadingCerradas}
+          error={errorCerradas}
+          filtradas={filtradasC}
+          filtroGrupo={filtroGrupoC}
+          setFiltroGrupo={setFiltroGrupoC}
+          filtroEtapa={filtroEtapaC}
+          setFiltroEtapa={setFiltroEtapaC}
+          buscar={buscarC}
+          setBuscar={setBuscarC}
+        />
+      )}
     </div>
+  );
+}
+
+function CerradasView({
+  data, loading, error, filtradas, filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, buscar, setBuscar
+}: {
+  data: ForecastCerradasReport | null;
+  loading: boolean;
+  error: string | null;
+  filtradas: ForecastCerradasReport["oportunidades"];
+  filtroGrupo: string;
+  setFiltroGrupo: (v: string) => void;
+  filtroEtapa: "" | "Ganado" | "Perdido";
+  setFiltroEtapa: (v: "" | "Ganado" | "Perdido") => void;
+  buscar: string;
+  setBuscar: (v: string) => void;
+}) {
+  const moneda = data?.supuestos.moneda ?? "MXN";
+
+  if (error) {
+    return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
+  }
+  if (loading && !data) {
+    return <div className="py-16 text-center text-sm text-text-muted">Cargando ganadas y perdidas…</div>;
+  }
+  if (!data || (data.stats.totalGanadas === 0 && data.stats.totalPerdidas === 0)) {
+    return (
+      <div className="rounded-xl border border-border bg-surface py-16 text-center text-sm text-text-muted">
+        Aún no hay oportunidades cerradas (ganadas o perdidas) en el board.
+      </div>
+    );
+  }
+
+  const mesData = data.porMes.map((m) => ({ mes: m.mes, ganado: m.valorGanado, perdido: m.valorPerdido }));
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <StatCard label="Ganadas" value={data.stats.totalGanadas} color="text-success" />
+        <StatCard label="Perdidas" value={data.stats.totalPerdidas} color="text-danger" />
+        <StatCard label="Valor ganado" value={money(data.stats.valorGanado, moneda)} color="text-success" />
+        <StatCard label="Valor perdido" value={money(data.stats.valorPerdido, moneda)} color="text-danger" />
+        <StatCard label="Tasa de cierre" value={`${data.stats.tasaCierre}%`} sub="ganadas / (ganadas + perdidas)" />
+      </div>
+
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
+        <Info size={14} className="mt-0.5 shrink-0 text-info" />
+        <span><strong className="text-text">Supuestos:</strong> {data.supuestos.nota}</span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-text"><DollarSign size={15} className="text-accent" /> Ganado vs. perdido por mes (fecha real de cierre)</h3>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={mesData} margin={{ top: 8, right: 8, bottom: 8, left: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+              <XAxis dataKey="mes" tick={{ fontSize: 11, fill: "#64748b" }} />
+              <YAxis tickFormatter={moneyShort} tick={{ fontSize: 11, fill: "#64748b" }} width={48} />
+              <Tooltip formatter={(v) => money(Number(v) || 0, moneda)} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="ganado" name="Ganado" radius={[4, 4, 0, 0]} fill={ETAPA_COLOR["Ganado"]} />
+              <Bar dataKey="perdido" name="Perdido" radius={[4, 4, 0, 0]} fill={ETAPA_COLOR["Perdido"]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-text">Ganado vs. perdido</h3>
+          <div className="flex flex-col gap-3 pt-2">
+            {(["Ganado", "Perdido"] as const).map((etapa) => {
+              const valor = etapa === "Ganado" ? data.stats.valorGanado : data.stats.valorPerdido;
+              const count = etapa === "Ganado" ? data.stats.totalGanadas : data.stats.totalPerdidas;
+              const max = Math.max(1, data.stats.valorGanado, data.stats.valorPerdido);
+              return (
+                <div key={etapa}>
+                  <div className="mb-1 flex items-center justify-between text-[13px]">
+                    <span className="font-medium text-text">{etapa} <span className="text-text-muted">({count})</span></span>
+                    <span className="font-semibold text-text">{money(valor, moneda)}</span>
+                  </div>
+                  <div className="h-5 overflow-hidden rounded-md bg-black/[0.06]">
+                    <div className="h-full rounded-md transition-all" style={{ width: `${(valor / max) * 100}%`, background: ETAPA_COLOR[etapa] }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {data.stats.ticketPromedioGanado > 0 && (
+            <p className="mt-4 text-xs text-text-muted">Ticket promedio ganado: <span className="font-semibold text-text">{money(data.stats.ticketPromedioGanado, moneda)}</span></p>
+          )}
+        </div>
+      </div>
+
+      {data.porEjecutivo.length > 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-surface">
+          <h3 className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold text-text">
+            <Users size={15} className="text-accent" /> Ganadas / perdidas por ejecutivo
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                  <th className="px-4 py-2 text-right font-medium">Ganadas</th>
+                  <th className="px-4 py-2 text-right font-medium">Perdidas</th>
+                  <th className="px-4 py-2 text-right font-medium">Valor ganado</th>
+                  <th className="px-4 py-2 text-right font-medium">Valor perdido</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.porEjecutivo.map((e) => (
+                  <tr key={e.ejecutivo} className="border-b border-border/60 last:border-0">
+                    <td className="px-4 py-2 font-medium text-text">{e.ejecutivo}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-success">{e.ganadas}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-danger">{e.perdidas}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-text-muted">{money(e.valorGanado, moneda)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-text-muted">{money(e.valorPerdido, moneda)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-xl border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <h3 className="text-sm font-semibold text-text">
+            Oportunidades cerradas
+            <span className="ml-2 text-xs font-normal text-text-muted">{filtradas.length} de {data.oportunidades.length}</span>
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={buscar}
+              onChange={(e) => setBuscar(e.target.value)}
+              placeholder="Buscar oportunidad, empresa o ejecutivo…"
+              className="h-8 w-64 rounded-lg border border-border bg-bg px-3 text-xs placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <select
+              value={filtroEtapa}
+              onChange={(e) => setFiltroEtapa(e.target.value as "" | "Ganado" | "Perdido")}
+              className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+            >
+              <option value="">Ganadas y perdidas</option>
+              <option value="Ganado">Solo ganadas</option>
+              <option value="Perdido">Solo perdidas</option>
+            </select>
+            <select
+              value={filtroGrupo}
+              onChange={(e) => setFiltroGrupo(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+            >
+              <option value="">Todos los grupos</option>
+              {data.grupos.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-text-muted">
+                <th className="px-4 py-2 font-medium">Oportunidad</th>
+                <th className="px-4 py-2 font-medium">Empresa</th>
+                <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                <th className="px-4 py-2 font-medium">Grupo</th>
+                <th className="px-4 py-2 font-medium">Etapa</th>
+                <th className="px-4 py-2 text-right font-medium">Valor</th>
+                <th className="px-4 py-2 font-medium">Cierre real</th>
+                <th className="px-4 py-2 font-medium">Cotización</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtradas.map((o) => (
+                <tr
+                  key={o.itemId}
+                  onClick={() => o.mondayUrl && window.open(o.mondayUrl, "_blank", "noopener")}
+                  className={`border-b border-border/60 last:border-0 ${o.mondayUrl ? "cursor-pointer transition-colors hover:bg-accent/[0.04]" : ""}`}
+                  title={o.mondayUrl ? "Abrir en Monday" : undefined}
+                >
+                  <td className="px-4 py-2 font-medium text-text">
+                    <span className="inline-flex items-center gap-1.5">
+                      {o.itemName}
+                      {o.mondayUrl && <ExternalLink size={12} className="shrink-0 text-text-muted/60" />}
+                    </span>
+                  </td>
+                  <td className="px-4 py-2 text-text-muted">{o.empresa ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{o.ejecutivo ?? "—"}</td>
+                  <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{o.grupo ?? "—"}</span></td>
+                  <td className="px-4 py-2"><span className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: ETAPA_COLOR[o.etapa] + "22", color: ETAPA_COLOR[o.etapa] }}>{o.etapa}</span></td>
+                  <td className="px-4 py-2 text-right tabular-nums text-text-muted">{o.sinMonto ? "sin monto" : money(o.valor ?? 0, moneda)}</td>
+                  <td className="px-4 py-2 text-text-muted">{o.fechaCierreReal ?? "—"}</td>
+                  <td className="px-4 py-2">
+                    {o.cotizacion ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); window.open(o.cotizacion!.url, "_blank", "noopener"); }}
+                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-accent hover:bg-accent/5"
+                        title={o.cotizacion.nombre}
+                      >
+                        <FileText size={12} /> PDF
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-text-muted/60">{o.archivos ? `${o.archivos} archivo(s)` : "—"}</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {filtradas.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-text-muted">Sin oportunidades con esos filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <p className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
+          Clic en una fila abre el item en Monday. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
+        </p>
+      </div>
+    </>
   );
 }

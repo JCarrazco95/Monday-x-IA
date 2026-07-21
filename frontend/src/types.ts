@@ -296,11 +296,64 @@ export interface ForecastReport {
   topOportunidades: ForecastOpportunity[];
 }
 
+// ── Forecast: vista 2, GANADAS Y PERDIDAS (histórico de cierres reales) ──
+export interface ForecastCerradaItem {
+  itemId: string;
+  itemName: string;
+  empresa: string | null;
+  ejecutivo: string | null;
+  grupo: string;
+  etapa: "Ganado" | "Perdido";
+  valor: number | null;
+  sinMonto: boolean;
+  fechaCierreReal: string | null;
+  mondayUrl: string | null;
+  cotizacion: { nombre: string; url: string } | null;
+  archivos: number;
+}
+
+export interface ForecastCerradasReport {
+  fuente: "monday";
+  grupos: string[];
+  oportunidades: ForecastCerradaItem[];
+  supuestos: { moneda: string; nota: string };
+  stats: {
+    totalGanadas: number;
+    totalPerdidas: number;
+    valorGanado: number;
+    valorPerdido: number;
+    tasaCierre: number; // 0-100
+    ticketPromedioGanado: number;
+  };
+  porMes: { mes: string; valorGanado: number; valorPerdido: number; countGanado: number; countPerdido: number }[];
+  porEjecutivo: { ejecutivo: string; ganadas: number; perdidas: number; valorGanado: number; valorPerdido: number }[];
+}
+
 // ── Asistente comercial (Chat RAG) ──
 export interface AssistantResponse {
   respuesta: string;
   itemsCitados: string[];
   contexto: { itemId: string; itemName: string }[];
+}
+
+// ── Asesor Experto Monday.com (chat de asesoría para el gerente) ──
+export interface AdvisorResponse {
+  respuestaDirecta: string;
+  pasos: string[];
+  tipsAdicionales: string[];
+  preguntasSeguimiento: string[];
+  fuentesUsadas: string[];
+}
+
+// ── Round Robin (control real: vendedores en la rotación de leads) ──
+export interface RoundRobinRep {
+  id: number;
+  nombre: string;
+  mondayPersonId: number | null;
+  activo: boolean;
+  orden: number;
+  vecesAsignado: number;
+  lastAssignedAt: string | null;
 }
 
 // Resultado del orquestador al procesar un evento (p. ej. analizar empresa real)

@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, AssistantResponse, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, ForecastCerradasReport, AssistantResponse, AdvisorResponse, RoundRobinRep, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
 
 const BASE = "/api";
 
@@ -257,10 +257,25 @@ export const api = {
 
   // Forecast / pipeline ponderado por probabilidad.
   getForecast: () => request<ForecastReport>("/forecast"),
+  // Vista 2: histórico de oportunidades ganadas/perdidas (solo modo Monday).
+  getForecastCerradas: () => request<ForecastCerradasReport>("/forecast/cerradas"),
 
   // Asistente comercial (Chat RAG sobre el histórico).
   askAssistant: (question: string) =>
     request<AssistantResponse>("/assistant/chat", { method: "POST", body: JSON.stringify({ question }) }),
+
+  // Asesor Experto Monday.com (navegación, round robin, lectura de pipeline).
+  askAdvisor: (message: string, opts: { useWebResearch?: boolean } = {}) =>
+    request<AdvisorResponse>("/advisor/chat", { method: "POST", body: JSON.stringify({ message, ...opts }) }),
+
+  // Round Robin: vendedores en la rotación de asignación de leads.
+  getRoundRobinReps: () => request<RoundRobinRep[]>("/round-robin/reps"),
+  addRoundRobinRep: (nombre: string, mondayPersonId?: number) =>
+    request<RoundRobinRep>("/round-robin/reps", { method: "POST", body: JSON.stringify({ nombre, mondayPersonId }) }),
+  setRoundRobinRepActive: (id: number, activo: boolean) =>
+    request<RoundRobinRep>(`/round-robin/reps/${id}`, { method: "PATCH", body: JSON.stringify({ activo }) }),
+  setRoundRobinRepMondayId: (id: number, mondayPersonId: number) =>
+    request<RoundRobinRep>(`/round-robin/reps/${id}`, { method: "PATCH", body: JSON.stringify({ mondayPersonId }) }),
 
   // Scraper / prospección de leads.
   getScraperSources: () => request<{ sources: ScraperSource[] }>("/scraper/sources"),
