@@ -306,6 +306,8 @@ export interface ForecastCerradaItem {
   etapa: "Ganado" | "Perdido";
   valor: number | null;
   sinMonto: boolean;
+  /** "Motivo de no compra*" (Monday) — solo en Perdido; null en Ganado. */
+  motivoPerdida: string | null;
   fechaCierreReal: string | null;
   mondayUrl: string | null;
   cotizacion: { nombre: string; url: string } | null;
@@ -324,9 +326,13 @@ export interface ForecastCerradasReport {
     valorPerdido: number;
     tasaCierre: number; // 0-100
     ticketPromedioGanado: number;
+    /** Perdidas sin el dropdown "Motivo de no compra*" capturado. */
+    perdidasSinMotivo: number;
   };
   porMes: { mes: string; valorGanado: number; valorPerdido: number; countGanado: number; countPerdido: number }[];
   porEjecutivo: { ejecutivo: string; ganadas: number; perdidas: number; valorGanado: number; valorPerdido: number }[];
+  /** Desglose de motivos de pérdida (solo perdidas), de mayor a menor. */
+  porMotivo: { motivo: string; count: number; valor: number }[];
 }
 
 // ── Asistente comercial (Chat RAG) ──

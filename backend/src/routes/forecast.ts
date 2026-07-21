@@ -241,6 +241,8 @@ async function buildCerradas(now: Date) {
         etapa: d.etapa as "Ganado" | "Perdido",
         valor: d.valor,
         sinMonto: d.valor == null,
+        // Solo tiene sentido en "Perdido"; en "Ganado" siempre null.
+        motivoPerdida: d.etapa === "Perdido" ? d.motivoPerdida : null,
         fechaCierreReal: d.fechaCierreReal,
         mondayUrl: d.mondayUrl,
         cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
@@ -282,6 +284,22 @@ async function buildCerradas(now: Date) {
   }
   const porEjecutivo = [...ejecMap.values()].sort((a, b) => (b.valorGanado + b.valorPerdido) - (a.valorGanado + a.valorPerdido));
 
+  // Motivo de no compra (solo perdidas). El dropdown de Monday puede traer
+  // varios motivos seleccionados separados por coma — se cuenta cada uno.
+  const motivoMap = new Map<string, { motivo: string; count: number; valor: number }>();
+  let perdidasSinMotivo = 0;
+  for (const d of perdidas) {
+    const texto = (d.motivoPerdida ?? "").trim();
+    if (!texto) { perdidasSinMotivo++; continue; }
+    for (const m of texto.split(",").map((s) => s.trim()).filter(Boolean)) {
+      const cur = motivoMap.get(m) ?? { motivo: m, count: 0, valor: 0 };
+      cur.count += 1;
+      cur.valor += d.valor ?? 0;
+      motivoMap.set(m, cur);
+    }
+  }
+  const porMotivo = [...motivoMap.values()].sort((a, b) => b.count - a.count);
+
   return {
     fuente: "monday" as const,
     grupos,
@@ -296,10 +314,12 @@ async function buildCerradas(now: Date) {
       valorGanado,
       valorPerdido,
       tasaCierre: totalCerradas ? Math.round((ganadas.length / totalCerradas) * 100) : 0,
-      ticketPromedioGanado: conMontoGanado.length ? Math.round(valorGanado / conMontoGanado.length) : 0
+      ticketPromedioGanado: conMontoGanado.length ? Math.round(valorGanado / conMontoGanado.length) : 0,
+      perdidasSinMotivo
     },
     porMes,
-    porEjecutivo
+    porEjecutivo,
+    porMotivo
   };
 }
 

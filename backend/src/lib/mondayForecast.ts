@@ -22,6 +22,7 @@ const COL_FECHA_CIERRE_REAL = process.env.FORECAST_COL_FECHA_CIERRE_REAL ?? "dea
 const COL_MES_CIERRE = process.env.FORECAST_COL_MES_CIERRE ?? "color_mm12f2n8"; // status "Mes de cierre"
 const COL_EJECUTIVO = process.env.FORECAST_COL_EJECUTIVO ?? "deal_owner";
 const COL_EMPRESA = process.env.FORECAST_COL_EMPRESA ?? "text_mkvxs7sb"; // "Razón social"
+const COL_MOTIVO_PERDIDA = process.env.FORECAST_COL_MOTIVO_PERDIDA ?? "men__desplegable_mkmfqf7c"; // "Motivo de no compra*"
 
 export const forecastMondayEnabled = !isMondayMockMode && Boolean(BOARD_OPORTUNIDADES);
 
@@ -46,6 +47,8 @@ export interface DealRow {
   fechaCierreEstimada: string | null; // YYYY-MM-DD
   fechaCierreReal: string | null;     // YYYY-MM-DD
   mesCierreLabel: string | null;      // etiqueta del status "Mes de cierre" (p. ej. "JULIO 2026")
+  /** "Motivo de no compra*" (dropdown) — solo tiene sentido en deals Perdido. */
+  motivoPerdida: string | null;
   /** Link directo al item en Monday (para abrirlo desde el panel). */
   mondayUrl: string | null;
   /** Archivos del item (cotizaciones): el primero con extensión .pdf primero. */
@@ -115,7 +118,7 @@ function normalizarEtapa(texto: string | null, grupo: string): EtapaDeal {
 /** Lee TODAS las oportunidades del board (paginado). Lanza si Monday falla. */
 export async function getDealsBoard(): Promise<DealRow[]> {
   if (!forecastMondayEnabled) return [];
-  const colIds = [COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE, COL_EJECUTIVO, COL_EMPRESA];
+  const colIds = [COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE, COL_EJECUTIVO, COL_EMPRESA, COL_MOTIVO_PERDIDA];
   const query = `
     query ($ids: [ID!], $cols: [String!], $cursor: String) {
       boards (ids: $ids) {
@@ -161,6 +164,7 @@ export async function getDealsBoard(): Promise<DealRow[]> {
         fechaCierreEstimada: cv.get(COL_FECHA_CIERRE) || null,
         fechaCierreReal: cv.get(COL_FECHA_CIERRE_REAL) || null,
         mesCierreLabel: cv.get(COL_MES_CIERRE) || null,
+        motivoPerdida: cv.get(COL_MOTIVO_PERDIDA) || null,
         mondayUrl: itemUrl(slug, BOARD_OPORTUNIDADES, it.id),
         archivos
       });

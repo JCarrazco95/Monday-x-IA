@@ -538,6 +538,32 @@ function CerradasView({
         </div>
       )}
 
+      {data.porMotivo.length > 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-1 text-sm font-semibold text-text">Motivos de pérdida</h3>
+          <p className="mb-3 text-[11px] text-text-muted">
+            Del campo "Motivo de no compra*" en Monday, capturado por el vendedor al marcar una oportunidad como perdida.
+            {data.stats.perdidasSinMotivo > 0 && ` ${data.stats.perdidasSinMotivo} perdida(s) sin motivo capturado.`}
+          </p>
+          <div className="flex flex-col gap-2.5">
+            {data.porMotivo.map((m) => {
+              const max = Math.max(1, ...data.porMotivo.map((x) => x.count));
+              return (
+                <div key={m.motivo}>
+                  <div className="mb-1 flex items-center justify-between text-[13px]">
+                    <span className="font-medium text-text">{m.motivo}</span>
+                    <span className="text-text-muted">{m.count} {m.count === 1 ? "caso" : "casos"} · {money(m.valor, moneda)}</span>
+                  </div>
+                  <div className="h-4 overflow-hidden rounded-md bg-black/[0.06]">
+                    <div className="h-full rounded-md bg-danger transition-all" style={{ width: `${(m.count / max) * 100}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 rounded-xl border border-border bg-surface">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-text">
@@ -601,7 +627,10 @@ function CerradasView({
                   <td className="px-4 py-2 text-text-muted">{o.empresa ?? "—"}</td>
                   <td className="px-4 py-2 text-text-muted">{o.ejecutivo ?? "—"}</td>
                   <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{o.grupo ?? "—"}</span></td>
-                  <td className="px-4 py-2"><span className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: ETAPA_COLOR[o.etapa] + "22", color: ETAPA_COLOR[o.etapa] }}>{o.etapa}</span></td>
+                  <td className="px-4 py-2">
+                    <span className="rounded-full px-2 py-0.5 text-[11px]" style={{ background: ETAPA_COLOR[o.etapa] + "22", color: ETAPA_COLOR[o.etapa] }}>{o.etapa}</span>
+                    {o.motivoPerdida && <div className="mt-1 text-[11px] text-text-muted">{o.motivoPerdida}</div>}
+                  </td>
                   <td className="px-4 py-2 text-right tabular-nums text-text-muted">{o.sinMonto ? "sin monto" : money(o.valor ?? 0, moneda)}</td>
                   <td className="px-4 py-2 text-text-muted">{o.fechaCierreReal ?? "—"}</td>
                   <td className="px-4 py-2">
