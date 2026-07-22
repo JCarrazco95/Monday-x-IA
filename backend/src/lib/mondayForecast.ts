@@ -21,8 +21,16 @@ const COL_FECHA_CIERRE = process.env.FORECAST_COL_FECHA_CIERRE ?? "deal_expected
 const COL_FECHA_CIERRE_REAL = process.env.FORECAST_COL_FECHA_CIERRE_REAL ?? "deal_close_date";
 const COL_MES_CIERRE = process.env.FORECAST_COL_MES_CIERRE ?? "color_mm12f2n8"; // status "Mes de cierre"
 const COL_EJECUTIVO = process.env.FORECAST_COL_EJECUTIVO ?? "deal_owner";
-const COL_EMPRESA = process.env.FORECAST_COL_EMPRESA ?? "text_mkvxs7sb"; // "Razón social"
+const COL_EMPRESA = process.env.FORECAST_COL_EMPRESA ?? "text8"; // "*Empresa" — más consistente que "Razón social"
+const COL_EMPRESA_ALT = process.env.FORECAST_COL_EMPRESA_ALT ?? "text_mkvxs7sb"; // "Razón social" (respaldo/razón fiscal)
 const COL_MOTIVO_PERDIDA = process.env.FORECAST_COL_MOTIVO_PERDIDA ?? "men__desplegable_mkmfqf7c"; // "Motivo de no compra*"
+// Columnas para el reporte ejecutivo (Ganadas y Perdidas): de dónde vino el
+// lead, para qué usarán la unidad, plazo de renta pactado y cuándo se creó el
+// acuerdo (para medir ciclo de venta = fecha real de cierre − fecha de creación).
+const COL_ORIGEN = process.env.FORECAST_COL_ORIGEN ?? "color_mm4g27mz"; // "Origen"
+const COL_GIRO_USO = process.env.FORECAST_COL_GIRO_USO ?? "text_mktjp81z"; // "Tipo de actividad para usar la unidad"
+const COL_PLAZO_MESES = process.env.FORECAST_COL_PLAZO_MESES ?? "numeric_mktjhkc3"; // "Plazo Renta real"
+const COL_FECHA_CREACION = process.env.FORECAST_COL_FECHA_CREACION ?? "deal_creation_date"; // "*Fecha de creación del acuerdo"
 
 export const forecastMondayEnabled = !isMondayMockMode && Boolean(BOARD_OPORTUNIDADES);
 
@@ -49,6 +57,14 @@ export interface DealRow {
   mesCierreLabel: string | null;      // etiqueta del status "Mes de cierre" (p. ej. "JULIO 2026")
   /** "Motivo de no compra*" (dropdown) — solo tiene sentido en deals Perdido. */
   motivoPerdida: string | null;
+  /** Fuente del lead ("Origen": Leads, Prospección, No identificado, …). */
+  origen: string | null;
+  /** Para qué va a usar el cliente la unidad (texto libre del vendedor). */
+  giroUso: string | null;
+  /** Plazo de renta pactado, en meses. */
+  plazoMeses: number | null;
+  /** Fecha en que se creó el acuerdo en Monday (para medir ciclo de venta). */
+  fechaCreacion: string | null;
   /** Link directo al item en Monday (para abrirlo desde el panel). */
   mondayUrl: string | null;
   /** Archivos del item (cotizaciones): el primero con extensión .pdf primero. */
@@ -118,7 +134,11 @@ function normalizarEtapa(texto: string | null, grupo: string): EtapaDeal {
 /** Lee TODAS las oportunidades del board (paginado). Lanza si Monday falla. */
 export async function getDealsBoard(): Promise<DealRow[]> {
   if (!forecastMondayEnabled) return [];
-  const colIds = [COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE, COL_EJECUTIVO, COL_EMPRESA, COL_MOTIVO_PERDIDA];
+  const colIds = [
+    COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE,
+    COL_EJECUTIVO, COL_EMPRESA, COL_EMPRESA_ALT, COL_MOTIVO_PERDIDA,
+    COL_ORIGEN, COL_GIRO_USO, COL_PLAZO_MESES, COL_FECHA_CREACION
+  ];
   const query = `
     query ($ids: [ID!], $cols: [String!], $cursor: String) {
       boards (ids: $ids) {
@@ -156,7 +176,7 @@ export async function getDealsBoard(): Promise<DealRow[]> {
       out.push({
         itemId: it.id,
         itemName: it.name,
-        empresa: cv.get(COL_EMPRESA) || null,
+        empresa: cv.get(COL_EMPRESA) || cv.get(COL_EMPRESA_ALT) || null,
         ejecutivo: cv.get(COL_EJECUTIVO) || null,
         grupo: it.group?.title ?? "",
         etapa: normalizarEtapa(cv.get(COL_ETAPA) ?? null, it.group?.title ?? ""),
@@ -165,6 +185,10 @@ export async function getDealsBoard(): Promise<DealRow[]> {
         fechaCierreReal: cv.get(COL_FECHA_CIERRE_REAL) || null,
         mesCierreLabel: cv.get(COL_MES_CIERRE) || null,
         motivoPerdida: cv.get(COL_MOTIVO_PERDIDA) || null,
+        origen: cv.get(COL_ORIGEN) || null,
+        giroUso: cv.get(COL_GIRO_USO) || null,
+        plazoMeses: parseMonto(cv.get(COL_PLAZO_MESES) ?? null),
+        fechaCreacion: cv.get(COL_FECHA_CREACION) || null,
         mondayUrl: itemUrl(slug, BOARD_OPORTUNIDADES, it.id),
         archivos
       });

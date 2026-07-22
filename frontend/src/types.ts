@@ -264,6 +264,15 @@ export interface ForecastOpportunity {
   sinMonto: boolean;
   mesCierreKey: string;
   mesCierre: string;
+  /** Fuente del lead ("Origen" en Monday: Leads, Prospección, …). */
+  origen?: string | null;
+  /** Para qué va a usar el cliente la unidad. */
+  giroUso?: string | null;
+  /** Plazo de renta pactado, en meses. */
+  plazoMeses?: number | null;
+  /** Fecha en que se creó el acuerdo en Monday. */
+  fechaCreacion?: string | null;
+  fechaCierreEstimada?: string | null;
 }
 
 export interface ForecastReport {
@@ -309,6 +318,12 @@ export interface ForecastCerradaItem {
   /** "Motivo de no compra*" (Monday) — solo en Perdido; null en Ganado. */
   motivoPerdida: string | null;
   fechaCierreReal: string | null;
+  fechaCreacion: string | null;
+  /** Días entre creación del acuerdo y cierre real (null si falta alguna fecha). */
+  cicloVentaDias: number | null;
+  origen: string | null;
+  giroUso: string | null;
+  plazoMeses: number | null;
   mondayUrl: string | null;
   cotizacion: { nombre: string; url: string } | null;
   archivos: number;
@@ -328,11 +343,15 @@ export interface ForecastCerradasReport {
     ticketPromedioGanado: number;
     /** Perdidas sin el dropdown "Motivo de no compra*" capturado. */
     perdidasSinMotivo: number;
+    /** Promedio de días entre creación del acuerdo y cierre real (null si no hay datos). */
+    cicloVentaPromedioDias: number | null;
   };
   porMes: { mes: string; valorGanado: number; valorPerdido: number; countGanado: number; countPerdido: number }[];
   porEjecutivo: { ejecutivo: string; ganadas: number; perdidas: number; valorGanado: number; valorPerdido: number }[];
   /** Desglose de motivos de pérdida (solo perdidas), de mayor a menor. */
   porMotivo: { motivo: string; count: number; valor: number }[];
+  /** Origen del lead (solo sobre ganadas), de mayor a menor. */
+  porOrigen: { origen: string; count: number; valor: number }[];
 }
 
 // ── Asistente comercial (Chat RAG) ──

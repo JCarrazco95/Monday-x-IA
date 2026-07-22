@@ -1,7 +1,6 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -128,7 +127,12 @@ async function buildForecastFromMonday(now: Date) {
       mesCierre: mesDate ? monthLabel(mesDate) : "Sin fecha",
       mondayUrl: d.mondayUrl,
       cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
-      archivos: d.archivos.length
+      archivos: d.archivos.length,
+      origen: d.origen,
+      giroUso: d.giroUso,
+      plazoMeses: d.plazoMeses,
+      fechaCreacion: d.fechaCreacion,
+      fechaCierreEstimada: d.fechaCierreEstimada
     };
   });
 
@@ -256,6 +260,15 @@ async function buildCerradas(now: Date) {
   const oportunidades = cerradas
     .map((d) => {
       const pdf = d.archivos.find((a) => a.extension === ".pdf" || a.extension === "pdf") ?? null;
+      // Ciclo de venta: días entre que se creó el acuerdo y su cierre real.
+      let cicloVentaDias: number | null = null;
+      if (d.fechaCreacion && d.fechaCierreReal) {
+        const ini = Date.parse(d.fechaCreacion);
+        const fin = Date.parse(d.fechaCierreReal);
+        if (!Number.isNaN(ini) && !Number.isNaN(fin) && fin >= ini) {
+          cicloVentaDias = Math.round((fin - ini) / 86_400_000);
+        }
+      }
       return {
         itemId: d.itemId,
         itemName: d.itemName,
@@ -268,6 +281,11 @@ async function buildCerradas(now: Date) {
         // Solo tiene sentido en "Perdido"; en "Ganado" siempre null.
         motivoPerdida: d.etapa === "Perdido" ? d.motivoPerdida : null,
         fechaCierreReal: d.fechaCierreReal,
+        fechaCreacion: d.fechaCreacion,
+        cicloVentaDias,
+        origen: d.origen,
+        giroUso: d.giroUso,
+        plazoMeses: d.plazoMeses,
         mondayUrl: d.mondayUrl,
         cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
         archivos: d.archivos.length
@@ -324,6 +342,23 @@ async function buildCerradas(now: Date) {
   }
   const porMotivo = [...motivoMap.values()].sort((a, b) => b.count - a.count);
 
+  // Origen del lead (Leads/Prospección/…), solo sobre ganadas (para ver qué
+  // fuente convierte mejor).
+  const origenMap = new Map<string, { origen: string; count: number; valor: number }>();
+  for (const d of ganadas) {
+    const nombre = d.origen ?? "Sin origen";
+    const cur = origenMap.get(nombre) ?? { origen: nombre, count: 0, valor: 0 };
+    cur.count += 1;
+    cur.valor += d.valor ?? 0;
+    origenMap.set(nombre, cur);
+  }
+  const porOrigen = [...origenMap.values()].sort((a, b) => b.count - a.count);
+
+  const ciclos = oportunidades.filter((o): o is typeof o & { cicloVentaDias: number } => o.cicloVentaDias != null);
+  const cicloVentaPromedioDias = ciclos.length
+    ? Math.round(ciclos.reduce((s, o) => s + o.cicloVentaDias, 0) / ciclos.length)
+    : null;
+
   return {
     fuente: "monday" as const,
     grupos,
@@ -339,11 +374,13 @@ async function buildCerradas(now: Date) {
       valorPerdido,
       tasaCierre: totalCerradas ? Math.round((ganadas.length / totalCerradas) * 100) : 0,
       ticketPromedioGanado: conMontoGanado.length ? Math.round(valorGanado / conMontoGanado.length) : 0,
-      perdidasSinMotivo
+      perdidasSinMotivo,
+      cicloVentaPromedioDias
     },
     porMes,
     porEjecutivo,
-    porMotivo
+    porMotivo,
+    porOrigen
   };
 }
 
@@ -569,44 +606,6 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
-  }
-});
-
-// TEMPORAL — quitar después de decidir qué columnas mostrar al director.
-// GET /api/forecast/columnas-debug → todas las columnas del board Oportunidades
-// (id, título, tipo) + los valores de hasta 5 items del grupo "Ganado".
-forecastRouter.get("/columnas-debug", async (_req, res) => {
-  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
-  try {
-    const boardId = process.env.MONDAY_BOARD_ID_OPORTUNIDADES;
-    const data: {
-      boards?: Array<{
-        columns?: Array<{ id: string; title: string; type: string }>;
-        items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null }> }> };
-      }>;
-    } = await mondayRequest(
-      `query ($ids: [ID!]) {
-        boards (ids: $ids) {
-          columns { id title type }
-          items_page (limit: 500) {
-            items { id name group { title } column_values { id text } }
-          }
-        }
-      }`,
-      { ids: [boardId] }
-    );
-    const board = data?.boards?.[0];
-    const items = (board?.items_page?.items ?? []).filter((it) => /ganado/i.test(it.group?.title ?? ""));
-    res.json({
-      columnas: board?.columns ?? [],
-      ejemplosGanados: items.slice(0, 5).map((it) => ({
-        id: it.id,
-        name: it.name,
-        columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, c.text]))
-      }))
-    });
-  } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 

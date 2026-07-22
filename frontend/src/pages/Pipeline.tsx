@@ -1,11 +1,11 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from "recharts";
-import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus } from "lucide-react";
+import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem } from "../types";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
 function toISODate(d: Date): string {
@@ -19,6 +19,16 @@ function startOfWeekMonday(d: Date): Date {
 }
 type PeriodPreset = "semana" | "mes";
 interface PeriodRange { curDesde: string; curHasta: string; prevDesde: string; prevHasta: string; curLabel: string; prevLabel: string; }
+interface ComparativoAcum { ganadas: number; perdidas: number; valorGanado: number; items: ForecastCerradaItem[]; motivos: Map<string, number> }
+interface ComparativoFila {
+  nombre: string;
+  actual: ComparativoAcum; anterior: ComparativoAcum;
+  tasaActual: number; tasaAnterior: number;
+  deltaGanadas: number | null; deltaValor: number | null;
+  topMotivo: { motivo: string; count: number } | null;
+  diagnostico: string[];
+}
+interface Comparativo { rango: PeriodRange; filas: ComparativoFila[]; tasaPromedioEquipo: number; }
 function periodRanges(preset: PeriodPreset): PeriodRange {
   const now = new Date();
   if (preset === "semana") {
@@ -137,8 +147,171 @@ function StatCard({ label, value, color, sub }: { label: string; value: React.Re
   );
 }
 
+// ===========================================================================
+//  Detalle de oportunidad — resumen completo estilo "Análisis IA" (Leads.tsx
+//  ItemView): métricas + bloques, en un modal, para no perder la tabla con
+//  filtros de fondo. Sirve tanto para el pipeline abierto como para cerradas
+//  (ambas traen las mismas columnas nuevas: origen, giroUso, plazoMeses, etc).
+// ===========================================================================
+type DetailItem =
+  | { kind: "abierto"; o: ForecastOpportunity }
+  | { kind: "cerrada"; o: ForecastCerradaItem };
+
+function DetailMetric({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-black/[0.02] p-3">
+      <div className="text-[11px] text-text-muted">{label}</div>
+      <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+function DetailBlock({ icon, title, children }: { icon: string; title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border p-4">
+      <h3 className="mb-2 flex items-center gap-2 text-[13px] font-semibold text-text">
+        <span>{icon}</span> {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; moneda: string; onClose: () => void }) {
+  const { o } = item;
+  const esCerrada = item.kind === "cerrada";
+  const cerrada = esCerrada ? (o as ForecastCerradaItem) : null;
+  const abierta = !esCerrada ? (o as ForecastOpportunity) : null;
+  const etapa = esCerrada ? cerrada!.etapa : abierta!.etapa;
+  const valor = esCerrada ? cerrada!.valor : abierta!.valorEstimado;
+  const sinMonto = esCerrada ? cerrada!.sinMonto : abierta!.sinMonto;
+  const initials = o.itemName.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-surface shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3 border-b border-border p-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-2 text-sm font-bold text-white">
+            {initials || "?"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold text-text">{o.itemName}</div>
+            <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-text-muted">
+              {o.empresa && <span>{o.empresa}</span>}
+              {o.ejecutivo && <span>· {o.ejecutivo}</span>}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+              <span
+                className="rounded-full px-2 py-0.5 text-[11px]"
+                style={{ background: (ETAPA_COLOR[etapa] ?? "#1462b4") + "22", color: ETAPA_COLOR[etapa] ?? "#1462b4" }}
+              >
+                {etapa}
+              </span>
+              {o.grupo && <span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{o.grupo}</span>}
+            </div>
+          </div>
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-text-muted hover:bg-black/[0.06] hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex flex-col gap-4 p-5">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <DetailMetric label={sinMonto ? "Valor" : "Valor del acuerdo"}>
+              <div className="text-lg font-bold text-text">{sinMonto ? "Sin monto" : money(valor ?? 0, moneda)}</div>
+            </DetailMetric>
+            {abierta && (
+              <DetailMetric label="Probabilidad de cierre">
+                <div className="text-lg font-bold text-text">{abierta.probabilidad}%</div>
+                <div className="text-[11px] text-text-muted">Ponderado: {money(abierta.valorPonderado, moneda)}</div>
+              </DetailMetric>
+            )}
+            {cerrada && (
+              <DetailMetric label={cerrada.etapa === "Ganado" ? "Resultado" : "Motivo de pérdida"}>
+                <div className={`text-[13px] font-semibold ${cerrada.etapa === "Ganado" ? "text-success" : "text-danger"}`}>
+                  {cerrada.etapa === "Ganado" ? "Ganado ✓" : (cerrada.motivoPerdida || "Sin motivo capturado")}
+                </div>
+              </DetailMetric>
+            )}
+            {(cerrada?.plazoMeses ?? abierta?.plazoMeses) != null && (
+              <DetailMetric label="Plazo de renta">
+                <div className="text-lg font-bold text-text">{cerrada?.plazoMeses ?? abierta?.plazoMeses} meses</div>
+              </DetailMetric>
+            )}
+            {cerrada?.cicloVentaDias != null && (
+              <DetailMetric label="Ciclo de venta">
+                <div className="text-lg font-bold text-text">{cerrada.cicloVentaDias} días</div>
+                <div className="text-[11px] text-text-muted">creación → cierre</div>
+              </DetailMetric>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {(cerrada?.origen ?? abierta?.origen) && (
+              <DetailBlock icon="📍" title="Origen del lead">
+                <p className="text-[13px] text-text">{cerrada?.origen ?? abierta?.origen}</p>
+              </DetailBlock>
+            )}
+            {(cerrada?.giroUso ?? abierta?.giroUso) && (
+              <DetailBlock icon="🚚" title="Uso de la unidad">
+                <p className="text-[13px] text-text">{cerrada?.giroUso ?? abierta?.giroUso}</p>
+              </DetailBlock>
+            )}
+          </div>
+
+          <DetailBlock icon="📅" title="Fechas">
+            <div className="flex flex-col gap-1.5 text-[13px] text-text">
+              {(cerrada?.fechaCreacion ?? abierta?.fechaCreacion) && (
+                <div className="flex items-center gap-2"><Calendar size={13} className="text-text-muted" /> Acuerdo creado: {cerrada?.fechaCreacion ?? abierta?.fechaCreacion}</div>
+              )}
+              {abierta?.fechaCierreEstimada && (
+                <div className="flex items-center gap-2"><Clock size={13} className="text-text-muted" /> Cierre estimado: {abierta.fechaCierreEstimada}</div>
+              )}
+              {cerrada?.fechaCierreReal && (
+                <div className="flex items-center gap-2"><Clock size={13} className="text-text-muted" /> Cierre real: {cerrada.fechaCierreReal}</div>
+              )}
+              {!(cerrada?.fechaCreacion ?? abierta?.fechaCreacion) && !abierta?.fechaCierreEstimada && !cerrada?.fechaCierreReal && (
+                <span className="text-text-muted">Sin fechas capturadas.</span>
+              )}
+            </div>
+          </DetailBlock>
+
+          {(cerrada?.cotizacion ?? abierta?.cotizacion) && (
+            <a
+              href={(cerrada?.cotizacion ?? abierta?.cotizacion)!.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-accent/30 bg-accent/10 px-3 py-1.5 text-[12px] font-medium text-accent hover:bg-accent/20"
+            >
+              <FileText size={13} /> Ver cotización adjunta
+            </a>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between border-t border-border bg-black/[0.02] px-5 py-3">
+          {o.mondayUrl ? (
+            <a href={o.mondayUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline">
+              Abrir en Monday <ExternalLink size={12} />
+            </a>
+          ) : <span />}
+          <button onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Pipeline() {
   const [vista, setVista] = useState<"abierto" | "cerradas">("abierto");
+  const [detalle, setDetalle] = useState<DetailItem | null>(null);
 
   const [data, setData] = useState<ForecastReport | null>(null);
   const [loading, setLoading] = useState(true);
@@ -261,14 +434,24 @@ export function Pipeline() {
     const todas = cerradas?.oportunidades ?? [];
     const universo = filtroVendedorC ? todas.filter((o) => o.ejecutivo === filtroVendedorC) : todas;
     const rango = periodRanges(comparPreset);
+    type Acum = { ganadas: number; perdidas: number; valorGanado: number; items: ForecastCerradaItem[]; motivos: Map<string, number> };
+    const vacio = (): Acum => ({ ganadas: 0, perdidas: 0, valorGanado: 0, items: [], motivos: new Map() });
     const enRango = (desde: string, hasta: string) => {
-      const map = new Map<string, { ganadas: number; perdidas: number; valorGanado: number }>();
+      const map = new Map<string, Acum>();
       for (const o of universo) {
         if (!o.fechaCierreReal || o.fechaCierreReal < desde || o.fechaCierreReal > hasta) continue;
         const nombre = o.ejecutivo ?? "Sin asignar";
-        const cur = map.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
-        if (o.etapa === "Ganado") { cur.ganadas += 1; cur.valorGanado += o.valor ?? 0; }
-        else cur.perdidas += 1;
+        const cur = map.get(nombre) ?? vacio();
+        cur.items.push(o);
+        if (o.etapa === "Ganado") {
+          cur.ganadas += 1;
+          cur.valorGanado += o.valor ?? 0;
+        } else {
+          cur.perdidas += 1;
+          for (const m of (o.motivoPerdida ?? "").split(",").map((s) => s.trim()).filter(Boolean)) {
+            cur.motivos.set(m, (cur.motivos.get(m) ?? 0) + 1);
+          }
+        }
         map.set(nombre, cur);
       }
       return map;
@@ -276,21 +459,54 @@ export function Pipeline() {
     const actual = enRango(rango.curDesde, rango.curHasta);
     const anterior = enRango(rango.prevDesde, rango.prevHasta);
     const nombres = [...new Set([...actual.keys(), ...anterior.keys()])];
-    const filas = nombres.map((nombre) => {
-      const a = actual.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
-      const p = anterior.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
+    const filasBase = nombres.map((nombre) => {
+      const a = actual.get(nombre) ?? vacio();
+      const p = anterior.get(nombre) ?? vacio();
       const totalA = a.ganadas + a.perdidas;
       const totalP = p.ganadas + p.perdidas;
+      const topMotivoEntry = [...a.motivos.entries()].sort((x, y) => y[1] - x[1])[0] ?? null;
       return {
         nombre,
         actual: a, anterior: p,
         tasaActual: totalA ? Math.round((a.ganadas / totalA) * 100) : 0,
         tasaAnterior: totalP ? Math.round((p.ganadas / totalP) * 100) : 0,
         deltaGanadas: pct(a.ganadas, p.ganadas),
-        deltaValor: pct(a.valorGanado, p.valorGanado)
+        deltaValor: pct(a.valorGanado, p.valorGanado),
+        topMotivo: topMotivoEntry ? { motivo: topMotivoEntry[0], count: topMotivoEntry[1] } : null
       };
     }).sort((x, y) => (y.actual.ganadas + y.actual.perdidas) - (x.actual.ganadas + x.actual.perdidas));
-    return { rango, filas };
+
+    // Diagnóstico: compara cada vendedor contra el promedio del equipo en el
+    // periodo actual (solo entre quienes tuvieron al menos un cierre), y
+    // detecta motivo de pérdida recurrente + caída fuerte vs. el periodo previo.
+    const conCierres = filasBase.filter((f) => f.actual.ganadas + f.actual.perdidas > 0);
+    const tasaPromedioEquipo = conCierres.length
+      ? Math.round(conCierres.reduce((s, f) => s + f.tasaActual, 0) / conCierres.length)
+      : 0;
+    const filas = filasBase.map((f) => {
+      const totalActual = f.actual.ganadas + f.actual.perdidas;
+      const diagnostico: string[] = [];
+      if (totalActual === 0) {
+        diagnostico.push("Sin cierres (ganados o perdidos) en este periodo.");
+      } else {
+        if (tasaPromedioEquipo > 0 && f.tasaActual < tasaPromedioEquipo - 15) {
+          diagnostico.push(`Tasa de cierre ${tasaPromedioEquipo - f.tasaActual} pts por debajo del promedio del equipo (${tasaPromedioEquipo}%).`);
+        }
+        if (f.topMotivo && f.topMotivo.count >= 2) {
+          diagnostico.push(`Motivo de pérdida recurrente: "${f.topMotivo.motivo}" (${f.topMotivo.count}×).`);
+        }
+        if (f.deltaGanadas !== null && f.deltaGanadas <= -25) {
+          diagnostico.push(`Ventas ganadas cayeron ${Math.abs(f.deltaGanadas)}% vs. el periodo anterior.`);
+        }
+        if (diagnostico.length === 0) {
+          diagnostico.push(tasaPromedioEquipo > 0 && f.tasaActual >= tasaPromedioEquipo
+            ? "Tasa de cierre en línea o por arriba del equipo."
+            : "Sin alertas relevantes en este periodo.");
+        }
+      }
+      return { ...f, diagnostico };
+    });
+    return { rango, filas, tasaPromedioEquipo };
   }, [cerradas, comparPreset, filtroVendedorC]);
 
   return (
@@ -494,7 +710,8 @@ export function Pipeline() {
                     rows={filtradas.map((o) => ({
                       Oportunidad: o.itemName, Empresa: o.empresa ?? "", Ejecutivo: o.ejecutivo ?? "",
                       Grupo: o.grupo ?? "", Etapa: o.etapa, "Probabilidad %": o.probabilidad,
-                      Valor: o.valorEstimado, Ponderado: o.valorPonderado, "Mes de cierre": o.mesCierre
+                      Valor: o.valorEstimado, Ponderado: o.valorPonderado, "Mes de cierre": o.mesCierre,
+                      "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? ""
                     }))}
                   />
                 </div>
@@ -521,9 +738,9 @@ export function Pipeline() {
                   {filtradas.map((o) => (
                     <tr
                       key={o.itemId}
-                      onClick={() => o.mondayUrl && window.open(o.mondayUrl, "_blank", "noopener")}
-                      className={`border-b border-border/60 last:border-0 ${o.mondayUrl ? "cursor-pointer transition-colors hover:bg-accent/[0.04]" : ""}`}
-                      title={o.mondayUrl ? "Abrir en Monday" : undefined}
+                      onClick={() => setDetalle({ kind: "abierto", o })}
+                      className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                      title="Ver detalle de la oportunidad"
                     >
                       <td className="px-4 py-2 font-medium text-text">
                         <span className="inline-flex items-center gap-1.5">
@@ -600,6 +817,15 @@ export function Pipeline() {
           comparPreset={comparPreset}
           setComparPreset={setComparPreset}
           comparativo={comparativo}
+          onSelect={(o) => setDetalle({ kind: "cerrada", o })}
+        />
+      )}
+
+      {detalle && (
+        <OpportunityDetailModal
+          item={detalle}
+          moneda={data?.supuestos.moneda ?? cerradas?.supuestos.moneda ?? "MXN"}
+          onClose={() => setDetalle(null)}
         />
       )}
     </div>
@@ -610,7 +836,7 @@ function CerradasView({
   data, loading, error, filtradas,
   filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, filtroMotivo, setFiltroMotivo,
   filtroVendedor, setFiltroVendedor, vendedores, fechaDesde, setFechaDesde, fechaHasta, setFechaHasta,
-  buscar, setBuscar, comparPreset, setComparPreset, comparativo
+  buscar, setBuscar, comparPreset, setComparPreset, comparativo, onSelect
 }: {
   data: ForecastCerradasReport | null;
   loading: boolean;
@@ -633,18 +859,11 @@ function CerradasView({
   setBuscar: (v: string) => void;
   comparPreset: PeriodPreset;
   setComparPreset: (v: PeriodPreset) => void;
-  comparativo: {
-    rango: PeriodRange;
-    filas: {
-      nombre: string;
-      actual: { ganadas: number; perdidas: number; valorGanado: number };
-      anterior: { ganadas: number; perdidas: number; valorGanado: number };
-      tasaActual: number; tasaAnterior: number;
-      deltaGanadas: number | null; deltaValor: number | null;
-    }[];
-  };
+  comparativo: Comparativo;
+  onSelect: (o: ForecastCerradaItem) => void;
 }) {
   const moneda = data?.supuestos.moneda ?? "MXN";
+  const [expandedVendor, setExpandedVendor] = useState<string | null>(null);
 
   if (error) {
     return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
@@ -664,12 +883,17 @@ function CerradasView({
 
   return (
     <>
-      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Ganadas" value={data.stats.totalGanadas} color="text-success" />
         <StatCard label="Perdidas" value={data.stats.totalPerdidas} color="text-danger" />
         <StatCard label="Valor ganado" value={money(data.stats.valorGanado, moneda)} color="text-success" />
         <StatCard label="Valor perdido" value={money(data.stats.valorPerdido, moneda)} color="text-danger" />
         <StatCard label="Tasa de cierre" value={`${data.stats.tasaCierre}%`} sub="ganadas / (ganadas + perdidas)" />
+        <StatCard
+          label="Ciclo de venta"
+          value={data.stats.cicloVentaPromedioDias != null ? `${data.stats.cicloVentaPromedioDias} días` : "—"}
+          sub="creación → cierre, prom."
+        />
       </div>
 
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
@@ -700,10 +924,13 @@ function CerradasView({
             </button>
           </div>
         </div>
-        <p className="mb-3 text-[11px] text-text-muted">
+        <p className="mb-1 text-[11px] text-text-muted">
           <span className="font-medium text-text">{comparativo.rango.curLabel}</span> ({comparativo.rango.curDesde} a {comparativo.rango.curHasta}) vs.{" "}
           <span className="font-medium text-text">{comparativo.rango.prevLabel}</span> ({comparativo.rango.prevDesde} a {comparativo.rango.prevHasta}).
           {filtroVendedor && ` Acotado a ${filtroVendedor}.`}
+        </p>
+        <p className="mb-3 text-[11px] text-text-muted">
+          <strong className="text-text">Cómo leer esto:</strong> "Ganadas" y "Valor ganado" son los cierres del periodo actual (entre paréntesis, el periodo anterior); "vs. anterior" es el cambio %; "Tasa de cierre" es ganadas ÷ (ganadas + perdidas). Clic en un vendedor para ver sus oportunidades del periodo.
         </p>
         {comparativo.filas.length === 0 ? (
           <p className="py-6 text-center text-xs text-text-muted">Sin cierres en ninguno de los dos periodos.</p>
@@ -712,25 +939,85 @@ function CerradasView({
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th className="px-3 py-2 font-medium"></th>
                   <th className="px-3 py-2 font-medium">Vendedor</th>
-                  <th className="px-3 py-2 text-right font-medium">Ganadas</th>
+                  <th className="px-3 py-2 text-right font-medium" title="Acuerdos ganados en el periodo actual (entre paréntesis, el periodo anterior).">Ganadas</th>
                   <th className="px-3 py-2 text-right font-medium">vs. anterior</th>
-                  <th className="px-3 py-2 text-right font-medium">Valor ganado</th>
+                  <th className="px-3 py-2 text-right font-medium" title="Suma del valor de los acuerdos ganados en el periodo actual.">Valor ganado</th>
                   <th className="px-3 py-2 text-right font-medium">vs. anterior</th>
-                  <th className="px-3 py-2 text-right font-medium">Tasa de cierre</th>
+                  <th className="px-3 py-2 text-right font-medium" title="Ganadas ÷ (ganadas + perdidas) del periodo.">Tasa de cierre</th>
+                  <th className="px-3 py-2 font-medium" title="Comparación automática contra el promedio del equipo en el periodo.">Diagnóstico</th>
                 </tr>
               </thead>
               <tbody>
-                {comparativo.filas.map((f) => (
-                  <tr key={f.nombre} className="border-b border-border/60 last:border-0">
-                    <td className="px-3 py-2 font-medium text-text">{f.nombre}</td>
-                    <td className="px-3 py-2 text-right tabular-nums">{f.actual.ganadas} <span className="text-text-muted">({f.anterior.ganadas})</span></td>
-                    <td className="px-3 py-2 text-right"><Delta value={f.deltaGanadas} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums text-text-muted">{money(f.actual.valorGanado, moneda)}</td>
-                    <td className="px-3 py-2 text-right"><Delta value={f.deltaValor} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums">{f.tasaActual}% <span className="text-text-muted">({f.tasaAnterior}%)</span></td>
-                  </tr>
-                ))}
+                {comparativo.filas.map((f) => {
+                  const abierto = expandedVendor === f.nombre;
+                  return (
+                    <Fragment key={f.nombre}>
+                      <tr
+                        onClick={() => setExpandedVendor(abierto ? null : f.nombre)}
+                        className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.03]"
+                      >
+                        <td className="px-3 py-2 text-text-muted">{abierto ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</td>
+                        <td className="px-3 py-2 font-medium text-text">{f.nombre}</td>
+                        <td className="px-3 py-2 text-right tabular-nums">{f.actual.ganadas} <span className="text-text-muted">({f.anterior.ganadas})</span></td>
+                        <td className="px-3 py-2 text-right"><Delta value={f.deltaGanadas} /></td>
+                        <td className="px-3 py-2 text-right tabular-nums text-text-muted">{money(f.actual.valorGanado, moneda)}</td>
+                        <td className="px-3 py-2 text-right"><Delta value={f.deltaValor} /></td>
+                        <td className="px-3 py-2 text-right tabular-nums">{f.tasaActual}% <span className="text-text-muted">({f.tasaAnterior}%)</span></td>
+                        <td className="px-3 py-2 text-[11px]">
+                          <div className="flex flex-col gap-0.5">
+                            {f.diagnostico.map((d, i) => {
+                              const esAlerta = d.startsWith("Tasa de cierre") || d.startsWith("Motivo de pérdida") || d.startsWith("Ventas ganadas cayeron");
+                              return <span key={i} className={esAlerta ? "text-warning" : "text-text-muted"}>{d}</span>;
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                      {abierto && (
+                        <tr className="border-b border-border/60 bg-black/[0.015]">
+                          <td colSpan={8} className="px-3 py-3">
+                            {f.actual.items.length === 0 ? (
+                              <p className="px-2 text-xs text-text-muted">Sin oportunidades cerradas en este periodo.</p>
+                            ) : (
+                              <table className="w-full text-[12px]">
+                                <thead>
+                                  <tr className="text-left text-[11px] text-text-muted">
+                                    <th className="px-2 py-1 font-medium">Oportunidad</th>
+                                    <th className="px-2 py-1 font-medium">Empresa</th>
+                                    <th className="px-2 py-1 font-medium">Etapa</th>
+                                    <th className="px-2 py-1 text-right font-medium">Valor</th>
+                                    <th className="px-2 py-1 font-medium">Cierre real</th>
+                                    <th className="px-2 py-1 font-medium">Motivo</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {f.actual.items.map((o) => (
+                                    <tr
+                                      key={o.itemId}
+                                      onClick={(e) => { e.stopPropagation(); onSelect(o); }}
+                                      className="cursor-pointer border-t border-border/40 hover:bg-accent/[0.05]"
+                                      title="Ver detalle de la oportunidad"
+                                    >
+                                      <td className="px-2 py-1.5 font-medium text-text">{o.itemName}</td>
+                                      <td className="px-2 py-1.5 text-text-muted">{o.empresa ?? "—"}</td>
+                                      <td className="px-2 py-1.5">
+                                        <span className="rounded-full px-1.5 py-0.5 text-[10px]" style={{ background: ETAPA_COLOR[o.etapa] + "22", color: ETAPA_COLOR[o.etapa] }}>{o.etapa}</span>
+                                      </td>
+                                      <td className="px-2 py-1.5 text-right tabular-nums text-text-muted">{o.sinMonto ? "sin monto" : money(o.valor ?? 0, moneda)}</td>
+                                      <td className="px-2 py-1.5 text-text-muted">{o.fechaCierreReal ?? "—"}</td>
+                                      <td className="px-2 py-1.5 text-text-muted">{o.motivoPerdida ?? "—"}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -921,7 +1208,9 @@ function CerradasView({
               rows={filtradas.map((o) => ({
                 Oportunidad: o.itemName, Empresa: o.empresa ?? "", Ejecutivo: o.ejecutivo ?? "",
                 Grupo: o.grupo ?? "", Etapa: o.etapa, Valor: o.valor ?? 0,
-                "Motivo de pérdida": o.motivoPerdida ?? "", "Cierre real": o.fechaCierreReal ?? ""
+                "Motivo de pérdida": o.motivoPerdida ?? "", "Fecha de creación": o.fechaCreacion ?? "",
+                "Cierre real": o.fechaCierreReal ?? "", "Ciclo de venta (días)": o.cicloVentaDias ?? "",
+                "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? ""
               }))}
             />
           </div>
@@ -944,9 +1233,9 @@ function CerradasView({
               {filtradas.map((o) => (
                 <tr
                   key={o.itemId}
-                  onClick={() => o.mondayUrl && window.open(o.mondayUrl, "_blank", "noopener")}
-                  className={`border-b border-border/60 last:border-0 ${o.mondayUrl ? "cursor-pointer transition-colors hover:bg-accent/[0.04]" : ""}`}
-                  title={o.mondayUrl ? "Abrir en Monday" : undefined}
+                  onClick={() => onSelect(o)}
+                  className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                  title="Ver detalle de la oportunidad"
                 >
                   <td className="px-4 py-2 font-medium text-text">
                     <span className="inline-flex items-center gap-1.5">
