@@ -2,9 +2,59 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from "recharts";
-import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText } from "lucide-react";
+import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { api } from "../lib/api";
-import type { ForecastReport, ForecastCerradasReport } from "../types";
+import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem } from "../types";
+
+// ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
+function toISODate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function startOfWeekMonday(d: Date): Date {
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const day = r.getDay();
+  r.setDate(r.getDate() + (day === 0 ? -6 : 1 - day));
+  return r;
+}
+type PeriodPreset = "semana" | "mes";
+interface PeriodRange { curDesde: string; curHasta: string; prevDesde: string; prevHasta: string; curLabel: string; prevLabel: string; }
+function periodRanges(preset: PeriodPreset): PeriodRange {
+  const now = new Date();
+  if (preset === "semana") {
+    const curStart = startOfWeekMonday(now);
+    const prevStart = new Date(curStart); prevStart.setDate(prevStart.getDate() - 7);
+    const prevEnd = new Date(curStart); prevEnd.setDate(prevEnd.getDate() - 1);
+    return {
+      curDesde: toISODate(curStart), curHasta: toISODate(now),
+      prevDesde: toISODate(prevStart), prevHasta: toISODate(prevEnd),
+      curLabel: "Esta semana", prevLabel: "Semana pasada (mismo tramo)"
+    };
+  }
+  const curStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const diasMesPrevio = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
+  const prevMonthSameDay = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(now.getDate(), diasMesPrevio));
+  return {
+    curDesde: toISODate(curStart), curHasta: toISODate(now),
+    prevDesde: toISODate(prevMonthStart), prevHasta: toISODate(prevMonthSameDay),
+    curLabel: "Este mes", prevLabel: "Mes pasado (mismo tramo)"
+  };
+}
+function pct(cur: number, prev: number): number | null {
+  if (prev === 0) return cur === 0 ? 0 : null; // null = "nuevo" (sin base de comparación)
+  return Math.round(((cur - prev) / prev) * 100);
+}
+function Delta({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-[11px] text-text-muted">nuevo</span>;
+  if (value === 0) return <span className="inline-flex items-center gap-0.5 text-[11px] text-text-muted"><Minus size={11} /> 0%</span>;
+  const up = value > 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[11px] font-medium ${up ? "text-success" : "text-danger"}`}>
+      {up ? <ArrowUp size={11} /> : <ArrowDown size={11} />} {Math.abs(value)}%
+    </span>
+  );
+}
 
 // ===========================================================================
 //  Pipeline / Forecast — pipeline ponderado por probabilidad.
@@ -44,6 +94,39 @@ function moneyShort(n: number): string {
   return `$${n}`;
 }
 
+// Exporta EXACTAMENTE lo que el usuario está viendo/filtrando en pantalla
+// (no un dump completo aparte) — CSV/XLS client-side, PDF = vista de impresión
+// del navegador (print:hidden oculta nav/filtros, ver index.css / clases print:).
+function ExportButtons({ filename, rows }: { filename: string; rows: Record<string, unknown>[] }) {
+  return (
+    <div className="flex items-center gap-1 print:hidden">
+      <button
+        onClick={() => exportToCsv(filename, rows)}
+        disabled={rows.length === 0}
+        title="Descargar CSV"
+        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs text-text-muted hover:text-text disabled:opacity-40"
+      >
+        <Download size={12} /> CSV
+      </button>
+      <button
+        onClick={() => exportToXlsx(filename, rows)}
+        disabled={rows.length === 0}
+        title="Descargar Excel"
+        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs text-text-muted hover:text-text disabled:opacity-40"
+      >
+        <Download size={12} /> XLS
+      </button>
+      <button
+        onClick={() => window.print()}
+        title="Imprimir / guardar como PDF"
+        className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-xs text-text-muted hover:text-text"
+      >
+        <Printer size={12} /> PDF
+      </button>
+    </div>
+  );
+}
+
 function StatCard({ label, value, color, sub }: { label: string; value: React.ReactNode; color?: string; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
@@ -63,6 +146,8 @@ export function Pipeline() {
   // Filtros de la tabla completa (modo Monday).
   const [filtroGrupo, setFiltroGrupo] = useState("");
   const [buscar, setBuscar] = useState("");
+  const [filtroVendedor, setFiltroVendedor] = useState("");
+  const [filtroMes, setFiltroMes] = useState(""); // mesCierreKey (estimado)
 
   // Vista 2: ganadas/perdidas (histórico de cierres reales, solo modo Monday).
   const [cerradas, setCerradas] = useState<ForecastCerradasReport | null>(null);
@@ -72,6 +157,10 @@ export function Pipeline() {
   const [buscarC, setBuscarC] = useState("");
   const [filtroEtapaC, setFiltroEtapaC] = useState<"" | "Ganado" | "Perdido">("");
   const [filtroMotivoC, setFiltroMotivoC] = useState("");
+  const [filtroVendedorC, setFiltroVendedorC] = useState("");
+  const [fechaDesdeC, setFechaDesdeC] = useState(""); // fechaCierreReal, YYYY-MM-DD
+  const [fechaHastaC, setFechaHastaC] = useState("");
+  const [comparPreset, setComparPreset] = useState<PeriodPreset>("semana");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,12 +200,30 @@ export function Pipeline() {
   }));
   const maxFunnel = Math.max(1, ...(data?.funnel ?? []).map((f) => f.valor));
 
+  // Vendedores únicos presentes en cada dataset (para los selects de filtro).
+  const vendedores = useMemo(
+    () => [...new Set((data?.oportunidades ?? []).map((o) => o.ejecutivo).filter((v): v is string => Boolean(v)))].sort(),
+    [data]
+  );
+  const vendedoresC = useMemo(
+    () => [...new Set((cerradas?.oportunidades ?? []).map((o) => o.ejecutivo).filter((v): v is string => Boolean(v)))].sort(),
+    [cerradas]
+  );
+  // Meses de cierre estimado únicos presentes (para el filtro del pipeline abierto).
+  const mesesDisponibles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const o of data?.oportunidades ?? []) if (o.mesCierreKey) map.set(o.mesCierreKey, o.mesCierre);
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [data]);
+
   // Tabla: en modo Monday, TODAS las oportunidades con filtros; en demo, el top.
   const filtradas = useMemo(() => {
     const base = esMonday ? (data?.oportunidades ?? data?.topOportunidades ?? []) : (data?.topOportunidades ?? []);
     const q = buscar.trim().toLowerCase();
     return base.filter((o) => {
       if (filtroGrupo && o.grupo !== filtroGrupo) return false;
+      if (filtroVendedor && o.ejecutivo !== filtroVendedor) return false;
+      if (filtroMes && o.mesCierreKey !== filtroMes) return false;
       if (!q) return true;
       return (
         o.itemName.toLowerCase().includes(q) ||
@@ -124,7 +231,7 @@ export function Pipeline() {
         (o.ejecutivo ?? "").toLowerCase().includes(q)
       );
     });
-  }, [data, esMonday, filtroGrupo, buscar]);
+  }, [data, esMonday, filtroGrupo, filtroVendedor, filtroMes, buscar]);
 
   const filtradasC = useMemo(() => {
     const base = cerradas?.oportunidades ?? [];
@@ -132,6 +239,9 @@ export function Pipeline() {
     return base.filter((o) => {
       if (filtroGrupoC && o.grupo !== filtroGrupoC) return false;
       if (filtroEtapaC && o.etapa !== filtroEtapaC) return false;
+      if (filtroVendedorC && o.ejecutivo !== filtroVendedorC) return false;
+      if (fechaDesdeC && (o.fechaCierreReal ?? "") < fechaDesdeC) return false;
+      if (fechaHastaC && (o.fechaCierreReal ?? "") > fechaHastaC) return false;
       // El dropdown de Monday puede traer varios motivos separados por coma.
       if (filtroMotivoC && !(o.motivoPerdida ?? "").split(",").map((s) => s.trim()).includes(filtroMotivoC)) return false;
       if (!q) return true;
@@ -141,7 +251,47 @@ export function Pipeline() {
         (o.ejecutivo ?? "").toLowerCase().includes(q)
       );
     });
-  }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC, filtroMotivoC]);
+  }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC, filtroMotivoC, filtroVendedorC, fechaDesdeC, fechaHastaC]);
+
+  // Comparativo de periodos (mide rendimiento del vendedor): siempre sobre el
+  // universo COMPLETO de cerradas (ignora filtros de grupo/etapa/motivo/texto,
+  // que son para explorar la tabla, no para comparar desempeño), respetando
+  // solo el filtro de vendedor si está activo.
+  const comparativo = useMemo(() => {
+    const todas = cerradas?.oportunidades ?? [];
+    const universo = filtroVendedorC ? todas.filter((o) => o.ejecutivo === filtroVendedorC) : todas;
+    const rango = periodRanges(comparPreset);
+    const enRango = (desde: string, hasta: string) => {
+      const map = new Map<string, { ganadas: number; perdidas: number; valorGanado: number }>();
+      for (const o of universo) {
+        if (!o.fechaCierreReal || o.fechaCierreReal < desde || o.fechaCierreReal > hasta) continue;
+        const nombre = o.ejecutivo ?? "Sin asignar";
+        const cur = map.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
+        if (o.etapa === "Ganado") { cur.ganadas += 1; cur.valorGanado += o.valor ?? 0; }
+        else cur.perdidas += 1;
+        map.set(nombre, cur);
+      }
+      return map;
+    };
+    const actual = enRango(rango.curDesde, rango.curHasta);
+    const anterior = enRango(rango.prevDesde, rango.prevHasta);
+    const nombres = [...new Set([...actual.keys(), ...anterior.keys()])];
+    const filas = nombres.map((nombre) => {
+      const a = actual.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
+      const p = anterior.get(nombre) ?? { ganadas: 0, perdidas: 0, valorGanado: 0 };
+      const totalA = a.ganadas + a.perdidas;
+      const totalP = p.ganadas + p.perdidas;
+      return {
+        nombre,
+        actual: a, anterior: p,
+        tasaActual: totalA ? Math.round((a.ganadas / totalA) * 100) : 0,
+        tasaAnterior: totalP ? Math.round((p.ganadas / totalP) * 100) : 0,
+        deltaGanadas: pct(a.ganadas, p.ganadas),
+        deltaValor: pct(a.valorGanado, p.valorGanado)
+      };
+    }).sort((x, y) => (y.actual.ganadas + y.actual.perdidas) - (x.actual.ganadas + x.actual.perdidas));
+    return { rango, filas };
+  }, [cerradas, comparPreset, filtroVendedorC]);
 
   return (
     <div className="mx-auto max-w-6xl">
@@ -166,13 +316,13 @@ export function Pipeline() {
         <button
           onClick={vista === "abierto" ? load : loadCerradas}
           disabled={vista === "abierto" ? loading : loadingCerradas}
-          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-medium text-text-muted transition-colors hover:text-text disabled:opacity-50 print:hidden"
         >
           <RefreshCw size={16} className={(vista === "abierto" ? loading : loadingCerradas) ? "animate-spin" : ""} /> Actualizar
         </button>
       </div>
 
-      <div className="mb-5 flex gap-1 border-b border-border">
+      <div className="mb-5 flex gap-1 border-b border-border print:hidden">
         <button
           onClick={() => setVista("abierto")}
           className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
@@ -308,13 +458,29 @@ export function Pipeline() {
                 {esMonday && <span className="ml-2 text-xs font-normal text-text-muted">{filtradas.length} de {(data.oportunidades ?? []).length}</span>}
               </h3>
               {esMonday && (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 print:hidden">
                   <input
                     value={buscar}
                     onChange={(e) => setBuscar(e.target.value)}
                     placeholder="Buscar oportunidad, empresa o ejecutivo…"
                     className="h-8 w-64 rounded-lg border border-border bg-bg px-3 text-xs placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
                   />
+                  <select
+                    value={filtroVendedor}
+                    onChange={(e) => setFiltroVendedor(e.target.value)}
+                    className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+                  >
+                    <option value="">Todos los vendedores</option>
+                    {vendedores.map((v) => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select
+                    value={filtroMes}
+                    onChange={(e) => setFiltroMes(e.target.value)}
+                    className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+                  >
+                    <option value="">Todos los meses de cierre</option>
+                    {mesesDisponibles.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                  </select>
                   <select
                     value={filtroGrupo}
                     onChange={(e) => setFiltroGrupo(e.target.value)}
@@ -323,6 +489,14 @@ export function Pipeline() {
                     <option value="">Todos los grupos</option>
                     {(data.grupos ?? []).map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
+                  <ExportButtons
+                    filename="pipeline-abierto"
+                    rows={filtradas.map((o) => ({
+                      Oportunidad: o.itemName, Empresa: o.empresa ?? "", Ejecutivo: o.ejecutivo ?? "",
+                      Grupo: o.grupo ?? "", Etapa: o.etapa, "Probabilidad %": o.probabilidad,
+                      Valor: o.valorEstimado, Ponderado: o.valorPonderado, "Mes de cierre": o.mesCierre
+                    }))}
+                  />
                 </div>
               )}
             </div>
@@ -414,8 +588,18 @@ export function Pipeline() {
           setFiltroEtapa={setFiltroEtapaC}
           filtroMotivo={filtroMotivoC}
           setFiltroMotivo={setFiltroMotivoC}
+          filtroVendedor={filtroVendedorC}
+          setFiltroVendedor={setFiltroVendedorC}
+          vendedores={vendedoresC}
+          fechaDesde={fechaDesdeC}
+          setFechaDesde={setFechaDesdeC}
+          fechaHasta={fechaHastaC}
+          setFechaHasta={setFechaHastaC}
           buscar={buscarC}
           setBuscar={setBuscarC}
+          comparPreset={comparPreset}
+          setComparPreset={setComparPreset}
+          comparativo={comparativo}
         />
       )}
     </div>
@@ -423,20 +607,42 @@ export function Pipeline() {
 }
 
 function CerradasView({
-  data, loading, error, filtradas, filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, filtroMotivo, setFiltroMotivo, buscar, setBuscar
+  data, loading, error, filtradas,
+  filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, filtroMotivo, setFiltroMotivo,
+  filtroVendedor, setFiltroVendedor, vendedores, fechaDesde, setFechaDesde, fechaHasta, setFechaHasta,
+  buscar, setBuscar, comparPreset, setComparPreset, comparativo
 }: {
   data: ForecastCerradasReport | null;
   loading: boolean;
   error: string | null;
-  filtradas: ForecastCerradasReport["oportunidades"];
+  filtradas: ForecastCerradaItem[];
   filtroGrupo: string;
   setFiltroGrupo: (v: string) => void;
   filtroEtapa: "" | "Ganado" | "Perdido";
   setFiltroEtapa: (v: "" | "Ganado" | "Perdido") => void;
   filtroMotivo: string;
   setFiltroMotivo: (v: string) => void;
+  filtroVendedor: string;
+  setFiltroVendedor: (v: string) => void;
+  vendedores: string[];
+  fechaDesde: string;
+  setFechaDesde: (v: string) => void;
+  fechaHasta: string;
+  setFechaHasta: (v: string) => void;
   buscar: string;
   setBuscar: (v: string) => void;
+  comparPreset: PeriodPreset;
+  setComparPreset: (v: PeriodPreset) => void;
+  comparativo: {
+    rango: PeriodRange;
+    filas: {
+      nombre: string;
+      actual: { ganadas: number; perdidas: number; valorGanado: number };
+      anterior: { ganadas: number; perdidas: number; valorGanado: number };
+      tasaActual: number; tasaAnterior: number;
+      deltaGanadas: number | null; deltaValor: number | null;
+    }[];
+  };
 }) {
   const moneda = data?.supuestos.moneda ?? "MXN";
 
@@ -469,6 +675,66 @@ function CerradasView({
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
         <Info size={14} className="mt-0.5 shrink-0 text-info" />
         <span><strong className="text-text">Supuestos:</strong> {data.supuestos.nota}</span>
+      </div>
+
+      {/* Comparativo de periodos: mide rendimiento por vendedor vs. el tramo
+          anterior equivalente (no el periodo completo pasado, para comparar
+          justo — ej. "lo que va de esta semana" vs. "lo mismo la semana pasada"). */}
+      <div className="mb-4 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+            <TrendingUp size={15} className="text-accent" /> Comparativo de periodos — rendimiento por vendedor
+          </h3>
+          <div className="flex gap-1 rounded-lg border border-border p-0.5 print:hidden">
+            <button
+              onClick={() => setComparPreset("semana")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${comparPreset === "semana" ? "bg-accent text-white" : "text-text-muted hover:text-text"}`}
+            >
+              Semanal
+            </button>
+            <button
+              onClick={() => setComparPreset("mes")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${comparPreset === "mes" ? "bg-accent text-white" : "text-text-muted hover:text-text"}`}
+            >
+              Mensual
+            </button>
+          </div>
+        </div>
+        <p className="mb-3 text-[11px] text-text-muted">
+          <span className="font-medium text-text">{comparativo.rango.curLabel}</span> ({comparativo.rango.curDesde} a {comparativo.rango.curHasta}) vs.{" "}
+          <span className="font-medium text-text">{comparativo.rango.prevLabel}</span> ({comparativo.rango.prevDesde} a {comparativo.rango.prevHasta}).
+          {filtroVendedor && ` Acotado a ${filtroVendedor}.`}
+        </p>
+        {comparativo.filas.length === 0 ? (
+          <p className="py-6 text-center text-xs text-text-muted">Sin cierres en ninguno de los dos periodos.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th className="px-3 py-2 font-medium">Vendedor</th>
+                  <th className="px-3 py-2 text-right font-medium">Ganadas</th>
+                  <th className="px-3 py-2 text-right font-medium">vs. anterior</th>
+                  <th className="px-3 py-2 text-right font-medium">Valor ganado</th>
+                  <th className="px-3 py-2 text-right font-medium">vs. anterior</th>
+                  <th className="px-3 py-2 text-right font-medium">Tasa de cierre</th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparativo.filas.map((f) => (
+                  <tr key={f.nombre} className="border-b border-border/60 last:border-0">
+                    <td className="px-3 py-2 font-medium text-text">{f.nombre}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{f.actual.ganadas} <span className="text-text-muted">({f.anterior.ganadas})</span></td>
+                    <td className="px-3 py-2 text-right"><Delta value={f.deltaGanadas} /></td>
+                    <td className="px-3 py-2 text-right tabular-nums text-text-muted">{money(f.actual.valorGanado, moneda)}</td>
+                    <td className="px-3 py-2 text-right"><Delta value={f.deltaValor} /></td>
+                    <td className="px-3 py-2 text-right tabular-nums">{f.tasaActual}% <span className="text-text-muted">({f.tasaAnterior}%)</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -582,7 +848,7 @@ function CerradasView({
             Oportunidades cerradas
             <span className="ml-2 text-xs font-normal text-text-muted">{filtradas.length} de {data.oportunidades.length}</span>
           </h3>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 print:hidden">
             <input
               value={buscar}
               onChange={(e) => setBuscar(e.target.value)}
@@ -597,6 +863,14 @@ function CerradasView({
               <option value="">Ganadas y perdidas</option>
               <option value="Ganado">Solo ganadas</option>
               <option value="Perdido">Solo perdidas</option>
+            </select>
+            <select
+              value={filtroVendedor}
+              onChange={(e) => setFiltroVendedor(e.target.value)}
+              className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+            >
+              <option value="">Todos los vendedores</option>
+              {vendedores.map((v) => <option key={v} value={v}>{v}</option>)}
             </select>
             <select
               value={filtroGrupo}
@@ -616,6 +890,40 @@ function CerradasView({
                 {data.porMotivo.map((m) => <option key={m.motivo} value={m.motivo}>{m.motivo} ({m.count})</option>)}
               </select>
             )}
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={fechaDesde}
+                onChange={(e) => setFechaDesde(e.target.value)}
+                title="Cierre real desde"
+                className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+              />
+              <span className="text-xs text-text-muted">–</span>
+              <input
+                type="date"
+                value={fechaHasta}
+                onChange={(e) => setFechaHasta(e.target.value)}
+                title="Cierre real hasta"
+                className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+              />
+              {(fechaDesde || fechaHasta) && (
+                <button
+                  onClick={() => { setFechaDesde(""); setFechaHasta(""); }}
+                  className="text-xs text-text-muted hover:text-text"
+                  title="Quitar rango de fechas"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+            <ExportButtons
+              filename="ganadas-perdidas"
+              rows={filtradas.map((o) => ({
+                Oportunidad: o.itemName, Empresa: o.empresa ?? "", Ejecutivo: o.ejecutivo ?? "",
+                Grupo: o.grupo ?? "", Etapa: o.etapa, Valor: o.valor ?? 0,
+                "Motivo de pérdida": o.motivoPerdida ?? "", "Cierre real": o.fechaCierreReal ?? ""
+              }))}
+            />
           </div>
         </div>
         <div className="overflow-x-auto">

@@ -1,7 +1,7 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { LayoutDashboard, Bot, Sparkles, Radar, Phone, ListChecks, TrendingUp, GraduationCap, BookOpen, MessageSquare, ScrollText, Settings, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, Bot, Sparkles, Radar, Phone, ListChecks, TrendingUp, GraduationCap, BookOpen, MessageSquare, Compass, ScrollText, Settings, type LucideIcon } from "lucide-react";
 import { api } from "../lib/api";
 import { useRole } from "../lib/useRole";
 import { Logo } from "./Logo";
@@ -19,6 +19,7 @@ const navItems: { to: string; label: string; icon: LucideIcon; end?: boolean; ad
   { to: "/seguimiento", label: "Seguimiento", icon: ListChecks, adminOnly: false },
   { to: "/pipeline", label: "Pipeline", icon: TrendingUp, adminOnly: true },
   { to: "/asistente", label: "Asistente", icon: MessageSquare, adminOnly: true },
+  { to: "/asesor", label: "Asesor Monday", icon: Compass, adminOnly: true },
   { to: "/coaching", label: "Coaching", icon: GraduationCap, adminOnly: true },
   { to: "/entrenamiento", label: "Entrenamiento", icon: BookOpen, adminOnly: false },
   { to: "/logs", label: "Bitácora", icon: ScrollText, adminOnly: true },
@@ -48,7 +49,7 @@ export function Layout() {
 
   return (
     <div className="flex min-h-screen bg-bg text-text">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6">
+      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-surface px-4 py-6 print:hidden">
         <div className="mb-6 px-2">
           <Logo className="h-9 w-auto" />
           <div className="mt-1.5 text-xs text-text-muted">Agentes IA · Monday</div>
@@ -134,7 +135,7 @@ export function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto px-8 py-6">
+      <main className="flex-1 overflow-y-auto px-8 py-6 print:overflow-visible print:p-0">
         <ErrorBoundary key={location.pathname}>
           <Outlet />
         </ErrorBoundary>
