@@ -259,6 +259,8 @@ export const api = {
   getForecast: () => request<ForecastReport>("/forecast"),
   // Vista 2: histórico de oportunidades ganadas/perdidas (solo modo Monday).
   getForecastCerradas: () => request<ForecastCerradasReport>("/forecast/cerradas"),
+  // Actualizaciones y archivos nativos de Monday para una oportunidad del pipeline.
+  getForecastActivity: (itemId: string) => request<MondayActivity>(`/forecast/${encodeURIComponent(itemId)}/actividad`),
 
   // Asistente comercial (Chat RAG sobre el histórico).
   askAssistant: (question: string) =>

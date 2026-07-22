@@ -273,6 +273,13 @@ export interface ForecastOpportunity {
   /** Fecha en que se creó el acuerdo en Monday. */
   fechaCreacion?: string | null;
   fechaCierreEstimada?: string | null;
+  /** "Valor de la cotización" — puede diferir del valor final del acuerdo. */
+  valorCotizacion?: number | null;
+  mesProyecto?: string | null;
+  comentariosSeguimiento?: string | null;
+  fechaInicioEtapa?: string | null;
+  /** Días en la etapa actual (hasta hoy). */
+  diasEnEtapaActual?: number | null;
 }
 
 export interface ForecastReport {
@@ -324,6 +331,12 @@ export interface ForecastCerradaItem {
   origen: string | null;
   giroUso: string | null;
   plazoMeses: number | null;
+  valorCotizacion: number | null;
+  mesProyecto: string | null;
+  comentariosSeguimiento: string | null;
+  fechaInicioEtapa: string | null;
+  /** Días entre que entró a Ganado/Perdido y el cierre real. */
+  diasEnEtapaActual: number | null;
   mondayUrl: string | null;
   cotizacion: { nombre: string; url: string } | null;
   archivos: number;

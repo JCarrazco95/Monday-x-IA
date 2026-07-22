@@ -31,6 +31,15 @@ const COL_ORIGEN = process.env.FORECAST_COL_ORIGEN ?? "color_mm4g27mz"; // "Orig
 const COL_GIRO_USO = process.env.FORECAST_COL_GIRO_USO ?? "text_mktjp81z"; // "Tipo de actividad para usar la unidad"
 const COL_PLAZO_MESES = process.env.FORECAST_COL_PLAZO_MESES ?? "numeric_mktjhkc3"; // "Plazo Renta real"
 const COL_FECHA_CREACION = process.env.FORECAST_COL_FECHA_CREACION ?? "deal_creation_date"; // "*Fecha de creación del acuerdo"
+// Nota: hay ~11 columnas "mirror" en este board (unidades, ciudad, terreno,
+// acuerdos especiales, tipo de proyecto, presupuesto, etc.) que dependen de una
+// relación al board "Leads Maxirent" — medido en producción (400 items
+// muestreados, TODOS los grupos): esa relación está en 0/400, así que esas
+// columnas están 100% vacías. No se traen porque no hay nada que mostrar; ver
+// docs de la investigación en el historial de commits de este archivo.
+const COL_MES_PROYECTO = process.env.FORECAST_COL_MES_PROYECTO ?? "text_mm3gg8qa"; // "MES DEL PROYECTO"
+const COL_COMENTARIOS_SEGUIMIENTO = process.env.FORECAST_COL_COMENTARIOS_SEGUIMIENTO ?? "text_mkw9n4hd"; // "Comentarios de seguimiento"
+const COL_FECHA_INICIO_ETAPA = process.env.FORECAST_COL_FECHA_INICIO_ETAPA ?? "date1"; // "*Fecha de inicio de la etapa actual"
 
 export const forecastMondayEnabled = !isMondayMockMode && Boolean(BOARD_OPORTUNIDADES);
 
@@ -65,6 +74,14 @@ export interface DealRow {
   plazoMeses: number | null;
   /** Fecha en que se creó el acuerdo en Monday (para medir ciclo de venta). */
   fechaCreacion: string | null;
+  /** "Valor de la cotización" — puede diferir del valor final del acuerdo. */
+  valorCotizacion: number | null;
+  /** Mes del proyecto (texto libre, poco capturado — ~8% de los items). */
+  mesProyecto: string | null;
+  /** Notas de seguimiento del vendedor. */
+  comentariosSeguimiento: string | null;
+  /** Desde cuándo el deal está en su etapa actual (para medir tiempo en etapa). */
+  fechaInicioEtapa: string | null;
   /** Link directo al item en Monday (para abrirlo desde el panel). */
   mondayUrl: string | null;
   /** Archivos del item (cotizaciones): el primero con extensión .pdf primero. */
@@ -137,7 +154,8 @@ export async function getDealsBoard(): Promise<DealRow[]> {
   const colIds = [
     COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE,
     COL_EJECUTIVO, COL_EMPRESA, COL_EMPRESA_ALT, COL_MOTIVO_PERDIDA,
-    COL_ORIGEN, COL_GIRO_USO, COL_PLAZO_MESES, COL_FECHA_CREACION
+    COL_ORIGEN, COL_GIRO_USO, COL_PLAZO_MESES, COL_FECHA_CREACION,
+    COL_MES_PROYECTO, COL_COMENTARIOS_SEGUIMIENTO, COL_FECHA_INICIO_ETAPA
   ];
   const query = `
     query ($ids: [ID!], $cols: [String!], $cursor: String) {
@@ -189,6 +207,10 @@ export async function getDealsBoard(): Promise<DealRow[]> {
         giroUso: cv.get(COL_GIRO_USO) || null,
         plazoMeses: parseMonto(cv.get(COL_PLAZO_MESES) ?? null),
         fechaCreacion: cv.get(COL_FECHA_CREACION) || null,
+        valorCotizacion: parseMonto(cv.get(COL_VALOR_ALT) ?? null),
+        mesProyecto: cv.get(COL_MES_PROYECTO) || null,
+        comentariosSeguimiento: cv.get(COL_COMENTARIOS_SEGUIMIENTO) || null,
+        fechaInicioEtapa: cv.get(COL_FECHA_INICIO_ETAPA) || null,
         mondayUrl: itemUrl(slug, BOARD_OPORTUNIDADES, it.id),
         archivos
       });

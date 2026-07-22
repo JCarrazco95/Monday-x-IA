@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { mondayRequest } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -86,6 +86,15 @@ const MES_LARGO: Record<string, number> = {
   julio: 6, agosto: 7, septiembre: 8, setiembre: 8, octubre: 9, noviembre: 10, diciembre: 11
 };
 
+/** Días entre dos fechas ISO (null si falta alguna o son inconsistentes). */
+function diasEntre(desdeISO: string | null, hastaISO: string | null): number | null {
+  if (!desdeISO || !hastaISO) return null;
+  const ini = Date.parse(desdeISO);
+  const fin = Date.parse(hastaISO);
+  if (Number.isNaN(ini) || Number.isNaN(fin) || fin < ini) return null;
+  return Math.round((fin - ini) / 86_400_000);
+}
+
 /** Mes de cierre proyectado de un deal abierto: fecha estimada > etiqueta "Mes de cierre" > null. */
 function mesCierreDe(d: DealRow): Date | null {
   if (d.fechaCierreEstimada) {
@@ -133,7 +142,12 @@ async function buildForecastFromMonday(now: Date) {
       giroUso: d.giroUso,
       plazoMeses: d.plazoMeses,
       fechaCreacion: d.fechaCreacion,
-      fechaCierreEstimada: d.fechaCierreEstimada
+      fechaCierreEstimada: d.fechaCierreEstimada,
+      valorCotizacion: d.valorCotizacion,
+      mesProyecto: d.mesProyecto,
+      comentariosSeguimiento: d.comentariosSeguimiento,
+      fechaInicioEtapa: d.fechaInicioEtapa,
+      diasEnEtapaActual: diasEntre(d.fechaInicioEtapa, now.toISOString())
     };
   });
 
@@ -261,15 +275,6 @@ async function buildCerradas(now: Date) {
   const oportunidades = cerradas
     .map((d) => {
       const pdf = d.archivos.find((a) => a.extension === ".pdf" || a.extension === "pdf") ?? null;
-      // Ciclo de venta: días entre que se creó el acuerdo y su cierre real.
-      let cicloVentaDias: number | null = null;
-      if (d.fechaCreacion && d.fechaCierreReal) {
-        const ini = Date.parse(d.fechaCreacion);
-        const fin = Date.parse(d.fechaCierreReal);
-        if (!Number.isNaN(ini) && !Number.isNaN(fin) && fin >= ini) {
-          cicloVentaDias = Math.round((fin - ini) / 86_400_000);
-        }
-      }
       return {
         itemId: d.itemId,
         itemName: d.itemName,
@@ -283,10 +288,17 @@ async function buildCerradas(now: Date) {
         motivoPerdida: d.etapa === "Perdido" ? d.motivoPerdida : null,
         fechaCierreReal: d.fechaCierreReal,
         fechaCreacion: d.fechaCreacion,
-        cicloVentaDias,
+        // Ciclo de venta: días entre que se creó el acuerdo y su cierre real.
+        cicloVentaDias: diasEntre(d.fechaCreacion, d.fechaCierreReal),
         origen: d.origen,
         giroUso: d.giroUso,
         plazoMeses: d.plazoMeses,
+        valorCotizacion: d.valorCotizacion,
+        mesProyecto: d.mesProyecto,
+        comentariosSeguimiento: d.comentariosSeguimiento,
+        fechaInicioEtapa: d.fechaInicioEtapa,
+        // Tiempo en la etapa final (Ganado/Perdido) hasta el cierre real.
+        diasEnEtapaActual: diasEntre(d.fechaInicioEtapa, d.fechaCierreReal),
         mondayUrl: d.mondayUrl,
         cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
         archivos: d.archivos.length
@@ -610,106 +622,17 @@ forecastRouter.get("/cerradas", async (_req, res) => {
   }
 });
 
-// TEMPORAL — quitar después de decidir qué tan viable es cada campo pedido.
-// GET /api/forecast/cobertura-debug → para cada columna candidata, cuántos
-// items (de una muestra de todos los grupos) la tienen realmente rellenada.
-// También prueba updates() y activity_logs() en un item con relación a Leads,
-// para evaluar el historial de actividad y el tiempo por etapa.
-forecastRouter.get("/cobertura-debug", async (_req, res) => {
-  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
+// GET /api/forecast/:itemId/actividad → "Actualizaciones" y archivos nativos
+// del item en Monday (solo lectura), igual que en Leads — el itemId de Monday
+// es global, no depende del board, así que se reusan los mismos helpers.
+forecastRouter.get("/:itemId/actividad", async (req, res) => {
+  if (!forecastMondayEnabled) return res.json({ enabled: false, updates: [], files: [] });
+  const { itemId } = req.params;
   try {
-    const boardId = process.env.MONDAY_BOARD_ID_OPORTUNIDADES;
-    const candidatas: Record<string, string> = {
-      text_mm3gg8qa: "MES DEL PROYECTO",
-      text_mkw9n4hd: "Comentarios de seguimiento",
-      deal_length: "Duración del acuerdo",
-      deal_value: "Valor de la cotizacion",
-      lookup_mm4emm7d: "Unidades Solicitadas",
-      lookup_mm4em02f: "Tipo de Unidad",
-      lookup_mm4daaza: "Unidades requeridas",
-      lookup_mm4excte: "Ciudad (es) de Operación",
-      lookup_mm4etv1p: "Ubicación donde van a operar las unidades",
-      lookup_mm4d4dd1: "Tipo de terreno",
-      lookup_mm4df434: "Acuerdos especiales",
-      lookup_mm4ez7rz: "Unidades con traslados",
-      lookup_mm4ehz0x: "Tipo de proyecto",
-      lookup_mm4ern2f: "Presupuesto por vehiculo",
-      lookup_mm4fykw6: "Situación por la que requiere las unidades",
-      dup__of_deal_age: "Duración de la etapa (actual)",
-      date1: "Fecha de inicio de la etapa actual",
-      board_relation_mktmg8dz: "Leads Maxirent (relación)"
-    };
-    const colIds = Object.keys(candidatas);
-    const query = `
-      query ($ids: [ID!], $cols: [String!], $cursor: String) {
-        boards (ids: $ids) {
-          items_page (limit: 100, cursor: $cursor) {
-            cursor
-            items { id name group { title } column_values (ids: $cols) { id text } }
-          }
-        }
-      }
-    `;
-    const conteos: Record<string, number> = {};
-    for (const id of colIds) conteos[id] = 0;
-    let total = 0;
-    let cursor: string | null = null;
-    let itemConRelacion: string | null = null;
-    let paginas = 0;
-    do {
-      const data: {
-        boards?: Array<{ items_page?: { cursor: string | null; items?: Array<{ id: string; column_values?: Array<{ id: string; text: string | null }> }> } }>;
-      } = await mondayRequest(query, { ids: [boardId], cols: colIds, cursor });
-      const page = data?.boards?.[0]?.items_page;
-      if (!page) break;
-      cursor = page.cursor;
-      paginas++;
-      for (const it of page.items ?? []) {
-        total++;
-        for (const cv of it.column_values ?? []) {
-          if (cv.text && cv.text.trim()) {
-            conteos[cv.id] = (conteos[cv.id] ?? 0) + 1;
-            if (cv.id === "board_relation_mktmg8dz" && !itemConRelacion) itemConRelacion = it.id;
-          }
-        }
-      }
-    } while (cursor && paginas < 4); // hasta ~400 items, suficiente muestra
-
-    // Con un item que sí tiene relación a Leads (si existe), probar updates()
-    // y activity_logs() del campo de etapa para evaluar factibilidad.
-    let updatesTest: unknown = null;
-    let activityLogsTest: unknown = null;
-    const itemPrueba = itemConRelacion ?? null;
-    if (itemPrueba) {
-      try {
-        const dataUpdates: { items?: Array<{ updates?: unknown[] }> } = await mondayRequest(
-          `query ($ids: [ID!]) { items (ids: $ids) { updates(limit: 5) { id body created_at creator { name } } } }`,
-          { ids: [itemPrueba] }
-        );
-        updatesTest = dataUpdates?.items?.[0]?.updates ?? [];
-      } catch (err) {
-        updatesTest = { error: err instanceof Error ? err.message : String(err) };
-      }
-      try {
-        const dataLogs: { boards?: Array<{ activity_logs?: unknown[] }> } = await mondayRequest(
-          `query ($ids: [ID!], $itemIds: [ID!]) { boards (ids: $ids) { activity_logs (item_ids: $itemIds, column_ids: ["deal_stage"], limit: 20) { id event data created_at } } }`,
-          { ids: [boardId], itemIds: [itemPrueba] }
-        );
-        activityLogsTest = dataLogs?.boards?.[0]?.activity_logs ?? [];
-      } catch (err) {
-        activityLogsTest = { error: err instanceof Error ? err.message : String(err) };
-      }
-    }
-
-    res.json({
-      totalMuestreado: total,
-      cobertura: Object.fromEntries(colIds.map((id) => [`${candidatas[id]} (${id})`, `${conteos[id]}/${total}`])),
-      itemConRelacionLeads: itemConRelacion,
-      updatesTest,
-      activityLogsTest
-    });
+    const [updates, files] = await Promise.all([getItemUpdates(itemId), getItemFiles(itemId)]);
+    res.json({ enabled: true, updates, files });
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 

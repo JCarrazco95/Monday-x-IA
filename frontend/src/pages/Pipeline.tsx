@@ -5,7 +5,8 @@ import {
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity } from "../types";
+import { ActualizacionesPanel } from "../components/MondayExtraTabs";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
 function toISODate(d: Date): string {
@@ -187,6 +188,21 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
   const sinMonto = esCerrada ? cerrada!.sinMonto : abierta!.sinMonto;
   const initials = o.itemName.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
+  const valorCotizacion = cerrada?.valorCotizacion ?? abierta?.valorCotizacion ?? null;
+  const mostrarValorCotizacion = valorCotizacion != null && valorCotizacion !== valor;
+  const diasEnEtapaActual = cerrada?.diasEnEtapaActual ?? abierta?.diasEnEtapaActual ?? null;
+
+  const [activity, setActivity] = useState<MondayActivity | null>(null);
+  const [loadingActivity, setLoadingActivity] = useState(true);
+  useEffect(() => {
+    setLoadingActivity(true);
+    api
+      .getForecastActivity(o.itemId)
+      .then(setActivity)
+      .catch(() => setActivity({ enabled: false, updates: [], files: [] }))
+      .finally(() => setLoadingActivity(false));
+  }, [o.itemId]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden"
@@ -250,6 +266,17 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
                 <div className="text-[11px] text-text-muted">creación → cierre</div>
               </DetailMetric>
             )}
+            {diasEnEtapaActual != null && (
+              <DetailMetric label={esCerrada ? "Tiempo hasta el cierre" : "Tiempo en la etapa actual"}>
+                <div className="text-lg font-bold text-text">{diasEnEtapaActual} días</div>
+              </DetailMetric>
+            )}
+            {mostrarValorCotizacion && (
+              <DetailMetric label="Valor de la cotización">
+                <div className="text-lg font-bold text-text">{money(valorCotizacion!, moneda)}</div>
+                <div className="text-[11px] text-text-muted">puede diferir del valor final</div>
+              </DetailMetric>
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -261,6 +288,16 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
             {(cerrada?.giroUso ?? abierta?.giroUso) && (
               <DetailBlock icon="🚚" title="Uso de la unidad">
                 <p className="text-[13px] text-text">{cerrada?.giroUso ?? abierta?.giroUso}</p>
+              </DetailBlock>
+            )}
+            {(cerrada?.mesProyecto ?? abierta?.mesProyecto) && (
+              <DetailBlock icon="🗓️" title="Mes del proyecto">
+                <p className="text-[13px] text-text">{cerrada?.mesProyecto ?? abierta?.mesProyecto}</p>
+              </DetailBlock>
+            )}
+            {(cerrada?.comentariosSeguimiento ?? abierta?.comentariosSeguimiento) && (
+              <DetailBlock icon="💬" title="Comentarios de seguimiento">
+                <p className="whitespace-pre-wrap text-[13px] text-text">{cerrada?.comentariosSeguimiento ?? abierta?.comentariosSeguimiento}</p>
               </DetailBlock>
             )}
           </div>
@@ -292,6 +329,10 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
               <FileText size={13} /> Ver cotización adjunta
             </a>
           )}
+
+          <DetailBlock icon="🕒" title="Actividad en Monday">
+            <ActualizacionesPanel activity={activity} loading={loadingActivity} />
+          </DetailBlock>
         </div>
 
         <div className="flex items-center justify-between border-t border-border bg-black/[0.02] px-5 py-3">
@@ -711,7 +752,9 @@ export function Pipeline() {
                       Oportunidad: o.itemName, Empresa: o.empresa ?? "", Ejecutivo: o.ejecutivo ?? "",
                       Grupo: o.grupo ?? "", Etapa: o.etapa, "Probabilidad %": o.probabilidad,
                       Valor: o.valorEstimado, Ponderado: o.valorPonderado, "Mes de cierre": o.mesCierre,
-                      "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? ""
+                      "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? "",
+                      "Mes del proyecto": o.mesProyecto ?? "", "Comentarios de seguimiento": o.comentariosSeguimiento ?? "",
+                      "Días en etapa actual": o.diasEnEtapaActual ?? ""
                     }))}
                   />
                 </div>
@@ -1210,7 +1253,9 @@ function CerradasView({
                 Grupo: o.grupo ?? "", Etapa: o.etapa, Valor: o.valor ?? 0,
                 "Motivo de pérdida": o.motivoPerdida ?? "", "Fecha de creación": o.fechaCreacion ?? "",
                 "Cierre real": o.fechaCierreReal ?? "", "Ciclo de venta (días)": o.cicloVentaDias ?? "",
-                "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? ""
+                "Origen del lead": o.origen ?? "", "Uso de la unidad": o.giroUso ?? "", "Plazo (meses)": o.plazoMeses ?? "",
+                "Mes del proyecto": o.mesProyecto ?? "", "Comentarios de seguimiento": o.comentariosSeguimiento ?? "",
+                "Valor de cotización": o.valorCotizacion ?? ""
               }))}
             />
           </div>
