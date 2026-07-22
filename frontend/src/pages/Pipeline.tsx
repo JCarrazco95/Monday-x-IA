@@ -784,7 +784,7 @@ export function Pipeline() {
             </div>
             {esMonday && (
               <p className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
-                Clic en una fila abre el item en Monday. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
+                Clic en una fila abre el detalle de la oportunidad. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
               </p>
             )}
           </div>
@@ -1274,7 +1274,7 @@ function CerradasView({
           </table>
         </div>
         <p className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
-          Clic en una fila abre el item en Monday. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
+          Clic en una fila abre el detalle de la oportunidad. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
         </p>
       </div>
     </>
