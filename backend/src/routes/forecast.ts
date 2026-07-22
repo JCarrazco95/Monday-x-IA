@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
+import { mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -28,6 +29,28 @@ export const forecastRouter = Router();
 
 const TICKET_BASE = Number(process.env.FORECAST_TICKET_BASE ?? 25000); // MXN/mes por oportunidad típica
 const MONEDA = process.env.FORECAST_MONEDA ?? "MXN";
+
+// ── Vendedores activos + corte de fecha (solo modo Monday) ─────────────────
+// El equipo comercial hoy son 4 vendedores; el resto de nombres en el board
+// son bajas o pruebas. Se filtra por nombre exacto (tal cual lo trae la
+// columna "Persona" de Monday) y se puede ajustar sin tocar código vía env.
+const VENDEDORES_ACTIVOS_DEFAULT = [
+  "Aarón Alonso Pérez Zárate",
+  "DANTE FERNANDO CORTES NAVARRO",
+  "Nadia Iran Mejorado Alfaro",
+  "Juan Ramon Martínez Turrubiates"
+];
+const VENDEDORES_ACTIVOS = (process.env.FORECAST_VENDEDORES_ACTIVOS
+  ? process.env.FORECAST_VENDEDORES_ACTIVOS.split(",").map((s) => s.trim()).filter(Boolean)
+  : VENDEDORES_ACTIVOS_DEFAULT
+).map((s) => s.toLowerCase());
+// Solo se aplica a cierres reales (Ganado/Perdido): el pipeline abierto no
+// tiene una fecha real de cierre con la que cortar por antigüedad.
+const DESDE_FECHA_CIERRE = process.env.FORECAST_DESDE_FECHA_CIERRE ?? "2026-01-01";
+
+function esVendedorActivo(ejecutivo: string | null): boolean {
+  return Boolean(ejecutivo) && VENDEDORES_ACTIVOS.includes(ejecutivo!.toLowerCase());
+}
 
 const MESES_ES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
@@ -75,11 +98,11 @@ function mesCierreDe(d: DealRow): Date | null {
 }
 
 async function buildForecastFromMonday(now: Date) {
-  const deals = await getDealsBoard();
+  const deals = (await getDealsBoard()).filter((d) => esVendedorActivo(d.ejecutivo));
   const probs = probEtapas();
 
   const abiertos = deals.filter((d) => d.etapa !== "Ganado" && d.etapa !== "Perdido");
-  const ganados = deals.filter((d) => d.etapa === "Ganado");
+  const ganados = deals.filter((d) => d.etapa === "Ganado" && (d.fechaCierreReal ?? "") >= DESDE_FECHA_CIERRE);
 
   const oportunidades = abiertos.map((d) => {
     const probabilidad = probs[d.etapa] ?? 20;
@@ -223,8 +246,10 @@ async function buildForecastFromMonday(now: Date) {
 // (ganadoMes/ganadoAnio) y nunca exponía la lista ni "Perdido". Esta vista
 // reutiliza esos mismos deals para el histórico de cierres reales.
 async function buildCerradas(now: Date) {
-  const deals = await getDealsBoard();
-  const cerradas = deals.filter((d) => d.etapa === "Ganado" || d.etapa === "Perdido");
+  const deals = (await getDealsBoard()).filter((d) => esVendedorActivo(d.ejecutivo));
+  const cerradas = deals.filter(
+    (d) => (d.etapa === "Ganado" || d.etapa === "Perdido") && (d.fechaCierreReal ?? "") >= DESDE_FECHA_CIERRE
+  );
   const ganadas = cerradas.filter((d) => d.etapa === "Ganado");
   const perdidas = cerradas.filter((d) => d.etapa === "Perdido");
 
@@ -544,6 +569,44 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
+  }
+});
+
+// TEMPORAL — quitar después de decidir qué columnas mostrar al director.
+// GET /api/forecast/columnas-debug → todas las columnas del board Oportunidades
+// (id, título, tipo) + los valores de hasta 5 items del grupo "Ganado".
+forecastRouter.get("/columnas-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
+  try {
+    const boardId = process.env.MONDAY_BOARD_ID_OPORTUNIDADES;
+    const data: {
+      boards?: Array<{
+        columns?: Array<{ id: string; title: string; type: string }>;
+        items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null }> }> };
+      }>;
+    } = await mondayRequest(
+      `query ($ids: [ID!]) {
+        boards (ids: $ids) {
+          columns { id title type }
+          items_page (limit: 500) {
+            items { id name group { title } column_values { id text } }
+          }
+        }
+      }`,
+      { ids: [boardId] }
+    );
+    const board = data?.boards?.[0];
+    const items = (board?.items_page?.items ?? []).filter((it) => /ganado/i.test(it.group?.title ?? ""));
+    res.json({
+      columnas: board?.columns ?? [],
+      ejemplosGanados: items.slice(0, 5).map((it) => ({
+        id: it.id,
+        name: it.name,
+        columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, c.text]))
+      }))
+    });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
