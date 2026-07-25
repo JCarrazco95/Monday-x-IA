@@ -241,8 +241,34 @@ export interface CoachingReport {
   tendencia: { periodo: string; globalProm: number; count: number }[];
 }
 
+// ── Campos "obligatorios" del detalle de oportunidad (definidos por el
+// director comercial) — compartidos entre pipeline abierto y cerradas. ──
+export interface DetalleObligatorioOportunidad {
+  duracionProyecto: string | null;
+  estadoCotizacion: string | null;
+  traslados: number | null;
+  adecuaciones: number | null;
+  unidadesRequeridas: string | null;
+  unidadesSolicitadas: string | null;
+  unidadesCotizadas: number | null;
+  vehiculosCotizados: string | null;
+  tipoTerreno: string | null;
+  ubicacionOperacion: string | null;
+  ciudadOperacion: string | null;
+  situacionRequiere: string | null;
+  tipoActividadUnidad: string | null;
+  tipoProyecto: string | null;
+  presupuestoVehiculo: string | null;
+  requierePermiso: string | null;
+  acuerdosEspeciales: string | null;
+  nombreProyecto: string | null;
+  fechaEntrega: string | null;
+  fechaArranque: string | null;
+  ultimaActualizacion: string | null;
+}
+
 // ── Forecast / Pipeline ponderado ──
-export interface ForecastOpportunity {
+export interface ForecastOpportunity extends DetalleObligatorioOportunidad {
   itemId: string;
   itemName: string;
   empresa: string | null;
@@ -313,7 +339,7 @@ export interface ForecastReport {
 }
 
 // ── Forecast: vista 2, GANADAS Y PERDIDAS (histórico de cierres reales) ──
-export interface ForecastCerradaItem {
+export interface ForecastCerradaItem extends DetalleObligatorioOportunidad {
   itemId: string;
   itemName: string;
   empresa: string | null;

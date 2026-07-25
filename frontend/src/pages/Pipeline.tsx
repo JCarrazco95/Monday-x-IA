@@ -5,7 +5,6 @@ import {
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import { ActualizacionesPanel } from "../components/MondayExtraTabs";
 import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
@@ -178,6 +177,113 @@ function DetailBlock({ icon, title, children }: { icon: string; title: string; c
   );
 }
 
+// Campo obligatorio (definido por el director comercial): siempre visible —
+// si el vendedor no lo llenó, se marca en rojo en vez de ocultarse, para que
+// el hueco de captura sea evidente de un vistazo.
+function RequiredField({ label, value }: { label: string; value: string | number | null }) {
+  const vacio = value == null || value === "";
+  return (
+    <div className={`rounded-lg border p-2.5 ${vacio ? "border-danger/40 bg-danger/[0.06]" : "border-border bg-black/[0.02]"}`}>
+      <div className="text-[10px] leading-tight text-text-muted">{label}</div>
+      <div className={`mt-1 text-[12px] font-semibold leading-snug ${vacio ? "text-danger" : "text-text"}`}>
+        {vacio ? "Sin capturar" : value}
+      </div>
+    </div>
+  );
+}
+
+// ── Actividad en Monday: resumen categorizado (correos/llamadas/mensajes) ──
+// La actividad nativa mezcla comentarios internos, correos enviados desde
+// Monday (integración Gmail) y transcripciones de llamadas pegadas por la
+// integración de Aircall/Wati — se distinguen por patrones del propio texto,
+// no hay un campo "tipo" en la API de updates.
+type TipoActividad = "correo" | "llamada" | "mensaje";
+const TIPO_ICON: Record<TipoActividad, string> = { correo: "📧", llamada: "📞", mensaje: "💬" };
+const TIPO_LABEL: Record<TipoActividad, string> = { correo: "Correo", llamada: "Llamada", mensaje: "Mensaje" };
+
+function categorizarUpdate(body: string): { tipo: TipoActividad; tema: string } {
+  const b = body.trim();
+  if (/^outgoing email/i.test(b)) {
+    const m = b.match(/nuevo mensaje de (.+)$/i);
+    return { tipo: "correo", tema: m ? `Nuevo mensaje de ${m[1].trim()}` : "Correo saliente" };
+  }
+  if (/call id:|call transcription/i.test(b)) {
+    const m = b.match(/Call Transcription:\s*([^:]{3,60}?):/i);
+    return { tipo: "llamada", tema: m ? `Llamada con ${m[1].trim()}` : "Llamada telefónica" };
+  }
+  const primeraLinea = b.split(/\n/)[0].slice(0, 80);
+  return { tipo: "mensaje", tema: primeraLinea || "Comentario" };
+}
+
+function fmtFechaActividad(iso: string | null): string {
+  if (!iso) return "";
+  try {
+    return new Date(iso).toLocaleString("es-MX", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  } catch {
+    return iso;
+  }
+}
+
+function ActividadResumen({ activity, loading }: { activity: MondayActivity | null; loading: boolean }) {
+  const [expandido, setExpandido] = useState<string | null>(null);
+
+  if (loading) return <p className="py-6 text-center text-xs text-text-muted">Cargando actividad…</p>;
+  if (!activity?.enabled) {
+    return <p className="py-6 text-center text-xs text-text-muted">Conecta Monday para ver aquí la actividad nativa del item.</p>;
+  }
+  if (activity.updates.length === 0) {
+    return <p className="py-6 text-center text-xs text-text-muted">Este item aún no tiene actividad en Monday.</p>;
+  }
+
+  const categorizados = activity.updates.map((u) => ({ ...u, ...categorizarUpdate(u.body) }));
+  const conteos = { correo: 0, llamada: 0, mensaje: 0 };
+  for (const c of categorizados) conteos[c.tipo]++;
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
+          📧 {conteos.correo} correo{conteos.correo === 1 ? "" : "s"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
+          📞 {conteos.llamada} llamada{conteos.llamada === 1 ? "" : "s"}
+        </span>
+        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
+          💬 {conteos.mensaje} mensaje{conteos.mensaje === 1 ? "" : "s"}
+        </span>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {categorizados.map((u) => {
+          const abierto = expandido === u.id;
+          const esLargo = u.body.length > 220;
+          return (
+            <li key={u.id} className="rounded-lg border border-border p-2.5">
+              <div className="mb-1 flex items-center gap-2 text-[11px] text-text-muted">
+                <span>{TIPO_ICON[u.tipo]}</span>
+                <span className="font-semibold text-text">{TIPO_LABEL[u.tipo]}</span>
+                {u.autor && <span>· {u.autor}</span>}
+                <span className="ml-auto shrink-0">{fmtFechaActividad(u.createdAt)}</span>
+              </div>
+              <div className="text-[12px] font-medium text-text">{u.tema}</div>
+              <p className="mt-1 whitespace-pre-wrap text-[12px] text-text-muted">
+                {esLargo && !abierto ? u.body.slice(0, 220) + "…" : u.body}
+              </p>
+              {esLargo && (
+                <button
+                  onClick={() => setExpandido(abierto ? null : u.id)}
+                  className="mt-1 text-[11px] font-medium text-accent hover:underline"
+                >
+                  {abierto ? "Ver menos" : "Ver completo"}
+                </button>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; moneda: string; onClose: () => void }) {
   const { o } = item;
   const esCerrada = item.kind === "cerrada";
@@ -191,6 +297,40 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
   const valorCotizacion = cerrada?.valorCotizacion ?? abierta?.valorCotizacion ?? null;
   const mostrarValorCotizacion = valorCotizacion != null && valorCotizacion !== valor;
   const diasEnEtapaActual = cerrada?.diasEnEtapaActual ?? abierta?.diasEnEtapaActual ?? null;
+
+  const det = cerrada ?? abierta!; // ambos extienden DetalleObligatorioOportunidad
+  const numOrDash = (n: number | null) => (n != null ? money(n, moneda) : null);
+  const camposObligatorios: { label: string; value: string | number | null }[] = [
+    { label: "Duración del proyecto", value: det.duracionProyecto },
+    { label: "Estado de la cotización", value: det.estadoCotizacion },
+    { label: "Valor total sin IVA", value: numOrDash(valorCotizacion) },
+    { label: "Valor de renta", value: valor != null ? money(valor, moneda) : null },
+    { label: "Traslados", value: numOrDash(det.traslados) },
+    { label: "Adecuaciones", value: numOrDash(det.adecuaciones) },
+    { label: "Unidades requeridas", value: det.unidadesRequeridas },
+    { label: "Unidades solicitadas", value: det.unidadesSolicitadas },
+    { label: "Unidades cotizadas", value: det.unidadesCotizadas },
+    { label: "Vehículos cotizados", value: det.vehiculosCotizados },
+    { label: "Tipo de terreno", value: det.tipoTerreno },
+    { label: "Ubicación de operación", value: det.ubicacionOperacion },
+    { label: "Ciudad(es) de operación", value: det.ciudadOperacion },
+    { label: "Situación por la que requiere las unidades", value: det.situacionRequiere },
+    { label: "Tipo de actividad para usar la unidad", value: det.tipoActividadUnidad },
+    { label: "Tipo de proyecto", value: det.tipoProyecto },
+    { label: "Presupuesto por vehículo", value: det.presupuestoVehiculo },
+    { label: "Requiere permiso/verificación", value: det.requierePermiso },
+    { label: "Acuerdos especiales", value: det.acuerdosEspeciales },
+    { label: "Nombre del proyecto", value: det.nombreProyecto }
+  ];
+
+  const fechas: { label: string; value: string; icon: React.ReactNode }[] = [];
+  if (det.fechaCreacion) fechas.push({ label: "Acuerdo creado", value: det.fechaCreacion, icon: <Calendar size={13} className="text-text-muted" /> });
+  if (det.fechaInicioEtapa) fechas.push({ label: "Inicio de la etapa actual", value: det.fechaInicioEtapa, icon: <Clock size={13} className="text-text-muted" /> });
+  if (abierta?.fechaCierreEstimada) fechas.push({ label: "Cierre estimado", value: abierta.fechaCierreEstimada, icon: <Clock size={13} className="text-text-muted" /> });
+  if (cerrada?.fechaCierreReal) fechas.push({ label: "Cierre real", value: cerrada.fechaCierreReal, icon: <Clock size={13} className="text-text-muted" /> });
+  if (det.fechaEntrega) fechas.push({ label: "Entrega estimada", value: det.fechaEntrega, icon: <Calendar size={13} className="text-text-muted" /> });
+  if (det.fechaArranque) fechas.push({ label: "Posible arranque", value: det.fechaArranque, icon: <Calendar size={13} className="text-text-muted" /> });
+  if (det.ultimaActualizacion) fechas.push({ label: "Última actualización", value: det.ultimaActualizacion, icon: <Clock size={13} className="text-text-muted" /> });
 
   const [activity, setActivity] = useState<MondayActivity | null>(null);
   const [loadingActivity, setLoadingActivity] = useState(true);
@@ -245,7 +385,6 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
             {abierta && (
               <DetailMetric label="Probabilidad de cierre">
                 <div className="text-lg font-bold text-text">{abierta.probabilidad}%</div>
-                <div className="text-[11px] text-text-muted">Ponderado: {money(abierta.valorPonderado, moneda)}</div>
               </DetailMetric>
             )}
             {cerrada && (
@@ -302,20 +441,22 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
             )}
           </div>
 
+          <DetailBlock icon="☑️" title="Campos obligatorios">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {camposObligatorios.map((c) => (
+                <RequiredField key={c.label} label={c.label} value={c.value} />
+              ))}
+            </div>
+          </DetailBlock>
+
           <DetailBlock icon="📅" title="Fechas">
             <div className="flex flex-col gap-1.5 text-[13px] text-text">
-              {(cerrada?.fechaCreacion ?? abierta?.fechaCreacion) && (
-                <div className="flex items-center gap-2"><Calendar size={13} className="text-text-muted" /> Acuerdo creado: {cerrada?.fechaCreacion ?? abierta?.fechaCreacion}</div>
-              )}
-              {abierta?.fechaCierreEstimada && (
-                <div className="flex items-center gap-2"><Clock size={13} className="text-text-muted" /> Cierre estimado: {abierta.fechaCierreEstimada}</div>
-              )}
-              {cerrada?.fechaCierreReal && (
-                <div className="flex items-center gap-2"><Clock size={13} className="text-text-muted" /> Cierre real: {cerrada.fechaCierreReal}</div>
-              )}
-              {!(cerrada?.fechaCreacion ?? abierta?.fechaCreacion) && !abierta?.fechaCierreEstimada && !cerrada?.fechaCierreReal && (
-                <span className="text-text-muted">Sin fechas capturadas.</span>
-              )}
+              {fechas.length === 0 && <span className="text-text-muted">Sin fechas capturadas.</span>}
+              {fechas.map((f) => (
+                <div key={f.label} className="flex items-center gap-2">
+                  {f.icon} {f.label}: {f.value}
+                </div>
+              ))}
             </div>
           </DetailBlock>
 
@@ -331,7 +472,7 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
           )}
 
           <DetailBlock icon="🕒" title="Actividad en Monday">
-            <ActualizacionesPanel activity={activity} loading={loadingActivity} />
+            <ActividadResumen activity={activity} loading={loadingActivity} />
           </DetailBlock>
         </div>
 

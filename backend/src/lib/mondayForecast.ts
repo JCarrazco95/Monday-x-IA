@@ -41,6 +41,33 @@ const COL_MES_PROYECTO = process.env.FORECAST_COL_MES_PROYECTO ?? "text_mm3gg8qa
 const COL_COMENTARIOS_SEGUIMIENTO = process.env.FORECAST_COL_COMENTARIOS_SEGUIMIENTO ?? "text_mkw9n4hd"; // "Comentarios de seguimiento"
 const COL_FECHA_INICIO_ETAPA = process.env.FORECAST_COL_FECHA_INICIO_ETAPA ?? "date1"; // "*Fecha de inicio de la etapa actual"
 
+// Campos obligatorios del detalle de oportunidad — IDs dados directamente por
+// el director comercial (no adivinados). Algunas son columnas "mirror" que
+// venían vacías en el muestreo anterior; se agregan igual porque el equipo
+// las empezó a llenar directo (ver "Vehículos/Unidades Cotizadas", nuevas).
+const COL_DURACION_PROYECTO = process.env.FORECAST_COL_DURACION_PROYECTO ?? "lookup_mm4d118x"; // "Duración de tu proyecto empresarial"
+const COL_ESTADO_COTIZACION = process.env.FORECAST_COL_ESTADO_COTIZACION ?? "color_mktmr9yy"; // "Estado cotización"
+const COL_TRASLADOS = process.env.FORECAST_COL_TRASLADOS ?? "numeric_mm5hf4w2"; // "Traslados"
+const COL_ADECUACIONES = process.env.FORECAST_COL_ADECUACIONES ?? "numeric_mm5hm90x"; // "Adecuaciones"
+const COL_UNIDADES_REQUERIDAS = process.env.FORECAST_COL_UNIDADES_REQUERIDAS ?? "lookup_mm4daaza"; // "Unidades requeridas"
+const COL_UNIDADES_SOLICITADAS = process.env.FORECAST_COL_UNIDADES_SOLICITADAS ?? "lookup_mm4emm7d"; // "Unidades Solicitadas"
+const COL_UNIDADES_COTIZADAS = process.env.FORECAST_COL_UNIDADES_COTIZADAS ?? "numeric_mm5h3vj5"; // "Unidades Cotizadas"
+const COL_VEHICULOS_COTIZADOS = process.env.FORECAST_COL_VEHICULOS_COTIZADOS ?? "dropdown_mm5h76r5"; // "Vehiculos Cotizados"
+const COL_TIPO_TERRENO = process.env.FORECAST_COL_TIPO_TERRENO ?? "lookup_mm4d4dd1"; // "Tipo de terreno"
+const COL_UBICACION_OPERACION = process.env.FORECAST_COL_UBICACION_OPERACION ?? "lookup_mm4etv1p"; // "Ubicación donde van a operar las unidades"
+const COL_CIUDAD_OPERACION = process.env.FORECAST_COL_CIUDAD_OPERACION ?? "lookup_mm4excte"; // "Ciudad(es) de Operación"
+const COL_SITUACION_REQUIERE = process.env.FORECAST_COL_SITUACION_REQUIERE ?? "lookup_mm4fykw6"; // "Situación por la que requiere las unidades"
+const COL_TIPO_ACTIVIDAD_UNIDAD = process.env.FORECAST_COL_TIPO_ACTIVIDAD_UNIDAD ?? "lookup_mm4esthy"; // "Tipo de actividad para usar la unidad" (mirror)
+const COL_TIPO_PROYECTO = process.env.FORECAST_COL_TIPO_PROYECTO ?? "lookup_mm4ehz0x"; // "Tipo de proyecto"
+const COL_PRESUPUESTO_VEHICULO = process.env.FORECAST_COL_PRESUPUESTO_VEHICULO ?? "lookup_mm4ern2f"; // "Presupuesto por vehiculo"
+const COL_REQUIERE_PERMISO = process.env.FORECAST_COL_REQUIERE_PERMISO ?? "lookup_mm4egy80"; // "Requiere permiso/verificación"
+const COL_ACUERDOS_ESPECIALES = process.env.FORECAST_COL_ACUERDOS_ESPECIALES ?? "lookup_mm4df434"; // "Acuerdos especiales"
+const COL_NOMBRE_PROYECTO = process.env.FORECAST_COL_NOMBRE_PROYECTO ?? "lookup_mm4h7dk6"; // "Nombre del proyecto"
+// Fechas adicionales para el bloque "Fechas" del detalle.
+const COL_FECHA_ENTREGA = process.env.FORECAST_COL_FECHA_ENTREGA ?? "date_mkpnckv9"; // "Fecha estimada de entrega"
+const COL_FECHA_ARRANQUE = process.env.FORECAST_COL_FECHA_ARRANQUE ?? "lookup_mm4e89vm"; // "Fecha de posible arranque"
+const COL_ULTIMA_ACTUALIZACION = process.env.FORECAST_COL_ULTIMA_ACTUALIZACION ?? "date"; // "Última actualización"
+
 export const forecastMondayEnabled = !isMondayMockMode && Boolean(BOARD_OPORTUNIDADES);
 
 export type EtapaDeal =
@@ -82,6 +109,28 @@ export interface DealRow {
   comentariosSeguimiento: string | null;
   /** Desde cuándo el deal está en su etapa actual (para medir tiempo en etapa). */
   fechaInicioEtapa: string | null;
+  // ── Campos obligatorios del detalle (definidos por el director comercial) ──
+  duracionProyecto: string | null;
+  estadoCotizacion: string | null;
+  traslados: number | null;
+  adecuaciones: number | null;
+  unidadesRequeridas: string | null;
+  unidadesSolicitadas: string | null;
+  unidadesCotizadas: number | null;
+  vehiculosCotizados: string | null;
+  tipoTerreno: string | null;
+  ubicacionOperacion: string | null;
+  ciudadOperacion: string | null;
+  situacionRequiere: string | null;
+  tipoActividadUnidad: string | null;
+  tipoProyecto: string | null;
+  presupuestoVehiculo: string | null;
+  requierePermiso: string | null;
+  acuerdosEspeciales: string | null;
+  nombreProyecto: string | null;
+  fechaEntrega: string | null;
+  fechaArranque: string | null;
+  ultimaActualizacion: string | null;
   /** Link directo al item en Monday (para abrirlo desde el panel). */
   mondayUrl: string | null;
   /** Archivos del item (cotizaciones): el primero con extensión .pdf primero. */
@@ -155,7 +204,12 @@ export async function getDealsBoard(): Promise<DealRow[]> {
     COL_ETAPA, COL_VALOR, COL_VALOR_ALT, COL_FECHA_CIERRE, COL_FECHA_CIERRE_REAL, COL_MES_CIERRE,
     COL_EJECUTIVO, COL_EMPRESA, COL_EMPRESA_ALT, COL_MOTIVO_PERDIDA,
     COL_ORIGEN, COL_GIRO_USO, COL_PLAZO_MESES, COL_FECHA_CREACION,
-    COL_MES_PROYECTO, COL_COMENTARIOS_SEGUIMIENTO, COL_FECHA_INICIO_ETAPA
+    COL_MES_PROYECTO, COL_COMENTARIOS_SEGUIMIENTO, COL_FECHA_INICIO_ETAPA,
+    COL_DURACION_PROYECTO, COL_ESTADO_COTIZACION, COL_TRASLADOS, COL_ADECUACIONES,
+    COL_UNIDADES_REQUERIDAS, COL_UNIDADES_SOLICITADAS, COL_UNIDADES_COTIZADAS, COL_VEHICULOS_COTIZADOS,
+    COL_TIPO_TERRENO, COL_UBICACION_OPERACION, COL_CIUDAD_OPERACION, COL_SITUACION_REQUIERE,
+    COL_TIPO_ACTIVIDAD_UNIDAD, COL_TIPO_PROYECTO, COL_PRESUPUESTO_VEHICULO, COL_REQUIERE_PERMISO,
+    COL_ACUERDOS_ESPECIALES, COL_NOMBRE_PROYECTO, COL_FECHA_ENTREGA, COL_FECHA_ARRANQUE, COL_ULTIMA_ACTUALIZACION
   ];
   const query = `
     query ($ids: [ID!], $cols: [String!], $cursor: String) {
@@ -211,6 +265,27 @@ export async function getDealsBoard(): Promise<DealRow[]> {
         mesProyecto: cv.get(COL_MES_PROYECTO) || null,
         comentariosSeguimiento: cv.get(COL_COMENTARIOS_SEGUIMIENTO) || null,
         fechaInicioEtapa: cv.get(COL_FECHA_INICIO_ETAPA) || null,
+        duracionProyecto: cv.get(COL_DURACION_PROYECTO) || null,
+        estadoCotizacion: cv.get(COL_ESTADO_COTIZACION) || null,
+        traslados: parseMonto(cv.get(COL_TRASLADOS) ?? null),
+        adecuaciones: parseMonto(cv.get(COL_ADECUACIONES) ?? null),
+        unidadesRequeridas: cv.get(COL_UNIDADES_REQUERIDAS) || null,
+        unidadesSolicitadas: cv.get(COL_UNIDADES_SOLICITADAS) || null,
+        unidadesCotizadas: parseMonto(cv.get(COL_UNIDADES_COTIZADAS) ?? null),
+        vehiculosCotizados: cv.get(COL_VEHICULOS_COTIZADOS) || null,
+        tipoTerreno: cv.get(COL_TIPO_TERRENO) || null,
+        ubicacionOperacion: cv.get(COL_UBICACION_OPERACION) || null,
+        ciudadOperacion: cv.get(COL_CIUDAD_OPERACION) || null,
+        situacionRequiere: cv.get(COL_SITUACION_REQUIERE) || null,
+        tipoActividadUnidad: cv.get(COL_TIPO_ACTIVIDAD_UNIDAD) || null,
+        tipoProyecto: cv.get(COL_TIPO_PROYECTO) || null,
+        presupuestoVehiculo: cv.get(COL_PRESUPUESTO_VEHICULO) || null,
+        requierePermiso: cv.get(COL_REQUIERE_PERMISO) || null,
+        acuerdosEspeciales: cv.get(COL_ACUERDOS_ESPECIALES) || null,
+        nombreProyecto: cv.get(COL_NOMBRE_PROYECTO) || null,
+        fechaEntrega: cv.get(COL_FECHA_ENTREGA) || null,
+        fechaArranque: cv.get(COL_FECHA_ARRANQUE) || null,
+        ultimaActualizacion: cv.get(COL_ULTIMA_ACTUALIZACION) || null,
         mondayUrl: itemUrl(slug, BOARD_OPORTUNIDADES, it.id),
         archivos
       });

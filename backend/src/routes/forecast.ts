@@ -95,6 +95,35 @@ function diasEntre(desdeISO: string | null, hastaISO: string | null): number | n
   return Math.round((fin - ini) / 86_400_000);
 }
 
+// Campos "obligatorios" del detalle de oportunidad (definidos por el director
+// comercial) — compartidos entre el pipeline abierto y ganadas/perdidas para
+// no duplicar el mapeo dos veces.
+function detalleObligatorio(d: DealRow) {
+  return {
+    duracionProyecto: d.duracionProyecto,
+    estadoCotizacion: d.estadoCotizacion,
+    traslados: d.traslados,
+    adecuaciones: d.adecuaciones,
+    unidadesRequeridas: d.unidadesRequeridas,
+    unidadesSolicitadas: d.unidadesSolicitadas,
+    unidadesCotizadas: d.unidadesCotizadas,
+    vehiculosCotizados: d.vehiculosCotizados,
+    tipoTerreno: d.tipoTerreno,
+    ubicacionOperacion: d.ubicacionOperacion,
+    ciudadOperacion: d.ciudadOperacion,
+    situacionRequiere: d.situacionRequiere,
+    tipoActividadUnidad: d.tipoActividadUnidad,
+    tipoProyecto: d.tipoProyecto,
+    presupuestoVehiculo: d.presupuestoVehiculo,
+    requierePermiso: d.requierePermiso,
+    acuerdosEspeciales: d.acuerdosEspeciales,
+    nombreProyecto: d.nombreProyecto,
+    fechaEntrega: d.fechaEntrega,
+    fechaArranque: d.fechaArranque,
+    ultimaActualizacion: d.ultimaActualizacion
+  };
+}
+
 /** Mes de cierre proyectado de un deal abierto: fecha estimada > etiqueta "Mes de cierre" > null. */
 function mesCierreDe(d: DealRow): Date | null {
   if (d.fechaCierreEstimada) {
@@ -147,7 +176,8 @@ async function buildForecastFromMonday(now: Date) {
       mesProyecto: d.mesProyecto,
       comentariosSeguimiento: d.comentariosSeguimiento,
       fechaInicioEtapa: d.fechaInicioEtapa,
-      diasEnEtapaActual: diasEntre(d.fechaInicioEtapa, now.toISOString())
+      diasEnEtapaActual: diasEntre(d.fechaInicioEtapa, now.toISOString()),
+      ...detalleObligatorio(d)
     };
   });
 
@@ -301,7 +331,8 @@ async function buildCerradas(now: Date) {
         diasEnEtapaActual: diasEntre(d.fechaInicioEtapa, d.fechaCierreReal),
         mondayUrl: d.mondayUrl,
         cotizacion: pdf ? { nombre: pdf.nombre, url: pdf.url } : null,
-        archivos: d.archivos.length
+        archivos: d.archivos.length,
+        ...detalleObligatorio(d)
       };
     })
     .sort((a, b) => (b.fechaCierreReal ?? "").localeCompare(a.fechaCierreReal ?? ""));
