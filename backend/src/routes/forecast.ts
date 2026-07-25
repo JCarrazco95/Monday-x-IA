@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles, getMondayItem } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -650,6 +650,20 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
+  }
+});
+
+// TEMPORAL — verifica si "Traslados/Adecuaciones/Unidades Cotizadas/Vehículos
+// Cotizados" (columnas nuevas) realmente están vacías en Monday para un item
+// dado, o si es un problema de mapeo del lado del backend.
+// GET /api/forecast/:itemId/columnas-raw-debug
+forecastRouter.get("/:itemId/columnas-raw-debug", async (req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
+  try {
+    const item = await getMondayItem(req.params.itemId);
+    res.json(item);
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 

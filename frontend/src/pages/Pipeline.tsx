@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback, useMemo, Fragment } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
 } from "recharts";
-import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock } from "lucide-react";
+import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock, Mail, Phone, MessageSquare } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
 import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity } from "../types";
@@ -198,8 +198,13 @@ function RequiredField({ label, value }: { label: string; value: string | number
 // integración de Aircall/Wati — se distinguen por patrones del propio texto,
 // no hay un campo "tipo" en la API de updates.
 type TipoActividad = "correo" | "llamada" | "mensaje";
-const TIPO_ICON: Record<TipoActividad, string> = { correo: "📧", llamada: "📞", mensaje: "💬" };
+const TIPO_ICON: Record<TipoActividad, React.ComponentType<{ size?: number }>> = { correo: Mail, llamada: Phone, mensaje: MessageSquare };
 const TIPO_LABEL: Record<TipoActividad, string> = { correo: "Correo", llamada: "Llamada", mensaje: "Mensaje" };
+const TIPO_COLOR: Record<TipoActividad, string> = {
+  correo: "bg-info/15 text-info",
+  llamada: "bg-danger/15 text-danger",
+  mensaje: "bg-accent/15 text-accent"
+};
 
 function categorizarUpdate(body: string): { tipo: TipoActividad; tema: string } {
   const b = body.trim();
@@ -223,9 +228,18 @@ function fmtFechaActividad(iso: string | null): string {
     return iso;
   }
 }
+function fmtMesActividad(iso: string | null): string {
+  if (!iso) return "Sin fecha";
+  try {
+    return new Date(iso).toLocaleDateString("es-MX", { month: "long", year: "numeric" });
+  } catch {
+    return "Sin fecha";
+  }
+}
 
 function ActividadResumen({ activity, loading }: { activity: MondayActivity | null; loading: boolean }) {
   const [expandido, setExpandido] = useState<string | null>(null);
+  const [filtroTipo, setFiltroTipo] = useState<TipoActividad | null>(null);
 
   if (loading) return <p className="py-6 text-center text-xs text-text-muted">Cargando actividad…</p>;
   if (!activity?.enabled) {
@@ -235,51 +249,92 @@ function ActividadResumen({ activity, loading }: { activity: MondayActivity | nu
     return <p className="py-6 text-center text-xs text-text-muted">Este item aún no tiene actividad en Monday.</p>;
   }
 
-  const categorizados = activity.updates.map((u) => ({ ...u, ...categorizarUpdate(u.body) }));
+  const categorizados = activity.updates
+    .map((u) => ({ ...u, ...categorizarUpdate(u.body) }))
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
   const conteos = { correo: 0, llamada: 0, mensaje: 0 };
   for (const c of categorizados) conteos[c.tipo]++;
+
+  const visibles = filtroTipo ? categorizados.filter((u) => u.tipo === filtroTipo) : categorizados;
+
+  // Agrupadas por mes, en el orden en que aparecen (ya vienen de más reciente a más viejo).
+  const grupos: { mes: string; items: typeof visibles }[] = [];
+  for (const u of visibles) {
+    const mes = fmtMesActividad(u.createdAt);
+    const grupo = grupos.at(-1);
+    if (grupo && grupo.mes === mes) grupo.items.push(u);
+    else grupos.push({ mes, items: [u] });
+  }
 
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap gap-2">
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
-          📧 {conteos.correo} correo{conteos.correo === 1 ? "" : "s"}
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
-          📞 {conteos.llamada} llamada{conteos.llamada === 1 ? "" : "s"}
-        </span>
-        <span className="inline-flex items-center gap-1 rounded-full bg-black/[0.05] px-2.5 py-1 text-[11px] font-medium text-text">
-          💬 {conteos.mensaje} mensaje{conteos.mensaje === 1 ? "" : "s"}
-        </span>
-      </div>
-      <ul className="flex flex-col gap-2">
-        {categorizados.map((u) => {
-          const abierto = expandido === u.id;
-          const esLargo = u.body.length > 220;
+        {(["correo", "llamada", "mensaje"] as const).map((t) => {
+          const Icon = TIPO_ICON[t];
+          const activo = filtroTipo === t;
           return (
-            <li key={u.id} className="rounded-lg border border-border p-2.5">
-              <div className="mb-1 flex items-center gap-2 text-[11px] text-text-muted">
-                <span>{TIPO_ICON[u.tipo]}</span>
-                <span className="font-semibold text-text">{TIPO_LABEL[u.tipo]}</span>
-                {u.autor && <span>· {u.autor}</span>}
-                <span className="ml-auto shrink-0">{fmtFechaActividad(u.createdAt)}</span>
-              </div>
-              <div className="text-[12px] font-medium text-text">{u.tema}</div>
-              <p className="mt-1 whitespace-pre-wrap text-[12px] text-text-muted">
-                {esLargo && !abierto ? u.body.slice(0, 220) + "…" : u.body}
-              </p>
-              {esLargo && (
-                <button
-                  onClick={() => setExpandido(abierto ? null : u.id)}
-                  className="mt-1 text-[11px] font-medium text-accent hover:underline"
-                >
-                  {abierto ? "Ver menos" : "Ver completo"}
-                </button>
-              )}
-            </li>
+            <button
+              key={t}
+              onClick={() => setFiltroTipo(activo ? null : t)}
+              title={`Filtrar por ${TIPO_LABEL[t].toLowerCase()}`}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                activo ? TIPO_COLOR[t] : "bg-black/[0.05] text-text hover:bg-black/[0.08]"
+              }`}
+            >
+              <Icon size={11} /> {conteos[t]} {TIPO_LABEL[t].toLowerCase()}{conteos[t] === 1 ? "" : "s"}
+            </button>
           );
         })}
-      </ul>
+        {filtroTipo && (
+          <button onClick={() => setFiltroTipo(null)} className="text-[11px] text-text-muted hover:text-text">
+            Quitar filtro
+          </button>
+        )}
+      </div>
+
+      {visibles.length === 0 ? (
+        <p className="py-4 text-center text-xs text-text-muted">Sin actividad de este tipo.</p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {grupos.map((g) => (
+            <div key={g.mes}>
+              <div className="mb-1.5 text-[11px] font-semibold capitalize text-text-muted">{g.mes}</div>
+              <ul className="flex flex-col gap-2">
+                {g.items.map((u) => {
+                  const abierto = expandido === u.id;
+                  const esLargo = u.body.length > 220;
+                  const Icon = TIPO_ICON[u.tipo];
+                  return (
+                    <li key={u.id} className="flex gap-2.5 rounded-lg border border-border p-2.5">
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${TIPO_COLOR[u.tipo]}`}>
+                        <Icon size={13} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                          <span className="font-semibold text-text">{u.autor ?? TIPO_LABEL[u.tipo]}</span>
+                          <span className="ml-auto shrink-0">{fmtFechaActividad(u.createdAt)}</span>
+                        </div>
+                        <div className="mt-0.5 text-[12px] font-medium text-text">{u.tema}</div>
+                        <p className="mt-1 whitespace-pre-wrap text-[12px] text-text-muted">
+                          {esLargo && !abierto ? u.body.slice(0, 220) + "…" : u.body}
+                        </p>
+                        {esLargo && (
+                          <button
+                            onClick={() => setExpandido(abierto ? null : u.id)}
+                            className="mt-1 text-[11px] font-medium text-accent hover:underline"
+                          >
+                            {abierto ? "Ver menos" : "Ver completo"}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
