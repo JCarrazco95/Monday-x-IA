@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles, getBoardColumns, mondayRequest } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -619,96 +619,6 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
-  }
-});
-
-// TEMPORAL — Fase 0 del plan de trazabilidad: 4 verificaciones puntuales antes
-// de construir UI. Se quita en cuanto se decida sobre activity_logs/columnas.
-// GET /api/forecast/investigacion-debug
-forecastRouter.get("/investigacion-debug", async (_req, res) => {
-  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
-  try {
-    const boardId = process.env.MONDAY_BOARD_ID_OPORTUNIDADES!;
-
-    // 1) Todas las columnas del board, para que el director marque cuáles son
-    // obligatorias por etapa (no se adivina).
-    const columnas = await getBoardColumns(boardId);
-    const colCalendario = columnas.find((c) => /calendar/i.test(c.title));
-
-    // Item real para probar updates()/activity_logs() (el intento previo falló
-    // por usar un itemId inventado).
-    const deals = await getDealsBoard();
-    const itemPrueba = deals[0]?.itemId ?? null;
-
-    // 2) Actividad nativa (¿aparecen ahí los correos enviados desde Monday?).
-    let updatesTest: unknown = null;
-    if (itemPrueba) {
-      try {
-        updatesTest = await getItemUpdates(itemPrueba);
-      } catch (err) {
-        updatesTest = { error: err instanceof Error ? err.message : String(err) };
-      }
-    }
-
-    // 3) activity_logs — nunca antes probado con un item real en este repo.
-    let activityLogsTest: unknown = null;
-    if (itemPrueba) {
-      try {
-        const dataLogs: { boards?: Array<{ activity_logs?: unknown[] }> } = await mondayRequest(
-          `query ($ids: [ID!], $itemIds: [ID!]) { boards (ids: $ids) { activity_logs (item_ids: $itemIds, limit: 50) { id event data created_at user_id } } }`,
-          { ids: [boardId], itemIds: [itemPrueba] }
-        );
-        activityLogsTest = dataLogs?.boards?.[0]?.activity_logs ?? [];
-      } catch (err) {
-        activityLogsTest = { error: err instanceof Error ? err.message : String(err) };
-      }
-    }
-
-    // 4) Cobertura real de "Google Calendar event" en una muestra amplia.
-    let calendarCobertura: string | null = null;
-    if (colCalendario) {
-      const query = `
-        query ($ids: [ID!], $cols: [String!], $cursor: String) {
-          boards (ids: $ids) {
-            items_page (limit: 100, cursor: $cursor) {
-              cursor
-              items { id column_values (ids: $cols) { id text } }
-            }
-          }
-        }
-      `;
-      let total = 0;
-      let conValor = 0;
-      let cursor: string | null = null;
-      let paginas = 0;
-      do {
-        const data: {
-          boards?: Array<{ items_page?: { cursor: string | null; items?: Array<{ column_values?: Array<{ id: string; text: string | null }> }> } }>;
-        } = await mondayRequest(query, { ids: [boardId], cols: [colCalendario.id], cursor });
-        const page = data?.boards?.[0]?.items_page;
-        if (!page) break;
-        cursor = page.cursor;
-        paginas++;
-        for (const it of page.items ?? []) {
-          total++;
-          const cv = (it.column_values ?? []).find((c) => c.id === colCalendario.id);
-          if (cv?.text && cv.text.trim()) conValor++;
-        }
-      } while (cursor && paginas < 4);
-      calendarCobertura = `${conValor}/${total}`;
-    }
-
-    res.json({
-      itemPrueba,
-      totalColumnas: columnas.length,
-      columnas,
-      colCalendario,
-      calendarCobertura,
-      updatesTest,
-      activityLogsTest
-    });
-  } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
