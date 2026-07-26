@@ -355,7 +355,14 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
 
   const det = cerrada ?? abierta!; // ambos extienden DetalleObligatorioOportunidad
   const numOrDash = (n: number | null) => (n != null ? money(n, moneda) : null);
+  // Todos los datos del proyecto se tratan igual: siempre visibles, en rojo
+  // si el vendedor no los llenó — sin distinguir visualmente "obligatorio" de
+  // "informativo".
   const camposObligatorios: { label: string; value: string | number | null }[] = [
+    { label: "Origen del lead", value: det.origen ?? null },
+    { label: "Uso de la unidad", value: det.giroUso ?? null },
+    { label: "Mes del proyecto", value: det.mesProyecto ?? null },
+    { label: "Comentarios de seguimiento", value: det.comentariosSeguimiento ?? null },
     { label: "Duración del proyecto", value: det.duracionProyecto },
     { label: "Estado de la cotización", value: det.estadoCotizacion },
     { label: "Valor total sin IVA", value: numOrDash(valorCotizacion) },
@@ -473,36 +480,13 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
             )}
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {(cerrada?.origen ?? abierta?.origen) && (
-              <DetailBlock icon="📍" title="Origen del lead">
-                <p className="text-[13px] text-text">{cerrada?.origen ?? abierta?.origen}</p>
-              </DetailBlock>
-            )}
-            {(cerrada?.giroUso ?? abierta?.giroUso) && (
-              <DetailBlock icon="🚚" title="Uso de la unidad">
-                <p className="text-[13px] text-text">{cerrada?.giroUso ?? abierta?.giroUso}</p>
-              </DetailBlock>
-            )}
-            {(cerrada?.mesProyecto ?? abierta?.mesProyecto) && (
-              <DetailBlock icon="🗓️" title="Mes del proyecto">
-                <p className="text-[13px] text-text">{cerrada?.mesProyecto ?? abierta?.mesProyecto}</p>
-              </DetailBlock>
-            )}
-            {(cerrada?.comentariosSeguimiento ?? abierta?.comentariosSeguimiento) && (
-              <DetailBlock icon="💬" title="Comentarios de seguimiento">
-                <p className="whitespace-pre-wrap text-[13px] text-text">{cerrada?.comentariosSeguimiento ?? abierta?.comentariosSeguimiento}</p>
-              </DetailBlock>
-            )}
-          </div>
-
-          <DetailBlock icon="☑️" title="Campos obligatorios">
+          <div className="rounded-xl border border-border p-4">
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {camposObligatorios.map((c) => (
                 <RequiredField key={c.label} label={c.label} value={c.value} />
               ))}
             </div>
-          </DetailBlock>
+          </div>
 
           <DetailBlock icon="📅" title="Fechas">
             <div className="flex flex-col gap-1.5 text-[13px] text-text">

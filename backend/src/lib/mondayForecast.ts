@@ -140,6 +140,10 @@ export interface DealRow {
 interface RawCV {
   id: string;
   text: string | null;
+  /** Solo columnas tipo "mirror": su valor real NO viene en `text` (queda
+   *  vacío ahí aunque el UI de Monday sí lo muestre) — hay que pedirlo aparte
+   *  vía el fragmento `... on MirrorValue { display_value }`. */
+  display_value?: string | null;
 }
 interface RawAsset {
   name?: string;
@@ -220,7 +224,7 @@ export async function getDealsBoard(): Promise<DealRow[]> {
             id
             name
             group { title }
-            column_values (ids: $cols) { id text }
+            column_values (ids: $cols) { id text ... on MirrorValue { display_value } }
             assets { name public_url file_extension }
           }
         }
@@ -238,7 +242,7 @@ export async function getDealsBoard(): Promise<DealRow[]> {
     if (!page) break;
     cursor = page.cursor;
     for (const it of page.items ?? []) {
-      const cv = new Map((it.column_values ?? []).map((c) => [c.id, c.text ?? null]));
+      const cv = new Map((it.column_values ?? []).map((c) => [c.id, (c.display_value || c.text) ?? null]));
       // Archivos del item (cotizaciones). PDFs primero; public_url es un enlace
       // firmado de Monday (caduca en ~1h, pero se regenera en cada carga).
       const archivos = (it.assets ?? [])
