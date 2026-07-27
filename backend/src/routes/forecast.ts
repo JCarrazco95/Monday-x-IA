@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles, mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -786,6 +786,73 @@ forecastRouter.get("/:itemId/actividad", async (req, res) => {
   try {
     const [updates, files] = await Promise.all([getItemUpdates(itemId), getItemFiles(itemId)]);
     res.json({ enabled: true, updates, files });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// TEMP DEBUG — (1) reconfirmar acceso al board "Actividades de ventas"
+// (8311006639) ahora que el cliente agregó al token como colaborador, con
+// distribución real de activity_type; (2) investigar cómo lucen los correos
+// dentro de updates() de un lead (el admin dice que solo llamadas/mensajes
+// quedan en el board de actividades — los correos deben venir de otro lado).
+forecastRouter.get("/correos-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  try {
+    const ACTIVIDADES_BOARD = "8311006639";
+    const LEADS = "8311006929";
+
+    let actividadesSample: unknown = null;
+    let actividadesError: string | null = null;
+    try {
+      actividadesSample = await mondayRequest(
+        `query ($ids: [ID!]) {
+          boards (ids: $ids) {
+            items_page (limit: 50) {
+              items {
+                id
+                name
+                column_values (ids: ["activity_type", "activity_owner", "activity_start_time", "board_relation_mm2wa7a9"]) {
+                  id text type
+                }
+              }
+            }
+          }
+        }`,
+        { ids: [ACTIVIDADES_BOARD] }
+      );
+    } catch (e) {
+      actividadesError = e instanceof Error ? e.message : String(e);
+    }
+
+    // Muestreamos 15 leads y traemos sus updates completos (campos crudos) para
+    // ver si hay marcas distintivas de "esto es un correo" (asunto/de/para, o
+    // un creator no-humano, o algo del app de email nativo de Monday).
+    const leadsSample = await mondayRequest<{ boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string }> } }> }>(
+      `query ($ids: [ID!]) { boards (ids: $ids) { items_page (limit: 15) { items { id name } } } }`,
+      { ids: [LEADS] }
+    );
+    const leadIds = leadsSample?.boards?.[0]?.items_page?.items?.map((it) => it.id) ?? [];
+
+    const updatesQuery = `
+      query ($ids: [ID!]) {
+        items (ids: $ids) {
+          id
+          name
+          updates {
+            id
+            text_body
+            body
+            created_at
+            creator { id name email }
+            assets { name file_extension }
+          }
+        }
+      }
+    `;
+    const updatesData = leadIds.length ? await mondayRequest(updatesQuery, { ids: leadIds }) : null;
+
+    res.json({ actividadesSample, actividadesError, leadIds, updatesData });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
