@@ -791,3 +791,17 @@ forecastRouter.get("/:itemId/actividad", async (req, res) => {
   }
 });
 
+// TEMP DEBUG — identificar la cuenta de Monday dueña del MONDAY_API_TOKEN,
+// para poder decirle al cliente a quién agregar como subscriber del board
+// "Actividades de ventas" (8311006639).
+forecastRouter.get("/me-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  try {
+    const { mondayRequest } = await import("../lib/monday.js");
+    const data = await mondayRequest(`query { me { id name email is_admin } }`);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
