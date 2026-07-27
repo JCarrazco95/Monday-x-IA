@@ -958,7 +958,35 @@ forecastRouter.get("/relacion-actividades-debug", async (_req, res) => {
       pagedItemsError = e instanceof Error ? e.message : String(e);
     }
 
-    res.json({ settings, cvData, linkedIdsArr, linkedItems, boardInfo, boardInfoError, pagedItems, pagedItemsError });
+    // items_page vino vacío pese a items_count:4055 — probamos board_kind /
+    // permissions del board, y un item puntual por su ID global para ver si
+    // existe pero está oculto (permiso) vs. realmente inaccesible.
+    let boardKind: unknown = null;
+    let boardKindError: string | null = null;
+    try {
+      boardKind = await mondayRequest(
+        `query ($ids: [ID!]) { boards (ids: $ids) { id board_kind permissions owners { id name } subscribers { id name } } }`,
+        { ids: [ACTIVIDADES_BOARD] }
+      );
+    } catch (e) {
+      boardKindError = e instanceof Error ? e.message : String(e);
+    }
+
+    let oneItem: unknown = null;
+    let oneItemError: string | null = null;
+    try {
+      oneItem = await mondayRequest(
+        `query ($ids: [ID!]) { items (ids: $ids) { id name state board { id } } }`,
+        { ids: ["12601114480"] }
+      );
+    } catch (e) {
+      oneItemError = e instanceof Error ? e.message : String(e);
+    }
+
+    res.json({
+      settings, cvData, linkedIdsArr, linkedItems, boardInfo, boardInfoError, pagedItems, pagedItemsError,
+      boardKind, boardKindError, oneItem, oneItemError
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
