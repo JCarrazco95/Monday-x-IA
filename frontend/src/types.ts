@@ -460,6 +460,20 @@ export interface LeadsBoardReport {
   supuestos: { nota: string };
 }
 
+// ── Cronograma de actividades (tipo + cantidad por actividad) de un lead ──
+export interface CronogramaEntry {
+  tipo: string;
+  fecha: string | null;
+  detalle: string | null;
+}
+
+export interface CronogramaActividades {
+  disponible: boolean;
+  motivo?: string;
+  entries: CronogramaEntry[];
+  resumenPorTipo: { tipo: string; count: number }[];
+}
+
 // ── Asistente comercial (Chat RAG) ──
 export interface AssistantResponse {
   respuesta: string;

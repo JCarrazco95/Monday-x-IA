@@ -227,3 +227,146 @@ export async function getLeadsMaxirentBoard(): Promise<LeadBoardRow[]> {
   } while (cursor);
   return out;
 }
+
+// ===========================================================================
+//  Cronograma de actividades (tipo + cantidad por actividad) por lead.
+//
+//  El widget "Cronograma de actividades" (custom_mktz7d26) es tipo
+//  "unsupported" en la API — nunca trae datos aunque el tablero lo muestre.
+//  Su fuente real son DOS lugares distintos:
+//   1. Llamadas/reuniones/WhatsApp: board separado "Actividades de ventas"
+//      (8311006639), enlazado desde cada lead vía la columna oculta
+//      `board_relation_mm2w17ac`. Columnas reales de ese board:
+//      activity_type/activity_owner/activity_start_time/long_text.
+//   2. Correos: NO están en el board de actividades (confirmado con el
+//      admin — ese board solo registra llamadas/mensajes). Sí aparecen como
+//      updates() nativos del lead, con un patrón fijo y reconocible:
+//      el cuerpo empieza con "Outgoing Email" (o "Incoming Email") y
+//      `creator` viene null (lo genera la integración de correo de Monday,
+//      no una persona). Cualquier otro update es un resumen/transcripción
+//      de llamada (ya cubierto por el board de actividades) y se ignora
+//      aquí para no duplicar conteos.
+// ===========================================================================
+
+const COL_LEAD_ACTIVIDADES_REL = "board_relation_mm2w17ac"; // "Actividades de ventas" (en Leads Maxirent)
+const COL_TS_LEAD_REL = "board_relation_mm5nkh1c"; // "Leads Maxirent" (en Time stamp)
+
+const COL_ACT_TIPO = "activity_type";
+const COL_ACT_RESP = "activity_owner";
+const COL_ACT_INICIO = "activity_start_time";
+const COL_ACT_DESC = "long_text";
+
+export interface CronogramaEntry {
+  tipo: string;
+  fecha: string | null;
+  detalle: string | null;
+}
+
+export interface CronogramaActividades {
+  disponible: boolean;
+  motivo?: string;
+  entries: CronogramaEntry[];
+  resumenPorTipo: { tipo: string; count: number }[];
+}
+
+interface RawUpdateFull {
+  text_body?: string | null;
+  body?: string | null;
+  created_at?: string | null;
+  creator?: { id: string } | null;
+}
+
+const EMAIL_RE = /^(Outgoing|Incoming) Email/;
+
+function parseEmailEntry(u: RawUpdateFull): CronogramaEntry {
+  const texto = u.text_body ?? (u.body ?? "").replace(/<[^>]*>/g, " ");
+  const direccion = /^Incoming/.test(texto.trim()) ? "De" : "Para";
+  const campo = direccion === "De" ? /From:\s*([^\n]+)/ : /To:\s*([^\n]+)/;
+  const match = texto.match(campo);
+  const asuntoMatch = texto.match(/Sent At:[^\n]*\n+\s*([^\n]+)/);
+  const partes = [match ? `${direccion}: ${match[1].trim()}` : null, asuntoMatch ? asuntoMatch[1].trim() : null].filter(Boolean);
+  return { tipo: "Correo", fecha: u.created_at ?? null, detalle: partes.join(" — ") || null };
+}
+
+const emptyResult = (motivo: string): CronogramaActividades => ({ disponible: false, motivo, entries: [], resumenPorTipo: [] });
+
+/** Cronograma de actividades (llamadas/reuniones/WhatsApp + correos) de un lead del board Leads Maxirent. */
+export async function getActivityTimeline(leadItemId: string): Promise<CronogramaActividades> {
+  if (isMondayMockMode) return emptyResult("Monday en modo demo.");
+  const query = `
+    query ($id: [ID!]) {
+      items (ids: $id) {
+        column_values (ids: ["${COL_LEAD_ACTIVIDADES_REL}"]) {
+          ... on BoardRelationValue { linked_item_ids }
+        }
+        updates (limit: 100) { text_body body created_at creator { id } }
+      }
+    }
+  `;
+  type Raw = { items?: Array<{ column_values?: Array<{ linked_item_ids?: string[] }>; updates?: RawUpdateFull[] }> };
+  const data: Raw = await mondayRequest(query, { id: [leadItemId] });
+  const item = data?.items?.[0];
+  if (!item) return emptyResult("No se encontró el lead en Monday.");
+
+  const linkedIds = item.column_values?.[0]?.linked_item_ids ?? [];
+  const entries: CronogramaEntry[] = [];
+
+  if (linkedIds.length) {
+    const actQuery = `
+      query ($ids: [ID!]) {
+        items (ids: $ids) {
+          column_values (ids: ["${COL_ACT_TIPO}", "${COL_ACT_RESP}", "${COL_ACT_INICIO}", "${COL_ACT_DESC}"]) { id text }
+        }
+      }
+    `;
+    type ActRaw = { items?: Array<{ column_values?: Array<{ id: string; text?: string | null }> }> };
+    const actData: ActRaw = await mondayRequest(actQuery, { ids: linkedIds });
+    for (const it of actData?.items ?? []) {
+      const cv = new Map((it.column_values ?? []).map((c) => [c.id, c.text ?? null]));
+      entries.push({
+        tipo: cv.get(COL_ACT_TIPO) || "Actividad",
+        fecha: cv.get(COL_ACT_INICIO) ?? null,
+        detalle: cv.get(COL_ACT_RESP) ?? cv.get(COL_ACT_DESC) ?? null
+      });
+    }
+  }
+
+  for (const u of item.updates ?? []) {
+    const texto = (u.text_body ?? u.body ?? "").trim();
+    if (u.creator == null && EMAIL_RE.test(texto)) entries.push(parseEmailEntry(u));
+  }
+
+  entries.sort((a, b) => {
+    const ta = a.fecha ? Date.parse(a.fecha) : NaN;
+    const tb = b.fecha ? Date.parse(b.fecha) : NaN;
+    if (Number.isNaN(ta) && Number.isNaN(tb)) return 0;
+    if (Number.isNaN(ta)) return 1;
+    if (Number.isNaN(tb)) return -1;
+    return tb - ta;
+  });
+
+  const conteo = new Map<string, number>();
+  for (const e of entries) conteo.set(e.tipo, (conteo.get(e.tipo) ?? 0) + 1);
+  const resumenPorTipo = [...conteo.entries()].map(([tipo, count]) => ({ tipo, count })).sort((a, b) => b.count - a.count);
+
+  return { disponible: true, entries, resumenPorTipo };
+}
+
+/** Igual que `getActivityTimeline`, pero para un item del board "Time stamp" (Journey de Leads): resuelve primero su lead enlazado en Leads Maxirent. */
+export async function getActivityTimelineForJourneyItem(timeStampItemId: string): Promise<CronogramaActividades> {
+  if (isMondayMockMode) return emptyResult("Monday en modo demo.");
+  const query = `
+    query ($id: [ID!]) {
+      items (ids: $id) {
+        column_values (ids: ["${COL_TS_LEAD_REL}"]) {
+          ... on BoardRelationValue { linked_item_ids }
+        }
+      }
+    }
+  `;
+  type Raw = { items?: Array<{ column_values?: Array<{ linked_item_ids?: string[] }> }> };
+  const data: Raw = await mondayRequest(query, { id: [timeStampItemId] });
+  const leadId = data?.items?.[0]?.column_values?.[0]?.linked_item_ids?.[0];
+  if (!leadId) return emptyResult("Este registro de Journey no está enlazado a un lead de Leads Maxirent.");
+  return getActivityTimeline(leadId);
+}

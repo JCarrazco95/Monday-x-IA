@@ -5,7 +5,7 @@ import {
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock, Mail, Phone, MessageSquare } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity, JourneyReport, JourneyLeadItem, LeadsBoardReport, LeadBoardItem } from "../types";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity, JourneyReport, JourneyLeadItem, LeadsBoardReport, LeadBoardItem, CronogramaActividades } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
 function toISODate(d: Date): string {
@@ -1722,13 +1722,66 @@ function OptionalField({ label, value }: { label: string; value: string | number
   );
 }
 
+function iconoTipoActividad(tipo: string) {
+  const t = tipo.toLowerCase();
+  if (t.includes("correo")) return <Mail size={13} />;
+  if (t.includes("whats")) return <MessageSquare size={13} />;
+  if (t.includes("meet") || t.includes("reun")) return <Calendar size={13} />;
+  if (t.includes("llamada") || t.includes("aircall")) return <Phone size={13} />;
+  return <Clock size={13} />;
+}
+
+/** Resumen "tipo + cantidad" y línea de tiempo de actividades (llamadas/WhatsApp/reuniones desde el board de Actividades de ventas + correos parseados de updates()). */
+function CronogramaSection({ cronograma, loading }: { cronograma: CronogramaActividades | null; loading: boolean }) {
+  if (loading) return <div className="border-t border-border px-5 py-4 text-xs text-text-muted">Cargando cronograma de actividades…</div>;
+  if (!cronograma) return null;
+  if (!cronograma.disponible) {
+    return (
+      <div className="border-t border-border px-5 py-4 text-xs text-text-muted">
+        Cronograma de actividades no disponible{cronograma.motivo ? `: ${cronograma.motivo}` : "."}
+      </div>
+    );
+  }
+  if (cronograma.entries.length === 0) {
+    return <div className="border-t border-border px-5 py-4 text-xs text-text-muted">Sin actividades (llamadas, WhatsApp, reuniones o correos) registradas para este lead.</div>;
+  }
+  return (
+    <div className="border-t border-border px-5 py-4">
+      <h4 className="mb-2 text-xs font-semibold text-text">Cronograma de actividades</h4>
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {cronograma.resumenPorTipo.map((r) => (
+          <span key={r.tipo} className="inline-flex items-center gap-1 rounded-full bg-border/50 px-2 py-1 text-[11px] font-medium text-text-muted">
+            {iconoTipoActividad(r.tipo)} {r.tipo}: {r.count}
+          </span>
+        ))}
+      </div>
+      <div className="max-h-56 overflow-y-auto rounded-lg border border-border">
+        {cronograma.entries.map((e, i) => (
+          <div key={i} className="flex items-start gap-2 border-b border-border/60 px-3 py-2 text-xs last:border-0">
+            <span className="mt-0.5 text-text-muted">{iconoTipoActividad(e.tipo)}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-text">{e.tipo}</span>
+                {e.fecha && <span className="text-[11px] text-text-muted">{e.fecha}</span>}
+              </div>
+              {e.detalle && <div className="mt-0.5 truncate text-text-muted" title={e.detalle}>{e.detalle}</div>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function InfoDetailModal({
-  title, subtitle, badge, campos, onClose
+  title, subtitle, badge, campos, cronograma, cronogramaLoading, onClose
 }: {
   title: string;
   subtitle?: string | null;
   badge?: string | null;
   campos: { label: string; value: string | number | null }[];
+  cronograma?: CronogramaActividades | null;
+  cronogramaLoading?: boolean;
   onClose: () => void;
 }) {
   const initials = title.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
@@ -1753,6 +1806,7 @@ function InfoDetailModal({
             {campos.map((c) => <OptionalField key={c.label} label={c.label} value={c.value} />)}
           </div>
         </div>
+        {cronograma !== undefined && <CronogramaSection cronograma={cronograma} loading={!!cronogramaLoading} />}
         <div className="flex items-center justify-end border-t border-border bg-black/[0.02] px-5 py-3">
           <button onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text">
             Cerrar
@@ -1780,6 +1834,8 @@ function JourneyView() {
   const [fechaHasta, setFechaHasta] = useState("");
   const [buscar, setBuscar] = useState("");
   const [detalle, setDetalle] = useState<JourneyLeadItem | null>(null);
+  const [cronograma, setCronograma] = useState<CronogramaActividades | null>(null);
+  const [cronogramaLoading, setCronogramaLoading] = useState(false);
   const orden = useOrden();
 
   useEffect(() => {
@@ -1789,6 +1845,16 @@ function JourneyView() {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
+
+  const abrirDetalle = (it: JourneyLeadItem) => {
+    setDetalle(it);
+    setCronograma(null);
+    setCronogramaLoading(true);
+    api.getJourneyCronograma(it.itemId)
+      .then(setCronograma)
+      .catch(() => setCronograma({ disponible: false, motivo: "Error al consultar Monday.", entries: [], resumenPorTipo: [] }))
+      .finally(() => setCronogramaLoading(false));
+  };
 
   const mesesDisponibles = useMemo(() => {
     const map = new Map<string, string>();
@@ -1945,7 +2011,7 @@ function JourneyView() {
               {filtradosOrdenados.map((it: JourneyLeadItem) => (
                 <tr
                   key={it.itemId}
-                  onClick={() => setDetalle(it)}
+                  onClick={() => abrirDetalle(it)}
                   className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
                   title="Ver detalle del lead"
                 >
@@ -1973,6 +2039,8 @@ function JourneyView() {
           subtitle={detalle.ejecutivo}
           badge={detalle.grupo}
           onClose={() => setDetalle(null)}
+          cronograma={cronograma}
+          cronogramaLoading={cronogramaLoading}
           campos={[
             { label: "Origen", value: detalle.origen },
             { label: "Estado lead", value: detalle.estadoLead },
@@ -2012,6 +2080,8 @@ function LeadsBoardView() {
   const [fechaHasta, setFechaHasta] = useState("");
   const [buscar, setBuscar] = useState("");
   const [detalle, setDetalle] = useState<LeadBoardItem | null>(null);
+  const [cronograma, setCronograma] = useState<CronogramaActividades | null>(null);
+  const [cronogramaLoading, setCronogramaLoading] = useState(false);
   const orden = useOrden();
 
   useEffect(() => {
@@ -2021,6 +2091,16 @@ function LeadsBoardView() {
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
       .finally(() => setLoading(false));
   }, []);
+
+  const abrirDetalle = (it: LeadBoardItem) => {
+    setDetalle(it);
+    setCronograma(null);
+    setCronogramaLoading(true);
+    api.getLeadCronograma(it.itemId)
+      .then(setCronograma)
+      .catch(() => setCronograma({ disponible: false, motivo: "Error al consultar Monday.", entries: [], resumenPorTipo: [] }))
+      .finally(() => setCronogramaLoading(false));
+  };
 
   const mesesDisponibles = useMemo(() => {
     const map = new Map<string, string>();
@@ -2159,7 +2239,7 @@ function LeadsBoardView() {
               {filtradosOrdenados.map((it: LeadBoardItem) => (
                 <tr
                   key={it.itemId}
-                  onClick={() => setDetalle(it)}
+                  onClick={() => abrirDetalle(it)}
                   className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
                   title="Ver detalle del lead"
                 >
@@ -2187,6 +2267,8 @@ function LeadsBoardView() {
           subtitle={detalle.ejecutivo}
           badge={detalle.grupo}
           onClose={() => setDetalle(null)}
+          cronograma={cronograma}
+          cronogramaLoading={cronogramaLoading}
           campos={[
             { label: "Empresa", value: detalle.empresa },
             { label: "Estado lead", value: detalle.estadoLead },
