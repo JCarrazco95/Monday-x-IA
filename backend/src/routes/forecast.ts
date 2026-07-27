@@ -668,8 +668,10 @@ forecastRouter.get("/journey-debug", async (_req, res) => {
     ]);
 
     // Muestra de items de los 3 grupos del board Time Stap, con TODAS sus columnas.
+    // Origen/Ejecutivo son "mirror" — su valor real no viene en `text`, hay que
+    // pedir `display_value` (mismo bug ya resuelto para Oportunidades).
     const dataGrupos: {
-      boards?: Array<{ groups?: Array<{ id: string; title: string; items_page?: { items?: Array<{ id: string; name: string; column_values?: Array<{ id: string; text: string | null }> }> } }> }>;
+      boards?: Array<{ groups?: Array<{ id: string; title: string; items_page?: { items?: Array<{ id: string; name: string; column_values?: Array<{ id: string; text: string | null; display_value?: string | null }> }> } }> }>;
     } = await mondayRequest(
       `query ($boardId: [ID!], $groupIds: [String!]) {
         boards (ids: $boardId) {
@@ -677,7 +679,7 @@ forecastRouter.get("/journey-debug", async (_req, res) => {
             id
             title
             items_page (limit: 15) {
-              items { id name column_values { id text } }
+              items { id name column_values { id text ... on MirrorValue { display_value } } }
             }
           }
         }
@@ -687,12 +689,12 @@ forecastRouter.get("/journey-debug", async (_req, res) => {
 
     // Muestra de items de Leads Maxirent (todos los grupos, primeros 10).
     const dataLeads: {
-      boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null }> }> } }>;
+      boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null; display_value?: string | null }> }> } }>;
     } = await mondayRequest(
       `query ($ids: [ID!]) {
         boards (ids: $ids) {
           items_page (limit: 10) {
-            items { id name group { title } column_values { id text } }
+            items { id name group { title } column_values { id text ... on MirrorValue { display_value } } }
           }
         }
       }`,
@@ -707,11 +709,16 @@ forecastRouter.get("/journey-debug", async (_req, res) => {
           id: g.id,
           title: g.title,
           totalItems: g.items_page?.items?.length ?? 0,
-          items: (g.items_page?.items ?? []).map((it) => ({
-            id: it.id,
-            name: it.name,
-            origen: it.column_values?.find((c) => c.id === "lookup_mm5n41b1")?.text ?? null
-          }))
+          items: (g.items_page?.items ?? []).map((it) => {
+            const origenCol = it.column_values?.find((c) => c.id === "lookup_mm5n41b1");
+            const ejecutivoCol = it.column_values?.find((c) => c.id === "lookup_mm5nnq7s");
+            return {
+              id: it.id,
+              name: it.name,
+              origen: (origenCol?.display_value || origenCol?.text) ?? null,
+              ejecutivo: (ejecutivoCol?.display_value || ejecutivoCol?.text) ?? null
+            };
+          })
         }))
       },
       leadsMaxirent: {
@@ -721,7 +728,7 @@ forecastRouter.get("/journey-debug", async (_req, res) => {
           id: it.id,
           name: it.name,
           grupo: it.group?.title,
-          columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, c.text]))
+          columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, (c.display_value || c.text) ?? null]))
         }))
       }
     });
