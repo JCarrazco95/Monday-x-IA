@@ -873,3 +873,68 @@ forecastRouter.get("/cronograma-debug", async (_req, res) => {
   }
 });
 
+// TEMP DEBUG #2 — activity_logs mostró una columna board_relation_mm2w17ac
+// ("Actividades de ventas") con muchos linkedPulseIds — probablemente la
+// fuente real detrás del widget "Cronograma de actividades". Investigamos
+// a qué board(s) apunta y cómo lucen los items enlazados.
+forecastRouter.get("/relacion-actividades-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  try {
+    const LEADS = "8311006929";
+    const RELCOL = "board_relation_mm2w17ac";
+
+    const settingsQuery = `
+      query ($boardId: [ID!], $colIds: [String!]) {
+        boards (ids: $boardId) {
+          columns (ids: $colIds) { id title type settings_str }
+        }
+      }
+    `;
+    const settings = await mondayRequest(settingsQuery, { boardId: [LEADS], colIds: [RELCOL] });
+
+    // Items con datos conocidos en esta columna (vistos en activity_logs).
+    const itemIds = ["12642043135", "12601139979"];
+    const cvQuery = `
+      query ($ids: [ID!], $cols: [String!]) {
+        items (ids: $ids) {
+          id
+          name
+          column_values (ids: $cols) {
+            id
+            text
+            value
+            ... on BoardRelationValue { display_value linked_item_ids }
+          }
+        }
+      }
+    `;
+    const cvData = await mondayRequest(cvQuery, { ids: itemIds, cols: [RELCOL] });
+
+    type CvRaw = { items?: Array<{ id: string; name: string; column_values?: Array<{ id: string; text?: string | null; value?: string | null; display_value?: string | null; linked_item_ids?: string[] }> }> };
+    const linkedIds = new Set<string>();
+    for (const it of (cvData as CvRaw)?.items ?? []) {
+      for (const id of it.column_values?.[0]?.linked_item_ids ?? []) linkedIds.add(id);
+    }
+    const linkedIdsArr = [...linkedIds].slice(0, 8);
+
+    let linkedItems: unknown = null;
+    if (linkedIdsArr.length) {
+      const linkedQuery = `
+        query ($ids: [ID!]) {
+          items (ids: $ids) {
+            id
+            name
+            board { id name }
+            column_values { id text type column { title } }
+          }
+        }
+      `;
+      linkedItems = await mondayRequest(linkedQuery, { ids: linkedIdsArr });
+    }
+
+    res.json({ settings, cvData, linkedIdsArr, linkedItems });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
