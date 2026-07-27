@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles, getBoardColumns, mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -650,6 +650,83 @@ forecastRouter.get("/cerradas", async (_req, res) => {
     res.status(502).json({
       error: `No se pudo construir ganadas/perdidas desde Monday: ${err instanceof Error ? err.message : String(err)}`
     });
+  }
+});
+
+// TEMPORAL — investigación para "Journey de Leads" y pestaña "Leads" nuevas.
+// GET /api/forecast/journey-debug
+forecastRouter.get("/journey-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
+  try {
+    const TIME_STAP_BOARD = "18423822387";
+    const LEADS_MAXIRENT_BOARD = "8311006929";
+    const GRUPOS = ["group_mm5nc0b", "group_mm5npb2y", "group_mm5nj1xc"];
+
+    const [colsTimeStap, colsLeads] = await Promise.all([
+      getBoardColumns(TIME_STAP_BOARD),
+      getBoardColumns(LEADS_MAXIRENT_BOARD)
+    ]);
+
+    // Muestra de items de los 3 grupos del board Time Stap, con TODAS sus columnas.
+    const dataGrupos: {
+      boards?: Array<{ groups?: Array<{ id: string; title: string; items_page?: { items?: Array<{ id: string; name: string; column_values?: Array<{ id: string; text: string | null }> }> } }> }>;
+    } = await mondayRequest(
+      `query ($boardId: [ID!], $groupIds: [String!]) {
+        boards (ids: $boardId) {
+          groups (ids: $groupIds) {
+            id
+            title
+            items_page (limit: 15) {
+              items { id name column_values { id text } }
+            }
+          }
+        }
+      }`,
+      { boardId: [TIME_STAP_BOARD], groupIds: GRUPOS }
+    );
+
+    // Muestra de items de Leads Maxirent (todos los grupos, primeros 10).
+    const dataLeads: {
+      boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null }> }> } }>;
+    } = await mondayRequest(
+      `query ($ids: [ID!]) {
+        boards (ids: $ids) {
+          items_page (limit: 10) {
+            items { id name group { title } column_values { id text } }
+          }
+        }
+      }`,
+      { ids: [LEADS_MAXIRENT_BOARD] }
+    );
+
+    res.json({
+      timeStap: {
+        totalColumnas: colsTimeStap.length,
+        columnas: colsTimeStap,
+        grupos: (dataGrupos.boards?.[0]?.groups ?? []).map((g) => ({
+          id: g.id,
+          title: g.title,
+          totalItems: g.items_page?.items?.length ?? 0,
+          items: (g.items_page?.items ?? []).map((it) => ({
+            id: it.id,
+            name: it.name,
+            origen: it.column_values?.find((c) => c.id === "lookup_mm5n41b1")?.text ?? null
+          }))
+        }))
+      },
+      leadsMaxirent: {
+        totalColumnas: colsLeads.length,
+        columnas: colsLeads,
+        ejemplos: (dataLeads.boards?.[0]?.items_page?.items ?? []).map((it) => ({
+          id: it.id,
+          name: it.name,
+          grupo: it.group?.title,
+          columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, c.text]))
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
 
