@@ -5,7 +5,7 @@ import {
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock, Mail, Phone, MessageSquare } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity } from "../types";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity, JourneyReport, JourneyLeadItem, LeadsBoardReport, LeadBoardItem } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
 function toISODate(d: Date): string {
@@ -531,7 +531,7 @@ function OpportunityDetailModal({ item, moneda, onClose }: { item: DetailItem; m
 }
 
 export function Pipeline() {
-  const [vista, setVista] = useState<"abierto" | "cerradas">("abierto");
+  const [vista, setVista] = useState<"abierto" | "cerradas" | "journey" | "leads">("abierto");
   const [detalle, setDetalle] = useState<DetailItem | null>(null);
 
   const [data, setData] = useState<ForecastReport | null>(null);
@@ -775,6 +775,22 @@ export function Pipeline() {
           }`}
         >
           Ganadas y Perdidas
+        </button>
+        <button
+          onClick={() => setVista("journey")}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            vista === "journey" ? "border-accent text-accent" : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Journey de Leads
+        </button>
+        <button
+          onClick={() => setVista("leads")}
+          className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+            vista === "leads" ? "border-accent text-accent" : "border-transparent text-text-muted hover:text-text"
+          }`}
+        >
+          Leads
         </button>
       </div>
 
@@ -1043,6 +1059,9 @@ export function Pipeline() {
           onSelect={(o) => setDetalle({ kind: "cerrada", o })}
         />
       )}
+
+      {vista === "journey" && <JourneyView />}
+      {vista === "leads" && <LeadsBoardView />}
 
       {detalle && (
         <OpportunityDetailModal
@@ -1501,6 +1520,428 @@ function CerradasView({
         <p className="border-t border-border px-4 py-2 text-[11px] text-text-muted">
           Clic en una fila abre el detalle de la oportunidad. El botón PDF abre la cotización adjunta al item (enlace temporal de Monday).
         </p>
+      </div>
+    </>
+  );
+}
+
+// ===========================================================================
+//  Vista 3: JOURNEY DE LEADS — board "Time stamp" (recorrido del lead antes
+//  de llegar a Oportunidades: intentos de contacto, contactado, cotización).
+//  Vista 4: LEADS — board real "Leads Maxirent", todos los grupos.
+//  Ambas cargan su propio dataset (self-contained) y filtran client-side,
+//  mismo patrón que el resto del Pipeline.
+// ===========================================================================
+const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+function mesKeyDe(fecha: string | null): string {
+  if (!fecha) return "";
+  return fecha.slice(0, 7); // YYYY-MM
+}
+function mesLabelDe(key: string): string {
+  const [y, m] = key.split("-");
+  const idx = Number(m) - 1;
+  return `${MESES_CORTOS[idx] ?? m} ${(y ?? "").slice(2)}`;
+}
+
+function FiltroBar({
+  buscar, setBuscar, filtroVendedor, setFiltroVendedor, vendedores,
+  filtroMes, setFiltroMes, mesesDisponibles, filtroGrupo, setFiltroGrupo, grupos,
+  fechaDesde, setFechaDesde, fechaHasta, setFechaHasta, exportFilename, exportRows
+}: {
+  buscar: string; setBuscar: (v: string) => void;
+  filtroVendedor: string; setFiltroVendedor: (v: string) => void; vendedores: string[];
+  filtroMes: string; setFiltroMes: (v: string) => void; mesesDisponibles: [string, string][];
+  filtroGrupo: string; setFiltroGrupo: (v: string) => void; grupos: string[];
+  fechaDesde: string; setFechaDesde: (v: string) => void; fechaHasta: string; setFechaHasta: (v: string) => void;
+  exportFilename: string; exportRows: Record<string, unknown>[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2 print:hidden">
+      <input
+        value={buscar}
+        onChange={(e) => setBuscar(e.target.value)}
+        placeholder="Buscar…"
+        className="h-8 w-56 rounded-lg border border-border bg-bg px-3 text-xs placeholder:text-text-muted/60 focus:outline-none focus:ring-1 focus:ring-accent"
+      />
+      <select value={filtroVendedor} onChange={(e) => setFiltroVendedor(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none">
+        <option value="">Todos los vendedores</option>
+        {vendedores.map((v) => <option key={v} value={v}>{v}</option>)}
+      </select>
+      <select value={filtroMes} onChange={(e) => setFiltroMes(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none">
+        <option value="">Todos los meses</option>
+        {mesesDisponibles.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+      </select>
+      <select value={filtroGrupo} onChange={(e) => setFiltroGrupo(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none">
+        <option value="">Todos los grupos</option>
+        {grupos.map((g) => <option key={g} value={g}>{g}</option>)}
+      </select>
+      <div className="flex items-center gap-1">
+        <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} title="Fecha de creación desde" className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none" />
+        <span className="text-xs text-text-muted">–</span>
+        <input type="date" value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} title="Fecha de creación hasta" className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none" />
+        {(fechaDesde || fechaHasta) && (
+          <button onClick={() => { setFechaDesde(""); setFechaHasta(""); }} className="text-xs text-text-muted hover:text-text" title="Quitar rango de fechas">✕</button>
+        )}
+      </div>
+      <ExportButtons filename={exportFilename} rows={exportRows} />
+    </div>
+  );
+}
+
+function JourneyView() {
+  const [data, setData] = useState<JourneyReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filtroGrupo, setFiltroGrupo] = useState("");
+  const [filtroVendedor, setFiltroVendedor] = useState("");
+  const [filtroMes, setFiltroMes] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [buscar, setBuscar] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    api.getJourneyReport()
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const mesesDisponibles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const it of data?.items ?? []) {
+      const key = mesKeyDe(it.fechaCreacion);
+      if (key) map.set(key, mesLabelDe(key));
+    }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data]);
+
+  const filtrados = useMemo(() => {
+    const base = data?.items ?? [];
+    const q = buscar.trim().toLowerCase();
+    return base.filter((it) => {
+      if (filtroGrupo && it.grupo !== filtroGrupo) return false;
+      if (filtroVendedor && it.ejecutivo !== filtroVendedor) return false;
+      if (filtroMes && mesKeyDe(it.fechaCreacion) !== filtroMes) return false;
+      if (fechaDesde && (it.fechaCreacion ?? "") < fechaDesde) return false;
+      if (fechaHasta && (it.fechaCreacion ?? "") > fechaHasta) return false;
+      if (!q) return true;
+      return it.itemName.toLowerCase().includes(q) || (it.ejecutivo ?? "").toLowerCase().includes(q);
+    });
+  }, [data, filtroGrupo, filtroVendedor, filtroMes, fechaDesde, fechaHasta, buscar]);
+
+  if (error) return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
+  if (loading && !data) return <div className="py-16 text-center text-sm text-text-muted">Cargando Journey de Leads…</div>;
+  if (!data || data.stats.total === 0) {
+    return <div className="rounded-xl border border-border bg-surface py-16 text-center text-sm text-text-muted">Sin leads Outbound (o sin origen capturado) en Calificados/No Califica/No contactado.</div>;
+  }
+
+  const maxEmbudo = Math.max(1, ...data.embudo.map((e) => e.count));
+  const maxGrupo = Math.max(1, ...data.porGrupo.map((g) => g.count));
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard label="Leads en journey" value={data.stats.total} />
+        <StatCard label="Días prom. a contactar" value={data.stats.diasPromedioAContactar != null ? `${data.stats.diasPromedioAContactar} días` : "—"} />
+        <StatCard label="Días prom. a cotizar" value={data.stats.diasPromedioACotizar != null ? `${data.stats.diasPromedioACotizar} días` : "—"} />
+        <StatCard label="Grupos" value={data.grupos.length} />
+      </div>
+
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
+        <Info size={14} className="mt-0.5 shrink-0 text-info" />
+        <span>{data.supuestos.nota}</span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-text">Embudo del journey</h3>
+          <div className="flex flex-col gap-3 pt-2">
+            {data.embudo.map((e) => (
+              <div key={e.hito}>
+                <div className="mb-1 flex items-center justify-between text-[13px]">
+                  <span className="font-medium text-text">{e.hito}</span>
+                  <span className="text-text-muted">{e.count}</span>
+                </div>
+                <div className="h-5 overflow-hidden rounded-md bg-black/[0.06]">
+                  <div className="h-full rounded-md bg-accent transition-all" style={{ width: `${(e.count / maxEmbudo) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-text">Por grupo</h3>
+          <div className="flex flex-col gap-3 pt-2">
+            {data.porGrupo.map((g) => (
+              <div key={g.grupo}>
+                <div className="mb-1 flex items-center justify-between text-[13px]">
+                  <span className="font-medium text-text">{g.grupo}</span>
+                  <span className="text-text-muted">{g.count}</span>
+                </div>
+                <div className="h-5 overflow-hidden rounded-md bg-black/[0.06]">
+                  <div className="h-full rounded-md bg-info transition-all" style={{ width: `${(g.count / maxGrupo) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {data.porEjecutivo.length > 0 && (
+        <div className="mt-4 rounded-xl border border-border bg-surface">
+          <h3 className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold text-text">
+            <Users size={15} className="text-accent" /> Por ejecutivo
+          </h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[13px]">
+              <thead>
+                <tr className="border-b border-border text-left text-xs text-text-muted">
+                  <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                  <th className="px-4 py-2 text-right font-medium">Leads</th>
+                  <th className="px-4 py-2 text-right font-medium">Contactados</th>
+                  <th className="px-4 py-2 text-right font-medium">Cotizados</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.porEjecutivo.map((e) => (
+                  <tr key={e.ejecutivo} className="border-b border-border/60 last:border-0">
+                    <td className="px-4 py-2 font-medium text-text">{e.ejecutivo}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{e.count}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-text-muted">{e.contactados}</td>
+                    <td className="px-4 py-2 text-right tabular-nums text-text-muted">{e.cotizados}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-4 rounded-xl border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <h3 className="text-sm font-semibold text-text">
+            Leads <span className="ml-2 text-xs font-normal text-text-muted">{filtrados.length} de {data.items.length}</span>
+          </h3>
+          <FiltroBar
+            buscar={buscar} setBuscar={setBuscar}
+            filtroVendedor={filtroVendedor} setFiltroVendedor={setFiltroVendedor} vendedores={data.ejecutivos}
+            filtroMes={filtroMes} setFiltroMes={setFiltroMes} mesesDisponibles={mesesDisponibles}
+            filtroGrupo={filtroGrupo} setFiltroGrupo={setFiltroGrupo} grupos={data.grupos}
+            fechaDesde={fechaDesde} setFechaDesde={setFechaDesde} fechaHasta={fechaHasta} setFechaHasta={setFechaHasta}
+            exportFilename="journey-leads"
+            exportRows={filtrados.map((it) => ({
+              Lead: it.itemName, Grupo: it.grupo, Ejecutivo: it.ejecutivo ?? "", Origen: it.origen ?? "",
+              "Estado lead": it.estadoLead ?? "", "Fecha creación": it.fechaCreacion ?? "",
+              "Días a contactar": it.diasAContactado ?? "", "Días a cotizar": it.diasACotizar ?? "",
+              Llamadas: it.llamadas ?? "", "Minutos de atención": it.minutosAtencion ?? ""
+            }))}
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-text-muted">
+                <th className="px-4 py-2 font-medium">Lead</th>
+                <th className="px-4 py-2 font-medium">Grupo</th>
+                <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                <th className="px-4 py-2 font-medium">Estado</th>
+                <th className="px-4 py-2 font-medium">Creación</th>
+                <th className="px-4 py-2 text-right font-medium">Días a contactar</th>
+                <th className="px-4 py-2 text-right font-medium">Días a cotizar</th>
+                <th className="px-4 py-2 font-medium">Llamadas</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((it: JourneyLeadItem) => (
+                <tr key={it.itemId} className="border-b border-border/60 last:border-0">
+                  <td className="px-4 py-2 font-medium text-text">{it.itemName}</td>
+                  <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{it.grupo}</span></td>
+                  <td className="px-4 py-2 text-text-muted">{it.ejecutivo ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.estadoLead ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.fechaCreacion ?? "—"}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{it.diasAContactado ?? "—"}</td>
+                  <td className="px-4 py-2 text-right tabular-nums">{it.diasACotizar ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.llamadas ?? "—"}</td>
+                </tr>
+              ))}
+              {filtrados.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-text-muted">Sin leads con esos filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function LeadsBoardView() {
+  const [data, setData] = useState<LeadsBoardReport | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filtroGrupo, setFiltroGrupo] = useState("");
+  const [filtroVendedor, setFiltroVendedor] = useState("");
+  const [filtroMes, setFiltroMes] = useState("");
+  const [fechaDesde, setFechaDesde] = useState("");
+  const [fechaHasta, setFechaHasta] = useState("");
+  const [buscar, setBuscar] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    api.getLeadsBoardReport()
+      .then(setData)
+      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const mesesDisponibles = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const it of data?.items ?? []) {
+      const key = mesKeyDe(it.fechaCreacion);
+      if (key) map.set(key, mesLabelDe(key));
+    }
+    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+  }, [data]);
+
+  const filtrados = useMemo(() => {
+    const base = data?.items ?? [];
+    const q = buscar.trim().toLowerCase();
+    return base.filter((it) => {
+      if (filtroGrupo && it.grupo !== filtroGrupo) return false;
+      if (filtroVendedor && it.ejecutivo !== filtroVendedor) return false;
+      if (filtroMes && mesKeyDe(it.fechaCreacion) !== filtroMes) return false;
+      if (fechaDesde && (it.fechaCreacion ?? "") < fechaDesde) return false;
+      if (fechaHasta && (it.fechaCreacion ?? "") > fechaHasta) return false;
+      if (!q) return true;
+      return (
+        it.itemName.toLowerCase().includes(q) ||
+        (it.empresa ?? "").toLowerCase().includes(q) ||
+        (it.ejecutivo ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [data, filtroGrupo, filtroVendedor, filtroMes, fechaDesde, fechaHasta, buscar]);
+
+  if (error) return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
+  if (loading && !data) return <div className="py-16 text-center text-sm text-text-muted">Cargando Leads…</div>;
+  if (!data || data.stats.total === 0) {
+    return <div className="rounded-xl border border-border bg-surface py-16 text-center text-sm text-text-muted">Sin leads en el board.</div>;
+  }
+
+  const maxEstado = Math.max(1, ...data.porEstado.map((e) => e.count));
+
+  return (
+    <>
+      <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <StatCard label="Leads totales" value={data.stats.total} />
+        <StatCard label="Grupos" value={data.grupos.length} />
+        <StatCard label="Ejecutivos" value={data.ejecutivos.length} />
+      </div>
+
+      <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
+        <Info size={14} className="mt-0.5 shrink-0 text-info" />
+        <span>{data.supuestos.nota}</span>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-surface p-4">
+          <h3 className="mb-3 text-sm font-semibold text-text">Por estado</h3>
+          <div className="flex flex-col gap-3 pt-2">
+            {data.porEstado.map((e) => (
+              <div key={e.estado}>
+                <div className="mb-1 flex items-center justify-between text-[13px]">
+                  <span className="font-medium text-text">{e.estado}</span>
+                  <span className="text-text-muted">{e.count}</span>
+                </div>
+                <div className="h-5 overflow-hidden rounded-md bg-black/[0.06]">
+                  <div className="h-full rounded-md bg-accent transition-all" style={{ width: `${(e.count / maxEstado) * 100}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {data.porEjecutivo.length > 0 && (
+          <div className="rounded-xl border border-border bg-surface">
+            <h3 className="flex items-center gap-2 border-b border-border px-4 py-3 text-sm font-semibold text-text">
+              <Users size={15} className="text-accent" /> Por ejecutivo
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-text-muted">
+                    <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                    <th className="px-4 py-2 text-right font-medium">Leads</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.porEjecutivo.map((e) => (
+                    <tr key={e.ejecutivo} className="border-b border-border/60 last:border-0">
+                      <td className="px-4 py-2 font-medium text-text">{e.ejecutivo}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">{e.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 rounded-xl border border-border bg-surface">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3">
+          <h3 className="text-sm font-semibold text-text">
+            Leads <span className="ml-2 text-xs font-normal text-text-muted">{filtrados.length} de {data.items.length}</span>
+          </h3>
+          <FiltroBar
+            buscar={buscar} setBuscar={setBuscar}
+            filtroVendedor={filtroVendedor} setFiltroVendedor={setFiltroVendedor} vendedores={data.ejecutivos}
+            filtroMes={filtroMes} setFiltroMes={setFiltroMes} mesesDisponibles={mesesDisponibles}
+            filtroGrupo={filtroGrupo} setFiltroGrupo={setFiltroGrupo} grupos={data.grupos}
+            fechaDesde={fechaDesde} setFechaDesde={setFechaDesde} fechaHasta={fechaHasta} setFechaHasta={setFechaHasta}
+            exportFilename="leads"
+            exportRows={filtrados.map((it) => ({
+              Lead: it.itemName, Empresa: it.empresa ?? "", Grupo: it.grupo, Ejecutivo: it.ejecutivo ?? "",
+              Estado: it.estadoLead ?? "", Teléfono: it.telefono ?? "", Email: it.email ?? "",
+              Origen: it.origen ?? "", "In/Out": it.inOut ?? "", "Cómo se enteró": it.comoEntero ?? "",
+              "Motivo de no compra": it.motivoNoCompra ?? "", "Ciudad de operación": it.ciudadOperacion ?? "",
+              "Tipo de proyecto": it.tipoProyecto ?? "", "Fecha de creación": it.fechaCreacion ?? ""
+            }))}
+          />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-text-muted">
+                <th className="px-4 py-2 font-medium">Lead</th>
+                <th className="px-4 py-2 font-medium">Empresa</th>
+                <th className="px-4 py-2 font-medium">Grupo</th>
+                <th className="px-4 py-2 font-medium">Ejecutivo</th>
+                <th className="px-4 py-2 font-medium">Estado</th>
+                <th className="px-4 py-2 font-medium">Teléfono</th>
+                <th className="px-4 py-2 font-medium">Origen</th>
+                <th className="px-4 py-2 font-medium">Creación</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtrados.map((it: LeadBoardItem) => (
+                <tr key={it.itemId} className="border-b border-border/60 last:border-0">
+                  <td className="px-4 py-2 font-medium text-text">{it.itemName}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.empresa ?? "—"}</td>
+                  <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{it.grupo}</span></td>
+                  <td className="px-4 py-2 text-text-muted">{it.ejecutivo ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.estadoLead ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.telefono ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.origen ?? it.inOut ?? "—"}</td>
+                  <td className="px-4 py-2 text-text-muted">{it.fechaCreacion ?? "—"}</td>
+                </tr>
+              ))}
+              {filtrados.length === 0 && (
+                <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-text-muted">Sin leads con esos filtros.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );

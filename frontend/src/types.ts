@@ -393,6 +393,73 @@ export interface ForecastCerradasReport {
   porOrigen: { origen: string; count: number; valor: number }[];
 }
 
+// ── Forecast: vista 3, JOURNEY DE LEADS (board "Time stamp") ──
+export interface JourneyLeadItem {
+  itemId: string;
+  itemName: string;
+  grupo: string;
+  origen: string | null;
+  ejecutivo: string | null;
+  estadoLead: string | null;
+  fechaCreacion: string | null;
+  cambioIntentando: string | null;
+  cambioContactado: string | null;
+  cambioCotizar: string | null;
+  cambioNoContactado: string | null;
+  cambioNoCalifica: string | null;
+  llamadas: string | null;
+  minutosAtencion: string | null;
+  semaforo: string | null;
+  revisado: string | null;
+  diasACcontactar: number | null;
+  diasAContactado: number | null;
+  diasACotizar: number | null;
+}
+
+export interface JourneyReport {
+  fuente: "monday";
+  grupos: string[];
+  ejecutivos: string[];
+  items: JourneyLeadItem[];
+  embudo: { hito: string; count: number }[];
+  porGrupo: { grupo: string; count: number }[];
+  porEjecutivo: { ejecutivo: string; count: number; contactados: number; cotizados: number }[];
+  stats: { total: number; diasPromedioAContactar: number | null; diasPromedioACotizar: number | null };
+  supuestos: { nota: string };
+}
+
+// ── Forecast: vista 4, LEADS (board real "Leads Maxirent") ──
+export interface LeadBoardItem {
+  itemId: string;
+  itemName: string;
+  grupo: string;
+  ejecutivo: string | null;
+  estadoLead: string | null;
+  empresa: string | null;
+  telefono: string | null;
+  email: string | null;
+  origen: string | null;
+  inOut: string | null;
+  comoEntero: string | null;
+  motivoNoCompra: string | null;
+  ciudadOperacion: string | null;
+  tipoProyecto: string | null;
+  fechaCreacion: string | null;
+  ultimaActualizacion: string | null;
+}
+
+export interface LeadsBoardReport {
+  fuente: "monday";
+  grupos: string[];
+  ejecutivos: string[];
+  items: LeadBoardItem[];
+  porGrupo: { grupo: string; count: number }[];
+  porEstado: { estado: string; count: number }[];
+  porEjecutivo: { ejecutivo: string; count: number }[];
+  stats: { total: number };
+  supuestos: { nota: string };
+}
+
 // ── Asistente comercial (Chat RAG) ──
 export interface AssistantResponse {
   respuesta: string;

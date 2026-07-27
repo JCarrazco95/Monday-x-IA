@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles, getBoardColumns, mondayRequest } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -9,6 +9,7 @@ import {
   type DealRow,
   type EtapaDeal
 } from "../lib/mondayForecast.js";
+import { getJourneyLeads, getLeadsMaxirentBoard } from "../lib/journeyLeads.js";
 import type { LeadEnrichmentOutput, CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -653,87 +654,126 @@ forecastRouter.get("/cerradas", async (_req, res) => {
   }
 });
 
-// TEMPORAL — investigación para "Journey de Leads" y pestaña "Leads" nuevas.
-// GET /api/forecast/journey-debug
-forecastRouter.get("/journey-debug", async (_req, res) => {
-  if (!forecastMondayEnabled) return res.status(501).json({ error: "Requiere Monday live." });
+// ───────────────────── Vista 3: JOURNEY DE LEADS (board "Time stamp") ─────────────────────
+//
+// Board separado (18423822387) que trackea el recorrido de un lead ANTES de
+// llegar a Oportunidades: cuándo se creó, cuándo se intentó contactar, cuándo
+// se contactó, cuándo se cotizó (o se descartó). Solo 3 grupos de seguimiento
+// (Calificados/No Califica/No contactado) y solo leads de Origen "Outbound" o
+// sin capturar (pedido explícito: excluir cualquier otra label).
+async function buildJourneyReport() {
+  const leads = await getJourneyLeads();
+
+  const items = leads.map((l) => ({
+    ...l,
+    diasACcontactar: diasEntre(l.fechaCreacion, l.cambioIntentando),
+    diasAContactado: diasEntre(l.fechaCreacion, l.cambioContactado),
+    diasACotizar: diasEntre(l.fechaCreacion, l.cambioCotizar)
+  }));
+
+  const grupos = [...new Set(items.map((l) => l.grupo))];
+  const ejecutivos = [...new Set(items.map((l) => l.ejecutivo).filter((v): v is string => Boolean(v)))].sort();
+
+  // Embudo: cuántos leads llegaron a cada hito (no son mutuamente excluyentes
+  // con el grupo actual — un lead "No contactado" hoy pudo haber sido
+  // "intentado" antes).
+  const embudo = [
+    { hito: "Creados", count: items.length },
+    { hito: "Intentando contactar", count: items.filter((l) => l.cambioIntentando).length },
+    { hito: "Contactados", count: items.filter((l) => l.cambioContactado).length },
+    { hito: "Cotización", count: items.filter((l) => l.cambioCotizar).length }
+  ];
+
+  const porGrupo = grupos.map((g) => ({ grupo: g, count: items.filter((l) => l.grupo === g).length }));
+
+  const ejecMap = new Map<string, { ejecutivo: string; count: number; contactados: number; cotizados: number }>();
+  for (const l of items) {
+    const nombre = l.ejecutivo ?? "Sin asignar";
+    const cur = ejecMap.get(nombre) ?? { ejecutivo: nombre, count: 0, contactados: 0, cotizados: 0 };
+    cur.count += 1;
+    if (l.cambioContactado) cur.contactados += 1;
+    if (l.cambioCotizar) cur.cotizados += 1;
+    ejecMap.set(nombre, cur);
+  }
+  const porEjecutivo = [...ejecMap.values()].sort((a, b) => b.count - a.count);
+
+  const avg = (vals: number[]) => (vals.length ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length) : null);
+
+  return {
+    fuente: "monday" as const,
+    grupos,
+    ejecutivos,
+    items,
+    embudo,
+    porGrupo,
+    porEjecutivo,
+    stats: {
+      total: items.length,
+      diasPromedioAContactar: avg(items.map((l) => l.diasAContactado).filter((n): n is number => n != null)),
+      diasPromedioACotizar: avg(items.map((l) => l.diasACotizar).filter((n): n is number => n != null))
+    },
+    supuestos: {
+      nota: "Board \"Time stamp\" (18423822387), grupos Calificados/No Califica/No contactado, filtrados a Origen=Outbound o sin capturar. Los días se calculan desde la fecha de creación hasta cada cambio de etapa registrado en Monday."
+    }
+  };
+}
+
+// ───────────────────── Vista 4: LEADS (board real "Leads Maxirent") ─────────────────────
+async function buildLeadsBoardReport() {
+  const leads = await getLeadsMaxirentBoard();
+  const grupos = [...new Set(leads.map((l) => l.grupo))];
+  const ejecutivos = [...new Set(leads.map((l) => l.ejecutivo).filter((v): v is string => Boolean(v)))].sort();
+
+  const porGrupo = grupos.map((g) => ({ grupo: g, count: leads.filter((l) => l.grupo === g).length }));
+
+  const estadoMap = new Map<string, number>();
+  for (const l of leads) {
+    const estado = l.estadoLead ?? "Sin estado";
+    estadoMap.set(estado, (estadoMap.get(estado) ?? 0) + 1);
+  }
+  const porEstado = [...estadoMap.entries()].map(([estado, count]) => ({ estado, count })).sort((a, b) => b.count - a.count);
+
+  const ejecMap = new Map<string, number>();
+  for (const l of leads) {
+    const nombre = l.ejecutivo ?? "Sin asignar";
+    ejecMap.set(nombre, (ejecMap.get(nombre) ?? 0) + 1);
+  }
+  const porEjecutivo = [...ejecMap.entries()].map(([ejecutivo, count]) => ({ ejecutivo, count })).sort((a, b) => b.count - a.count);
+
+  return {
+    fuente: "monday" as const,
+    grupos,
+    ejecutivos,
+    items: leads,
+    porGrupo,
+    porEstado,
+    porEjecutivo,
+    stats: { total: leads.length },
+    supuestos: { nota: "Board real \"Leads Maxirent\" (8311006929), solo lectura, todos los grupos." }
+  };
+}
+
+// GET /api/forecast/journey → reporte "Journey de Leads" (board Time stamp).
+forecastRouter.get("/journey", async (_req, res) => {
+  if (!forecastMondayEnabled) {
+    return res.status(501).json({ error: "Journey de Leads requiere Monday live (MONDAY_API_TOKEN)." });
+  }
   try {
-    const TIME_STAP_BOARD = "18423822387";
-    const LEADS_MAXIRENT_BOARD = "8311006929";
-    const GRUPOS = ["group_mm5nc0b", "group_mm5npb2y", "group_mm5nj1xc"];
-
-    const [colsTimeStap, colsLeads] = await Promise.all([
-      getBoardColumns(TIME_STAP_BOARD),
-      getBoardColumns(LEADS_MAXIRENT_BOARD)
-    ]);
-
-    // Muestra de items de los 3 grupos del board Time Stap, con TODAS sus columnas.
-    // Origen/Ejecutivo son "mirror" — su valor real no viene en `text`, hay que
-    // pedir `display_value` (mismo bug ya resuelto para Oportunidades).
-    const dataGrupos: {
-      boards?: Array<{ groups?: Array<{ id: string; title: string; items_page?: { items?: Array<{ id: string; name: string; column_values?: Array<{ id: string; text: string | null; display_value?: string | null }> }> } }> }>;
-    } = await mondayRequest(
-      `query ($boardId: [ID!], $groupIds: [String!]) {
-        boards (ids: $boardId) {
-          groups (ids: $groupIds) {
-            id
-            title
-            items_page (limit: 15) {
-              items { id name column_values { id text ... on MirrorValue { display_value } } }
-            }
-          }
-        }
-      }`,
-      { boardId: [TIME_STAP_BOARD], groupIds: GRUPOS }
-    );
-
-    // Muestra de items de Leads Maxirent (todos los grupos, primeros 10).
-    const dataLeads: {
-      boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; group?: { title?: string }; column_values?: Array<{ id: string; text: string | null; display_value?: string | null }> }> } }>;
-    } = await mondayRequest(
-      `query ($ids: [ID!]) {
-        boards (ids: $ids) {
-          items_page (limit: 10) {
-            items { id name group { title } column_values { id text ... on MirrorValue { display_value } } }
-          }
-        }
-      }`,
-      { ids: [LEADS_MAXIRENT_BOARD] }
-    );
-
-    res.json({
-      timeStap: {
-        totalColumnas: colsTimeStap.length,
-        columnas: colsTimeStap,
-        grupos: (dataGrupos.boards?.[0]?.groups ?? []).map((g) => ({
-          id: g.id,
-          title: g.title,
-          totalItems: g.items_page?.items?.length ?? 0,
-          items: (g.items_page?.items ?? []).map((it) => {
-            const origenCol = it.column_values?.find((c) => c.id === "lookup_mm5n41b1");
-            const ejecutivoCol = it.column_values?.find((c) => c.id === "lookup_mm5nnq7s");
-            return {
-              id: it.id,
-              name: it.name,
-              origen: (origenCol?.display_value || origenCol?.text) ?? null,
-              ejecutivo: (ejecutivoCol?.display_value || ejecutivoCol?.text) ?? null
-            };
-          })
-        }))
-      },
-      leadsMaxirent: {
-        totalColumnas: colsLeads.length,
-        columnas: colsLeads,
-        ejemplos: (dataLeads.boards?.[0]?.items_page?.items ?? []).map((it) => ({
-          id: it.id,
-          name: it.name,
-          grupo: it.group?.title,
-          columnas: Object.fromEntries((it.column_values ?? []).map((c) => [c.id, (c.display_value || c.text) ?? null]))
-        }))
-      }
-    });
+    res.json(await buildJourneyReport());
   } catch (err) {
-    res.status(502).json({ error: err instanceof Error ? err.message : String(err) });
+    res.status(502).json({ error: `No se pudo construir Journey de Leads: ${err instanceof Error ? err.message : String(err)}` });
+  }
+});
+
+// GET /api/forecast/leads-board → reporte "Leads" (board real Leads Maxirent).
+forecastRouter.get("/leads-board", async (_req, res) => {
+  if (!forecastMondayEnabled) {
+    return res.status(501).json({ error: "La pestaña Leads requiere Monday live (MONDAY_API_TOKEN)." });
+  }
+  try {
+    res.json(await buildLeadsBoardReport());
+  } catch (err) {
+    res.status(502).json({ error: `No se pudo construir el reporte de Leads: ${err instanceof Error ? err.message : String(err)}` });
   }
 });
 

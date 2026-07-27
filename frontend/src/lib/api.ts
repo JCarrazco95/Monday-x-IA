@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, ForecastCerradasReport, AssistantResponse, AdvisorResponse, RoundRobinRep, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, ForecastCerradasReport, JourneyReport, LeadsBoardReport, AssistantResponse, AdvisorResponse, RoundRobinRep, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
 
 const BASE = "/api";
 
@@ -261,6 +261,9 @@ export const api = {
   getForecastCerradas: () => request<ForecastCerradasReport>("/forecast/cerradas"),
   // Actualizaciones y archivos nativos de Monday para una oportunidad del pipeline.
   getForecastActivity: (itemId: string) => request<MondayActivity>(`/forecast/${encodeURIComponent(itemId)}/actividad`),
+  // Vista 3: Journey de Leads (board "Time stamp") y Vista 4: Leads (board real Leads Maxirent).
+  getJourneyReport: () => request<JourneyReport>("/forecast/journey"),
+  getLeadsBoardReport: () => request<LeadsBoardReport>("/forecast/leads-board"),
 
   // Asistente comercial (Chat RAG sobre el histórico).
   askAssistant: (question: string) =>
