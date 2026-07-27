@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "../db/index.js";
 import { safeParseJson } from "../lib/references.js";
-import { getItemUpdates, getItemFiles } from "../lib/monday.js";
+import { getItemUpdates, getItemFiles, getBoardColumns, mondayRequest } from "../lib/monday.js";
 import {
   forecastMondayEnabled,
   getDealsBoard,
@@ -786,6 +786,52 @@ forecastRouter.get("/:itemId/actividad", async (req, res) => {
   try {
     const [updates, files] = await Promise.all([getItemUpdates(itemId), getItemFiles(itemId)]);
     res.json({ enabled: true, updates, files });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// TEMP DEBUG — investigar columna "Cronograma de actividades" (custom_mktz7d26)
+// en ambos boards (Leads Maxirent + Time stamp) antes de construir el reporte.
+forecastRouter.get("/cronograma-debug", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  try {
+    const LEADS = "8311006929";
+    const TIMESTAP = "18423822387";
+    const [colsLeads, colsTime] = await Promise.all([getBoardColumns(LEADS), getBoardColumns(TIMESTAP)]);
+    const target = "custom_mktz7d26";
+    const foundLeads = colsLeads.find((c) => c.id === target);
+    const foundTime = colsTime.find((c) => c.id === target);
+
+    const query = `
+      query ($ids: [ID!], $cols: [String!]) {
+        boards (ids: $ids) {
+          id
+          items_page (limit: 5) {
+            items {
+              id
+              name
+              column_values (ids: $cols) { id text value type }
+            }
+          }
+        }
+      }
+    `;
+    const sampleLeads = foundLeads
+      ? await mondayRequest(query, { ids: [LEADS], cols: [target] })
+      : null;
+    const sampleTime = foundTime
+      ? await mondayRequest(query, { ids: [TIMESTAP], cols: [target] })
+      : null;
+
+    res.json({
+      colsLeadsAll: colsLeads.map((c) => ({ id: c.id, title: c.title, type: c.type })),
+      colsTimeAll: colsTime.map((c) => ({ id: c.id, title: c.title, type: c.type })),
+      foundLeads,
+      foundTime,
+      sampleLeads,
+      sampleTime
+    });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
