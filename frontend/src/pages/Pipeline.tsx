@@ -55,6 +55,52 @@ function pct(cur: number, prev: number): number | null {
   if (prev === 0) return cur === 0 ? 0 : null; // null = "nuevo" (sin base de comparación)
   return Math.round(((cur - prev) / prev) * 100);
 }
+// ── Columnas ordenables: helper genérico reusado por las 4 tablas del Pipeline ──
+type SortDir = "asc" | "desc";
+function cmpValores(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return -1;
+  if (b == null) return 1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b), "es", { numeric: true, sensitivity: "base" });
+}
+/** Estado + helpers de orden para una tabla. `key` es cualquier string que la vista use para identificar la columna. */
+function useOrden() {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const toggle = (key: string) => {
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+  return { sortKey, sortDir, toggle };
+}
+function ordenarPor<T>(rows: T[], sortKey: string | null, sortDir: SortDir, accessors: Record<string, (r: T) => unknown>): T[] {
+  if (!sortKey || !accessors[sortKey]) return rows;
+  const get = accessors[sortKey];
+  const factor = sortDir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => cmpValores(get(a), get(b)) * factor);
+}
+function SortTh({
+  label, colKey, sortKey, sortDir, onSort, align, className
+}: {
+  label: string; colKey: string; sortKey: string | null; sortDir: SortDir; onSort: (key: string) => void;
+  align?: "right"; className?: string;
+}) {
+  const activo = sortKey === colKey;
+  return (
+    <th
+      onClick={() => onSort(colKey)}
+      title={`Ordenar por ${label.toLowerCase()}`}
+      className={`cursor-pointer select-none px-4 py-2 font-medium text-text-muted hover:text-text ${align === "right" ? "text-right" : "text-left"} ${className ?? ""}`}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === "right" ? "flex-row-reverse" : ""}`}>
+        {label}
+        {activo ? (sortDir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />) : <span className="w-[11px]" />}
+      </span>
+    </th>
+  );
+}
+
 function Delta({ value }: { value: number | null }) {
   if (value === null) return <span className="text-[11px] text-text-muted">nuevo</span>;
   if (value === 0) return <span className="inline-flex items-center gap-0.5 text-[11px] text-text-muted"><Minus size={11} /> 0%</span>;
@@ -647,6 +693,29 @@ export function Pipeline() {
     });
   }, [cerradas, filtroGrupoC, buscarC, filtroEtapaC, filtroMotivoC, filtroVendedorC, fechaDesdeC, fechaHastaC]);
 
+  // Orden de columnas (clic en el encabezado) para las tablas "Todas las
+  // oportunidades" y "Oportunidades cerradas".
+  const ordenAbierto = useOrden();
+  const ACCESSORS_ABIERTO: Record<string, (o: ForecastOpportunity) => unknown> = {
+    oportunidad: (o) => o.itemName, empresa: (o) => o.empresa, ejecutivo: (o) => o.ejecutivo,
+    grupo: (o) => o.grupo, etapa: (o) => o.etapa, prob: (o) => o.probabilidad,
+    valor: (o) => o.valorEstimado, ponderado: (o) => o.valorPonderado, cierre: (o) => o.mesCierreKey
+  };
+  const filtradasOrdenadas = useMemo(
+    () => ordenarPor(filtradas, ordenAbierto.sortKey, ordenAbierto.sortDir, ACCESSORS_ABIERTO),
+    [filtradas, ordenAbierto.sortKey, ordenAbierto.sortDir]
+  );
+
+  const ordenCerradas = useOrden();
+  const ACCESSORS_CERRADAS: Record<string, (o: ForecastCerradaItem) => unknown> = {
+    oportunidad: (o) => o.itemName, empresa: (o) => o.empresa, ejecutivo: (o) => o.ejecutivo,
+    grupo: (o) => o.grupo, etapa: (o) => o.etapa, valor: (o) => o.valor, cierre: (o) => o.fechaCierreReal
+  };
+  const filtradasCOrdenadas = useMemo(
+    () => ordenarPor(filtradasC, ordenCerradas.sortKey, ordenCerradas.sortDir, ACCESSORS_CERRADAS),
+    [filtradasC, ordenCerradas.sortKey, ordenCerradas.sortDir]
+  );
+
   // Comparativo de periodos (mide rendimiento del vendedor): siempre sobre el
   // universo COMPLETO de cerradas (ignora filtros de grupo/etapa/motivo/texto,
   // que son para explorar la tabla, no para comparar desempeño), respetando
@@ -960,21 +1029,21 @@ export function Pipeline() {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-border text-left text-xs text-text-muted">
-                    <th className="px-4 py-2 font-medium">Oportunidad</th>
-                    {esMonday && <th className="px-4 py-2 font-medium">Empresa</th>}
-                    {esMonday && <th className="px-4 py-2 font-medium">Ejecutivo</th>}
-                    {esMonday && <th className="px-4 py-2 font-medium">Grupo</th>}
-                    <th className="px-4 py-2 font-medium">Etapa</th>
+                    <SortTh label="Oportunidad" colKey="oportunidad" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />
+                    {esMonday && <SortTh label="Empresa" colKey="empresa" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />}
+                    {esMonday && <SortTh label="Ejecutivo" colKey="ejecutivo" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />}
+                    {esMonday && <SortTh label="Grupo" colKey="grupo" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />}
+                    <SortTh label="Etapa" colKey="etapa" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />
                     {!esMonday && <th className="px-4 py-2 font-medium">Prioridad</th>}
-                    <th className="px-4 py-2 text-right font-medium">Prob.</th>
-                    <th className="px-4 py-2 text-right font-medium">Valor{esMonday ? "" : " est."}</th>
-                    <th className="px-4 py-2 text-right font-medium">Ponderado</th>
-                    <th className="px-4 py-2 font-medium">Cierre</th>
+                    <SortTh label="Prob." colKey="prob" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} align="right" />
+                    <SortTh label={`Valor${esMonday ? "" : " est."}`} colKey="valor" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} align="right" />
+                    <SortTh label="Ponderado" colKey="ponderado" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} align="right" />
+                    <SortTh label="Cierre" colKey="cierre" sortKey={ordenAbierto.sortKey} sortDir={ordenAbierto.sortDir} onSort={ordenAbierto.toggle} />
                     {esMonday && <th className="px-4 py-2 font-medium">Cotización</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {filtradas.map((o) => (
+                  {filtradasOrdenadas.map((o) => (
                     <tr
                       key={o.itemId}
                       onClick={() => setDetalle({ kind: "abierto", o })}
@@ -1037,7 +1106,10 @@ export function Pipeline() {
           data={cerradas}
           loading={loadingCerradas}
           error={errorCerradas}
-          filtradas={filtradasC}
+          filtradas={filtradasCOrdenadas}
+          ordenKey={ordenCerradas.sortKey}
+          ordenDir={ordenCerradas.sortDir}
+          onOrdenar={ordenCerradas.toggle}
           filtroGrupo={filtroGrupoC}
           setFiltroGrupo={setFiltroGrupoC}
           filtroEtapa={filtroEtapaC}
@@ -1075,7 +1147,7 @@ export function Pipeline() {
 }
 
 function CerradasView({
-  data, loading, error, filtradas,
+  data, loading, error, filtradas, ordenKey, ordenDir, onOrdenar,
   filtroGrupo, setFiltroGrupo, filtroEtapa, setFiltroEtapa, filtroMotivo, setFiltroMotivo,
   filtroVendedor, setFiltroVendedor, vendedores, fechaDesde, setFechaDesde, fechaHasta, setFechaHasta,
   buscar, setBuscar, comparPreset, setComparPreset, comparativo, onSelect
@@ -1084,6 +1156,9 @@ function CerradasView({
   loading: boolean;
   error: string | null;
   filtradas: ForecastCerradaItem[];
+  ordenKey: string | null;
+  ordenDir: SortDir;
+  onOrdenar: (key: string) => void;
   filtroGrupo: string;
   setFiltroGrupo: (v: string) => void;
   filtroEtapa: "" | "Ganado" | "Perdido";
@@ -1463,13 +1538,13 @@ function CerradasView({
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-xs text-text-muted">
-                <th className="px-4 py-2 font-medium">Oportunidad</th>
-                <th className="px-4 py-2 font-medium">Empresa</th>
-                <th className="px-4 py-2 font-medium">Ejecutivo</th>
-                <th className="px-4 py-2 font-medium">Grupo</th>
-                <th className="px-4 py-2 font-medium">Etapa</th>
-                <th className="px-4 py-2 text-right font-medium">Valor</th>
-                <th className="px-4 py-2 font-medium">Cierre real</th>
+                <SortTh label="Oportunidad" colKey="oportunidad" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
+                <SortTh label="Empresa" colKey="empresa" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
+                <SortTh label="Ejecutivo" colKey="ejecutivo" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
+                <SortTh label="Grupo" colKey="grupo" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
+                <SortTh label="Etapa" colKey="etapa" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
+                <SortTh label="Valor" colKey="valor" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} align="right" />
+                <SortTh label="Cierre real" colKey="cierre" sortKey={ordenKey} sortDir={ordenDir} onSort={onOrdenar} />
                 <th className="px-4 py-2 font-medium">Cotización</th>
               </tr>
             </thead>
@@ -1545,13 +1620,15 @@ function mesLabelDe(key: string): string {
 
 function FiltroBar({
   buscar, setBuscar, filtroVendedor, setFiltroVendedor, vendedores,
-  filtroMes, setFiltroMes, mesesDisponibles, filtroGrupo, setFiltroGrupo, grupos,
+  filtroMes, setFiltroMes, mesesDisponibles, filtroGrupo, setFiltroGrupo, grupos, grupoSlot,
   fechaDesde, setFechaDesde, fechaHasta, setFechaHasta, exportFilename, exportRows
 }: {
   buscar: string; setBuscar: (v: string) => void;
   filtroVendedor: string; setFiltroVendedor: (v: string) => void; vendedores: string[];
   filtroMes: string; setFiltroMes: (v: string) => void; mesesDisponibles: [string, string][];
   filtroGrupo: string; setFiltroGrupo: (v: string) => void; grupos: string[];
+  /** Si se pasa, reemplaza el `<select>` de grupo por este nodo (ej. multiselección). */
+  grupoSlot?: React.ReactNode;
   fechaDesde: string; setFechaDesde: (v: string) => void; fechaHasta: string; setFechaHasta: (v: string) => void;
   exportFilename: string; exportRows: Record<string, unknown>[];
 }) {
@@ -1571,10 +1648,12 @@ function FiltroBar({
         <option value="">Todos los meses</option>
         {mesesDisponibles.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
       </select>
-      <select value={filtroGrupo} onChange={(e) => setFiltroGrupo(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none">
-        <option value="">Todos los grupos</option>
-        {grupos.map((g) => <option key={g} value={g}>{g}</option>)}
-      </select>
+      {grupoSlot ?? (
+        <select value={filtroGrupo} onChange={(e) => setFiltroGrupo(e.target.value)} className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none">
+          <option value="">Todos los grupos</option>
+          {grupos.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+      )}
       <div className="flex items-center gap-1">
         <input type="date" value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} title="Fecha de creación desde" className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none" />
         <span className="text-xs text-text-muted">–</span>
@@ -1588,16 +1667,120 @@ function FiltroBar({
   );
 }
 
+/** Multiselección de grupo por checkboxes — usado en Journey de Leads (solo 3 grupos). */
+function GrupoMultiSelect({ opciones, seleccionados, onChange }: { opciones: string[]; seleccionados: string[]; onChange: (v: string[]) => void }) {
+  const [abierto, setAbierto] = useState(false);
+  const label = seleccionados.length === 0 ? "Todos los grupos" : `${seleccionados.length} grupo${seleccionados.length === 1 ? "" : "s"}`;
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        className="h-8 rounded-lg border border-border bg-bg px-2 text-xs text-text-muted focus:outline-none"
+      >
+        {label}
+      </button>
+      {abierto && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setAbierto(false)} />
+          <div className="absolute z-20 mt-1 w-56 rounded-lg border border-border bg-surface p-2 shadow-lg">
+            {opciones.map((g) => {
+              const activo = seleccionados.includes(g);
+              return (
+                <label key={g} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 text-xs text-text hover:bg-black/[0.04]">
+                  <input
+                    type="checkbox"
+                    checked={activo}
+                    onChange={() => onChange(activo ? seleccionados.filter((x) => x !== g) : [...seleccionados, g])}
+                  />
+                  {g}
+                </label>
+              );
+            })}
+            {seleccionados.length > 0 && (
+              <button onClick={() => onChange([])} className="mt-1 w-full rounded px-2 py-1 text-left text-[11px] text-text-muted hover:text-text">Quitar filtro</button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// Campo de detalle "opcional" (no obligatorio como en Oportunidades) — se
+// marca en AMARILLO cuando falta el dato, en vez de rojo, para Journey de
+// Leads y Leads (pedido explícito, distinto al detector de Oportunidades).
+function OptionalField({ label, value }: { label: string; value: string | number | null }) {
+  const vacio = value == null || value === "";
+  return (
+    <div className={`rounded-lg border p-2.5 ${vacio ? "border-warning/40 bg-warning/[0.08]" : "border-border bg-black/[0.02]"}`}>
+      <div className="text-[10px] leading-tight text-text-muted">{label}</div>
+      <div className={`mt-1 text-[12px] font-semibold leading-snug ${vacio ? "text-warning" : "text-text"}`}>
+        {vacio ? "Sin capturar" : value}
+      </div>
+    </div>
+  );
+}
+
+function InfoDetailModal({
+  title, subtitle, badge, campos, onClose
+}: {
+  title: string;
+  subtitle?: string | null;
+  badge?: string | null;
+  campos: { label: string; value: string | number | null }[];
+  onClose: () => void;
+}) {
+  const initials = title.split(" ").slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 print:hidden" onClick={onClose}>
+      <div className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start gap-3 border-b border-border p-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-accent-2 text-sm font-bold text-white">
+            {initials || "?"}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold text-text">{title}</div>
+            {subtitle && <div className="mt-0.5 text-xs text-text-muted">{subtitle}</div>}
+            {badge && <span className="mt-1.5 inline-block rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{badge}</span>}
+          </div>
+          <button onClick={onClose} className="shrink-0 rounded-lg p-1.5 text-text-muted hover:bg-black/[0.06] hover:text-text">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="p-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {campos.map((c) => <OptionalField key={c.label} label={c.label} value={c.value} />)}
+          </div>
+        </div>
+        <div className="flex items-center justify-end border-t border-border bg-black/[0.02] px-5 py-3">
+          <button onClick={onClose} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-text-muted hover:text-text">
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ACCESSORS_JOURNEY: Record<string, (it: JourneyLeadItem) => unknown> = {
+  lead: (it) => it.itemName, grupo: (it) => it.grupo, ejecutivo: (it) => it.ejecutivo,
+  estado: (it) => it.estadoLead, creacion: (it) => it.fechaCreacion,
+  diasContactar: (it) => it.diasAContactado, diasCotizar: (it) => it.diasACotizar
+};
+
 function JourneyView() {
   const [data, setData] = useState<JourneyReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [filtroGrupo, setFiltroGrupo] = useState("");
+  const [filtroGrupos, setFiltroGrupos] = useState<string[]>([]);
   const [filtroVendedor, setFiltroVendedor] = useState("");
   const [filtroMes, setFiltroMes] = useState("");
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [buscar, setBuscar] = useState("");
+  const [detalle, setDetalle] = useState<JourneyLeadItem | null>(null);
+  const orden = useOrden();
 
   useEffect(() => {
     setLoading(true);
@@ -1620,7 +1803,7 @@ function JourneyView() {
     const base = data?.items ?? [];
     const q = buscar.trim().toLowerCase();
     return base.filter((it) => {
-      if (filtroGrupo && it.grupo !== filtroGrupo) return false;
+      if (filtroGrupos.length > 0 && !filtroGrupos.includes(it.grupo)) return false;
       if (filtroVendedor && it.ejecutivo !== filtroVendedor) return false;
       if (filtroMes && mesKeyDe(it.fechaCreacion) !== filtroMes) return false;
       if (fechaDesde && (it.fechaCreacion ?? "") < fechaDesde) return false;
@@ -1628,7 +1811,12 @@ function JourneyView() {
       if (!q) return true;
       return it.itemName.toLowerCase().includes(q) || (it.ejecutivo ?? "").toLowerCase().includes(q);
     });
-  }, [data, filtroGrupo, filtroVendedor, filtroMes, fechaDesde, fechaHasta, buscar]);
+  }, [data, filtroGrupos, filtroVendedor, filtroMes, fechaDesde, fechaHasta, buscar]);
+
+  const filtradosOrdenados = useMemo(
+    () => ordenarPor(filtrados, orden.sortKey, orden.sortDir, ACCESSORS_JOURNEY),
+    [filtrados, orden.sortKey, orden.sortDir]
+  );
 
   if (error) return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
   if (loading && !data) return <div className="py-16 text-center text-sm text-text-muted">Cargando Journey de Leads…</div>;
@@ -1727,10 +1915,11 @@ function JourneyView() {
             buscar={buscar} setBuscar={setBuscar}
             filtroVendedor={filtroVendedor} setFiltroVendedor={setFiltroVendedor} vendedores={data.ejecutivos}
             filtroMes={filtroMes} setFiltroMes={setFiltroMes} mesesDisponibles={mesesDisponibles}
-            filtroGrupo={filtroGrupo} setFiltroGrupo={setFiltroGrupo} grupos={data.grupos}
+            filtroGrupo="" setFiltroGrupo={() => {}} grupos={data.grupos}
+            grupoSlot={<GrupoMultiSelect opciones={data.grupos} seleccionados={filtroGrupos} onChange={setFiltroGrupos} />}
             fechaDesde={fechaDesde} setFechaDesde={setFechaDesde} fechaHasta={fechaHasta} setFechaHasta={setFechaHasta}
             exportFilename="journey-leads"
-            exportRows={filtrados.map((it) => ({
+            exportRows={filtradosOrdenados.map((it) => ({
               Lead: it.itemName, Grupo: it.grupo, Ejecutivo: it.ejecutivo ?? "", Origen: it.origen ?? "",
               "Estado lead": it.estadoLead ?? "", "Fecha creación": it.fechaCreacion ?? "",
               "Días a contactar": it.diasAContactado ?? "", "Días a cotizar": it.diasACotizar ?? "",
@@ -1742,19 +1931,24 @@ function JourneyView() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-xs text-text-muted">
-                <th className="px-4 py-2 font-medium">Lead</th>
-                <th className="px-4 py-2 font-medium">Grupo</th>
-                <th className="px-4 py-2 font-medium">Ejecutivo</th>
-                <th className="px-4 py-2 font-medium">Estado</th>
-                <th className="px-4 py-2 font-medium">Creación</th>
-                <th className="px-4 py-2 text-right font-medium">Días a contactar</th>
-                <th className="px-4 py-2 text-right font-medium">Días a cotizar</th>
+                <SortTh label="Lead" colKey="lead" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Grupo" colKey="grupo" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Ejecutivo" colKey="ejecutivo" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Estado" colKey="estado" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Creación" colKey="creacion" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Días a contactar" colKey="diasContactar" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} align="right" />
+                <SortTh label="Días a cotizar" colKey="diasCotizar" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} align="right" />
                 <th className="px-4 py-2 font-medium">Llamadas</th>
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((it: JourneyLeadItem) => (
-                <tr key={it.itemId} className="border-b border-border/60 last:border-0">
+              {filtradosOrdenados.map((it: JourneyLeadItem) => (
+                <tr
+                  key={it.itemId}
+                  onClick={() => setDetalle(it)}
+                  className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                  title="Ver detalle del lead"
+                >
                   <td className="px-4 py-2 font-medium text-text">{it.itemName}</td>
                   <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{it.grupo}</span></td>
                   <td className="px-4 py-2 text-text-muted">{it.ejecutivo ?? "—"}</td>
@@ -1765,16 +1959,47 @@ function JourneyView() {
                   <td className="px-4 py-2 text-text-muted">{it.llamadas ?? "—"}</td>
                 </tr>
               ))}
-              {filtrados.length === 0 && (
+              {filtradosOrdenados.length === 0 && (
                 <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-text-muted">Sin leads con esos filtros.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {detalle && (
+        <InfoDetailModal
+          title={detalle.itemName}
+          subtitle={detalle.ejecutivo}
+          badge={detalle.grupo}
+          onClose={() => setDetalle(null)}
+          campos={[
+            { label: "Origen", value: detalle.origen },
+            { label: "Estado lead", value: detalle.estadoLead },
+            { label: "Fecha creación", value: detalle.fechaCreacion },
+            { label: "Cambio a intentando contactar", value: detalle.cambioIntentando },
+            { label: "Cambio a contactado", value: detalle.cambioContactado },
+            { label: "Cambio a cotizar", value: detalle.cambioCotizar },
+            { label: "Cambio a no contactado", value: detalle.cambioNoContactado },
+            { label: "Cambio a no califica", value: detalle.cambioNoCalifica },
+            { label: "Días a contactar", value: detalle.diasAContactado },
+            { label: "Días a cotizar", value: detalle.diasACotizar },
+            { label: "Llamadas", value: detalle.llamadas },
+            { label: "Minutos de atención", value: detalle.minutosAtencion },
+            { label: "Semáforo", value: detalle.semaforo },
+            { label: "Revisado", value: detalle.revisado }
+          ]}
+        />
+      )}
     </>
   );
 }
+
+const ACCESSORS_LEADS: Record<string, (it: LeadBoardItem) => unknown> = {
+  lead: (it) => it.itemName, empresa: (it) => it.empresa, grupo: (it) => it.grupo,
+  ejecutivo: (it) => it.ejecutivo, estado: (it) => it.estadoLead, telefono: (it) => it.telefono,
+  origen: (it) => it.origen ?? it.inOut, creacion: (it) => it.fechaCreacion
+};
 
 function LeadsBoardView() {
   const [data, setData] = useState<LeadsBoardReport | null>(null);
@@ -1786,6 +2011,8 @@ function LeadsBoardView() {
   const [fechaDesde, setFechaDesde] = useState("");
   const [fechaHasta, setFechaHasta] = useState("");
   const [buscar, setBuscar] = useState("");
+  const [detalle, setDetalle] = useState<LeadBoardItem | null>(null);
+  const orden = useOrden();
 
   useEffect(() => {
     setLoading(true);
@@ -1821,6 +2048,11 @@ function LeadsBoardView() {
       );
     });
   }, [data, filtroGrupo, filtroVendedor, filtroMes, fechaDesde, fechaHasta, buscar]);
+
+  const filtradosOrdenados = useMemo(
+    () => ordenarPor(filtrados, orden.sortKey, orden.sortDir, ACCESSORS_LEADS),
+    [filtrados, orden.sortKey, orden.sortDir]
+  );
 
   if (error) return <div className="rounded-lg border border-danger/20 bg-danger/10 px-4 py-3 text-sm text-danger">{error}</div>;
   if (loading && !data) return <div className="py-16 text-center text-sm text-text-muted">Cargando Leads…</div>;
@@ -1900,7 +2132,7 @@ function LeadsBoardView() {
             filtroGrupo={filtroGrupo} setFiltroGrupo={setFiltroGrupo} grupos={data.grupos}
             fechaDesde={fechaDesde} setFechaDesde={setFechaDesde} fechaHasta={fechaHasta} setFechaHasta={setFechaHasta}
             exportFilename="leads"
-            exportRows={filtrados.map((it) => ({
+            exportRows={filtradosOrdenados.map((it) => ({
               Lead: it.itemName, Empresa: it.empresa ?? "", Grupo: it.grupo, Ejecutivo: it.ejecutivo ?? "",
               Estado: it.estadoLead ?? "", Teléfono: it.telefono ?? "", Email: it.email ?? "",
               Origen: it.origen ?? "", "In/Out": it.inOut ?? "", "Cómo se enteró": it.comoEntero ?? "",
@@ -1913,19 +2145,24 @@ function LeadsBoardView() {
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-border text-left text-xs text-text-muted">
-                <th className="px-4 py-2 font-medium">Lead</th>
-                <th className="px-4 py-2 font-medium">Empresa</th>
-                <th className="px-4 py-2 font-medium">Grupo</th>
-                <th className="px-4 py-2 font-medium">Ejecutivo</th>
-                <th className="px-4 py-2 font-medium">Estado</th>
-                <th className="px-4 py-2 font-medium">Teléfono</th>
-                <th className="px-4 py-2 font-medium">Origen</th>
-                <th className="px-4 py-2 font-medium">Creación</th>
+                <SortTh label="Lead" colKey="lead" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Empresa" colKey="empresa" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Grupo" colKey="grupo" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Ejecutivo" colKey="ejecutivo" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Estado" colKey="estado" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Teléfono" colKey="telefono" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Origen" colKey="origen" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
+                <SortTh label="Creación" colKey="creacion" sortKey={orden.sortKey} sortDir={orden.sortDir} onSort={orden.toggle} />
               </tr>
             </thead>
             <tbody>
-              {filtrados.map((it: LeadBoardItem) => (
-                <tr key={it.itemId} className="border-b border-border/60 last:border-0">
+              {filtradosOrdenados.map((it: LeadBoardItem) => (
+                <tr
+                  key={it.itemId}
+                  onClick={() => setDetalle(it)}
+                  className="cursor-pointer border-b border-border/60 transition-colors last:border-0 hover:bg-accent/[0.04]"
+                  title="Ver detalle del lead"
+                >
                   <td className="px-4 py-2 font-medium text-text">{it.itemName}</td>
                   <td className="px-4 py-2 text-text-muted">{it.empresa ?? "—"}</td>
                   <td className="px-4 py-2"><span className="rounded-full bg-border/50 px-2 py-0.5 text-[11px] text-text-muted">{it.grupo}</span></td>
@@ -1936,13 +2173,36 @@ function LeadsBoardView() {
                   <td className="px-4 py-2 text-text-muted">{it.fechaCreacion ?? "—"}</td>
                 </tr>
               ))}
-              {filtrados.length === 0 && (
+              {filtradosOrdenados.length === 0 && (
                 <tr><td colSpan={8} className="px-4 py-8 text-center text-sm text-text-muted">Sin leads con esos filtros.</td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {detalle && (
+        <InfoDetailModal
+          title={detalle.itemName}
+          subtitle={detalle.ejecutivo}
+          badge={detalle.grupo}
+          onClose={() => setDetalle(null)}
+          campos={[
+            { label: "Empresa", value: detalle.empresa },
+            { label: "Estado lead", value: detalle.estadoLead },
+            { label: "Teléfono", value: detalle.telefono },
+            { label: "Email", value: detalle.email },
+            { label: "Origen", value: detalle.origen },
+            { label: "IN/OUT", value: detalle.inOut },
+            { label: "¿Cómo se enteró?", value: detalle.comoEntero },
+            { label: "Motivo de no compra", value: detalle.motivoNoCompra },
+            { label: "Ciudad de operación", value: detalle.ciudadOperacion },
+            { label: "Tipo de proyecto", value: detalle.tipoProyecto },
+            { label: "Fecha de creación", value: detalle.fechaCreacion },
+            { label: "Última actualización", value: detalle.ultimaActualizacion }
+          ]}
+        />
+      )}
     </>
   );
 }
