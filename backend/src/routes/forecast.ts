@@ -932,7 +932,33 @@ forecastRouter.get("/relacion-actividades-debug", async (_req, res) => {
       linkedItems = await mondayRequest(linkedQuery, { ids: linkedIdsArr });
     }
 
-    res.json({ settings, cvData, linkedIdsArr, linkedItems });
+    // items(ids:[...]) vino vacío — probamos si el token puede ver el board
+    // destino en absoluto, y si items_page (paginado, distinto path de acceso)
+    // sí trae algo.
+    const ACTIVIDADES_BOARD = "8311006639";
+    let boardInfo: unknown = null;
+    let boardInfoError: string | null = null;
+    try {
+      boardInfo = await mondayRequest(
+        `query ($ids: [ID!]) { boards (ids: $ids) { id name state items_count columns { id title type } } }`,
+        { ids: [ACTIVIDADES_BOARD] }
+      );
+    } catch (e) {
+      boardInfoError = e instanceof Error ? e.message : String(e);
+    }
+
+    let pagedItems: unknown = null;
+    let pagedItemsError: string | null = null;
+    try {
+      pagedItems = await mondayRequest(
+        `query ($ids: [ID!]) { boards (ids: $ids) { items_page (limit: 10) { items { id name column_values { id text type column { title } } } } } }`,
+        { ids: [ACTIVIDADES_BOARD] }
+      );
+    } catch (e) {
+      pagedItemsError = e instanceof Error ? e.message : String(e);
+    }
+
+    res.json({ settings, cvData, linkedIdsArr, linkedItems, boardInfo, boardInfoError, pagedItems, pagedItemsError });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
