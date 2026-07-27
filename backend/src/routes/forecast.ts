@@ -807,7 +807,7 @@ forecastRouter.get("/cronograma-debug", async (_req, res) => {
       query ($ids: [ID!], $cols: [String!]) {
         boards (ids: $ids) {
           id
-          items_page (limit: 5) {
+          items_page (limit: 100) {
             items {
               id
               name
@@ -824,13 +824,49 @@ forecastRouter.get("/cronograma-debug", async (_req, res) => {
       ? await mondayRequest(query, { ids: [TIMESTAP], cols: [target] })
       : null;
 
+    // De los 100 muestreados, ¿alguno trae texto no vacío en esta columna?
+    type ItemsPageRaw = { boards?: Array<{ items_page?: { items?: Array<{ id: string; name: string; column_values?: Array<{ text?: string | null; value?: string | null }> }> } }> };
+    const leadsItems = (sampleLeads as ItemsPageRaw | null)?.boards?.[0]?.items_page?.items ?? [];
+    const conDatos = leadsItems.filter((it) => (it.column_values?.[0]?.text || it.column_values?.[0]?.value));
+
+    // El tipo "unsupported" no trae datos por column_values — probamos si
+    // activity_logs (bitácora nativa de Monday) capturó cambios de esta
+    // columna. Usamos de preferencia los items que sí mostraron algo de
+    // texto/value; si ninguno, probamos con los primeros 30 muestreados.
+    const idsParaLog = (conDatos.length ? conDatos : leadsItems.slice(0, 30)).map((it) => it.id);
+    const logQuery = `
+      query ($boardId: ID!, $itemIds: [ID!]) {
+        boards (ids: [$boardId]) {
+          activity_logs (item_ids: $itemIds, limit: 50) {
+            id
+            event
+            data
+            created_at
+          }
+        }
+      }
+    `;
+    let activityLogs: unknown = null;
+    let activityLogsError: string | null = null;
+    if (idsParaLog.length) {
+      try {
+        activityLogs = await mondayRequest(logQuery, { boardId: LEADS, itemIds: idsParaLog });
+      } catch (e) {
+        activityLogsError = e instanceof Error ? e.message : String(e);
+      }
+    }
+
     res.json({
       colsLeadsAll: colsLeads.map((c) => ({ id: c.id, title: c.title, type: c.type })),
       colsTimeAll: colsTime.map((c) => ({ id: c.id, title: c.title, type: c.type })),
       foundLeads,
       foundTime,
-      sampleLeads,
-      sampleTime
+      totalMuestreados: leadsItems.length,
+      conDatosCount: conDatos.length,
+      conDatos: conDatos.slice(0, 10).map((it) => ({ id: it.id, name: it.name, cv: it.column_values?.[0] })),
+      idsParaLog,
+      activityLogs,
+      activityLogsError
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
