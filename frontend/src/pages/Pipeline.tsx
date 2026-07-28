@@ -5,7 +5,7 @@ import {
 import { TrendingUp, RefreshCw, Info, DollarSign, Users, Database, ExternalLink, FileText, Download, Printer, ArrowUp, ArrowDown, Minus, X, ChevronDown, ChevronRight, Calendar, Clock, Mail, Phone, MessageSquare } from "lucide-react";
 import { api } from "../lib/api";
 import { exportToCsv, exportToXlsx } from "../lib/exportUtils";
-import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity, JourneyReport, JourneyLeadItem, LeadsBoardReport, LeadBoardItem, CronogramaActividades } from "../types";
+import type { ForecastReport, ForecastCerradasReport, ForecastCerradaItem, ForecastOpportunity, MondayActivity, JourneyReport, JourneyLeadItem, LeadsBoardReport, LeadBoardItem, CronogramaActividades, ActividadesAgregado } from "../types";
 
 // ── Fechas: comparativo de periodos (semana/mes actual vs. el tramo anterior) ──
 function toISODate(d: Date): string {
@@ -1817,6 +1817,68 @@ function InfoDetailModal({
   );
 }
 
+/** Resumen GLOBAL de actividades (todos los leads), calculado en segundo plano — nunca en vivo. Compartido por Journey de Leads y Leads. */
+function AgregadoActividadesCard() {
+  const [data, setData] = useState<ActividadesAgregado | null>(null);
+  const [refrescando, setRefrescando] = useState(false);
+
+  const cargar = useCallback(() => {
+    api.getActividadesAgregado()
+      .then(setData)
+      .catch((err) => setData({ disponible: false, motivo: err instanceof Error ? err.message : String(err) }));
+  }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const onRefrescar = async () => {
+    setRefrescando(true);
+    try {
+      await api.refreshActividadesAgregado();
+    } finally {
+      // El recálculo corre en segundo plano y tarda minutos — esta espera
+      // corta es solo para dar feedback visual, no para esperar a que termine.
+      setTimeout(() => { cargar(); setRefrescando(false); }, 3000);
+    }
+  };
+
+  return (
+    <div className="mb-4 rounded-xl border border-border bg-surface p-4">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold text-text">
+          <Clock size={15} className="text-accent" /> Actividades totales{data?.desde ? ` desde ${data.desde}` : ""}
+        </h3>
+        <div className="flex items-center gap-2">
+          {data?.generadoEn && (
+            <span className="text-[11px] text-text-muted">Actualizado: {new Date(data.generadoEn).toLocaleString()}</span>
+          )}
+          <button
+            onClick={onRefrescar}
+            disabled={refrescando}
+            className="flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[11px] text-text-muted hover:text-text disabled:opacity-50"
+            title="Recalcular ahora (tarda varios minutos en segundo plano)"
+          >
+            <RefreshCw size={11} className={refrescando ? "animate-spin" : ""} /> Recalcular
+          </button>
+        </div>
+      </div>
+      {!data ? (
+        <div className="text-xs text-text-muted">Cargando…</div>
+      ) : !data.disponible ? (
+        <div className="text-xs text-text-muted">{data.motivo ?? "No disponible."}</div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-lg bg-accent/10 px-3 py-1.5 text-sm font-semibold text-accent">{data.total} total</span>
+          {(data.resumenPorTipo ?? []).map((r) => (
+            <span key={r.tipo} className="inline-flex items-center gap-1 rounded-full bg-border/50 px-2.5 py-1 text-xs font-medium text-text-muted">
+              {iconoTipoActividad(r.tipo)} {r.tipo}: {r.count}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const ACCESSORS_JOURNEY: Record<string, (it: JourneyLeadItem) => unknown> = {
   lead: (it) => it.itemName, grupo: (it) => it.grupo, ejecutivo: (it) => it.ejecutivo,
   estado: (it) => it.estadoLead, creacion: (it) => it.fechaCreacion,
@@ -1901,6 +1963,8 @@ function JourneyView() {
         <StatCard label="Días prom. a cotizar" value={data.stats.diasPromedioACotizar != null ? `${data.stats.diasPromedioACotizar} días` : "—"} />
         <StatCard label="Grupos" value={data.grupos.length} />
       </div>
+
+      <AgregadoActividadesCard />
 
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
         <Info size={14} className="mt-0.5 shrink-0 text-info" />
@@ -2149,6 +2213,8 @@ function LeadsBoardView() {
         <StatCard label="Grupos" value={data.grupos.length} />
         <StatCard label="Ejecutivos" value={data.ejecutivos.length} />
       </div>
+
+      <AgregadoActividadesCard />
 
       <div className="mb-4 flex items-start gap-2 rounded-lg border border-info/25 bg-info/[0.06] px-4 py-2.5 text-xs text-text-muted">
         <Info size={14} className="mt-0.5 shrink-0 text-info" />

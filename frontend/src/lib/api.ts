@@ -1,4 +1,4 @@
-import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, ForecastCerradasReport, JourneyReport, LeadsBoardReport, CronogramaActividades, AssistantResponse, AdvisorResponse, RoundRobinRep, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
+import type { Agent, HealthResponse, LogEntry, LeadAnalysis, LeadsResponse, OrchestratorResult, CallsResponse, AnalyzedCallsResponse, AnalyzedCallDetail, NextBestActionReport, CoachingReport, ForecastReport, ForecastCerradasReport, JourneyReport, LeadsBoardReport, CronogramaActividades, ActividadesAgregado, AssistantResponse, AdvisorResponse, RoundRobinRep, ScraperSource, ScraperSearchResult, ScraperImportResult, Prospect, TrainingCourse, TrainingLesson, TrainingRecs, QuizForm, QuizResult, TrainingAdopcion, MondayActivity, Region } from "../types";
 
 const BASE = "/api";
 
@@ -267,6 +267,9 @@ export const api = {
   // Cronograma de actividades (tipo + cantidad) de un lead, por cada vista.
   getLeadCronograma: (itemId: string) => request<CronogramaActividades>(`/forecast/leads-board/${encodeURIComponent(itemId)}/cronograma`),
   getJourneyCronograma: (itemId: string) => request<CronogramaActividades>(`/forecast/journey/${encodeURIComponent(itemId)}/cronograma`),
+  // Resumen global de actividades (todos los leads, calculado en segundo plano).
+  getActividadesAgregado: () => request<ActividadesAgregado>("/forecast/actividades-agregado"),
+  refreshActividadesAgregado: () => request<{ iniciado: boolean; nota: string }>("/forecast/actividades-agregado/refresh", { method: "POST" }),
 
   // Asistente comercial (Chat RAG sobre el histórico).
   askAssistant: (question: string) =>

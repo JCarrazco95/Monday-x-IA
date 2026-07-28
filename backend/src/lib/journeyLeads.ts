@@ -248,6 +248,7 @@ export async function getLeadsMaxirentBoard(): Promise<LeadBoardRow[]> {
 //      aquí para no duplicar conteos.
 // ===========================================================================
 
+const BOARD_ACTIVIDADES = process.env.MONDAY_BOARD_ID_ACTIVIDADES ?? "8311006639";
 const COL_LEAD_ACTIVIDADES_REL = "board_relation_mm2w17ac"; // "Actividades de ventas" (en Leads Maxirent)
 const COL_TS_LEAD_REL = "board_relation_mm5nkh1c"; // "Leads Maxirent" (en Time stamp)
 
@@ -369,4 +370,112 @@ export async function getActivityTimelineForJourneyItem(timeStampItemId: string)
   const leadId = data?.items?.[0]?.column_values?.[0]?.linked_item_ids?.[0];
   if (!leadId) return emptyResult("Este registro de Journey no está enlazado a un lead de Leads Maxirent.");
   return getActivityTimeline(leadId);
+}
+
+// ===========================================================================
+//  Resumen GLOBAL (todos los leads) de tipo + cantidad por actividad, desde
+//  una fecha dada. A diferencia de `getActivityTimeline` (por lead, on-demand)
+//  este recorre TODO el board de una vez — se usa desde un job en segundo
+//  plano (`activitySummaryCache.ts`), nunca en vivo desde una petición HTTP.
+// ===========================================================================
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+export interface ActivitySummaryGlobal {
+  desde: string;
+  resumenPorTipo: { tipo: string; count: number }[];
+  total: number;
+}
+
+/** Pagina TODO el board de Actividades de ventas y cuenta por activity_type, filtrando por fecha >= desde. */
+async function contarActividadesDesde(desde: string, conteo: Map<string, number>): Promise<void> {
+  const query = `
+    query ($ids: [ID!], $cursor: String) {
+      boards (ids: $ids) {
+        items_page (limit: 100, cursor: $cursor) {
+          cursor
+          items { column_values (ids: ["${COL_ACT_TIPO}", "${COL_ACT_INICIO}"]) { id text } }
+        }
+      }
+    }
+  `;
+  type Raw = { boards?: Array<{ items_page?: { cursor: string | null; items?: Array<{ column_values?: Array<{ id: string; text?: string | null }> }> } }> };
+  let cursor: string | null = null;
+  do {
+    const data: Raw = await mondayRequest(query, { ids: [BOARD_ACTIVIDADES], cursor });
+    const page = data?.boards?.[0]?.items_page;
+    if (!page) break;
+    cursor = page.cursor;
+    for (const it of page.items ?? []) {
+      const cv = new Map((it.column_values ?? []).map((c) => [c.id, c.text ?? null]));
+      const fecha = cv.get(COL_ACT_INICIO);
+      if (!fecha || fecha < desde) continue;
+      const tipo = cv.get(COL_ACT_TIPO) || "Actividad";
+      conteo.set(tipo, (conteo.get(tipo) ?? 0) + 1);
+    }
+    if (cursor) await sleep(150);
+  } while (cursor);
+}
+
+/** Pagina TODOS los leads de Leads Maxirent, y en lotes trae sus updates() para contar correos ("Outgoing/Incoming Email", creator null) desde la fecha dada. */
+async function contarCorreosDesde(desde: string, conteo: Map<string, number>): Promise<void> {
+  const leadIds: string[] = [];
+  const idsQuery = `
+    query ($ids: [ID!], $cursor: String) {
+      boards (ids: $ids) {
+        items_page (limit: 100, cursor: $cursor) { cursor items { id } }
+      }
+    }
+  `;
+  type IdsRaw = { boards?: Array<{ items_page?: { cursor: string | null; items?: Array<{ id: string }> } }> };
+  let cursor: string | null = null;
+  do {
+    const data: IdsRaw = await mondayRequest(idsQuery, { ids: [BOARD_LEADS_MAXIRENT], cursor });
+    const page = data?.boards?.[0]?.items_page;
+    if (!page) break;
+    cursor = page.cursor;
+    for (const it of page.items ?? []) leadIds.push(it.id);
+    if (cursor) await sleep(150);
+  } while (cursor);
+
+  const BATCH = 25;
+  const updatesQuery = `
+    query ($ids: [ID!]) {
+      items (ids: $ids) { updates (limit: 100) { text_body body created_at creator { id } } }
+    }
+  `;
+  type UpdatesRaw = { items?: Array<{ updates?: RawUpdateFull[] }> };
+  let correos = 0;
+  for (let i = 0; i < leadIds.length; i += BATCH) {
+    const batch = leadIds.slice(i, i + BATCH);
+    const data: UpdatesRaw = await mondayRequest(updatesQuery, { ids: batch });
+    for (const it of data?.items ?? []) {
+      for (const u of it.updates ?? []) {
+        if (u.creator != null) continue;
+        const texto = (u.text_body ?? u.body ?? "").trim();
+        if (!EMAIL_RE.test(texto)) continue;
+        if (!u.created_at || u.created_at < desde) continue;
+        correos++;
+      }
+    }
+    await sleep(150);
+  }
+  if (correos > 0) conteo.set("Correo", correos);
+}
+
+/**
+ * Resumen global (todos los leads) de tipo + cantidad por actividad, desde
+ * una fecha (`YYYY-MM-DD`). Costoso — pagina el board completo de
+ * Actividades de ventas (~4000+ items) y los updates() de TODOS los leads.
+ * Diseñado para correr en segundo plano (ver `activitySummaryCache.ts`), no
+ * bajo demanda desde una petición HTTP.
+ */
+export async function computeActivitySummaryGlobal(desde: string): Promise<ActivitySummaryGlobal> {
+  if (isMondayMockMode) return { desde, resumenPorTipo: [], total: 0 };
+  const conteo = new Map<string, number>();
+  await contarActividadesDesde(desde, conteo);
+  await contarCorreosDesde(desde, conteo);
+  const resumenPorTipo = [...conteo.entries()].map(([tipo, count]) => ({ tipo, count })).sort((a, b) => b.count - a.count);
+  const total = resumenPorTipo.reduce((s, r) => s + r.count, 0);
+  return { desde, resumenPorTipo, total };
 }

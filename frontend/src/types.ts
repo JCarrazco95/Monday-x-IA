@@ -474,6 +474,17 @@ export interface CronogramaActividades {
   resumenPorTipo: { tipo: string; count: number }[];
 }
 
+// ── Resumen GLOBAL de actividades (todos los leads, calculado en segundo plano) ──
+export interface ActividadesAgregado {
+  disponible: boolean;
+  motivo?: string;
+  desde?: string;
+  resumenPorTipo?: { tipo: string; count: number }[];
+  total?: number;
+  generadoEn?: string;
+  error?: string;
+}
+
 // ── Asistente comercial (Chat RAG) ──
 export interface AssistantResponse {
   respuesta: string;

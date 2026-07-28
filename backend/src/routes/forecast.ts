@@ -10,6 +10,7 @@ import {
   type EtapaDeal
 } from "../lib/mondayForecast.js";
 import { getJourneyLeads, getLeadsMaxirentBoard, getActivityTimeline, getActivityTimelineForJourneyItem } from "../lib/journeyLeads.js";
+import { getCachedActivitySummary, refreshActivitySummary } from "../lib/activitySummaryCache.js";
 import type { LeadEnrichmentOutput, CallIntelligenceOutput } from "../agents/types.js";
 
 // ===========================================================================
@@ -812,4 +813,29 @@ forecastRouter.get("/journey/:itemId/cronograma", async (req, res) => {
   } catch (err) {
     res.status(502).json({ error: `No se pudo construir el cronograma: ${err instanceof Error ? err.message : String(err)}` });
   }
+});
+
+// GET /api/forecast/actividades-agregado → resumen GLOBAL (tipo + cantidad,
+// todos los leads, desde ACTIVIDADES_RESUMEN_DESDE) — SIEMPRE lee la caché
+// (instantáneo), nunca calcula en vivo. El job en segundo plano
+// (activitySummaryCache.ts) la recalcula solo cada N horas.
+forecastRouter.get("/actividades-agregado", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  try {
+    const cached = await getCachedActivitySummary();
+    if (!cached) return res.json({ disponible: false, motivo: "Aún no se ha calculado (el proceso en segundo plano corre poco después de arrancar el servidor)." });
+    res.json({ disponible: true, ...cached });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// POST /api/forecast/actividades-agregado/refresh → dispara el recálculo
+// manualmente (no espera a que termine: puede tardar minutos por la
+// cantidad de items a paginar). Responde de inmediato; el resultado se ve
+// consultando GET /actividades-agregado una vez que `generadoEn` cambie.
+forecastRouter.post("/actividades-agregado/refresh", async (_req, res) => {
+  if (!forecastMondayEnabled) return res.status(501).json({ error: "requiere Monday live" });
+  refreshActivitySummary().catch(() => {});
+  res.json({ iniciado: true, nota: "El recálculo corre en segundo plano; puede tardar varios minutos. Consulta GET /api/forecast/actividades-agregado para ver el resultado." });
 });
