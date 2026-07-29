@@ -413,7 +413,7 @@ async function contarActividadesDesde(desde: string, conteo: Map<string, number>
       const tipo = cv.get(COL_ACT_TIPO) || "Actividad";
       conteo.set(tipo, (conteo.get(tipo) ?? 0) + 1);
     }
-    if (cursor) await sleep(150);
+    if (cursor) await sleep(400);
   } while (cursor);
 }
 
@@ -435,10 +435,10 @@ async function contarCorreosDesde(desde: string, conteo: Map<string, number>): P
     if (!page) break;
     cursor = page.cursor;
     for (const it of page.items ?? []) leadIds.push(it.id);
-    if (cursor) await sleep(150);
+    if (cursor) await sleep(400);
   } while (cursor);
 
-  const BATCH = 25;
+  const BATCH = 15;
   const updatesQuery = `
     query ($ids: [ID!]) {
       items (ids: $ids) { updates (limit: 100) { text_body body created_at creator { id } } }
@@ -458,7 +458,7 @@ async function contarCorreosDesde(desde: string, conteo: Map<string, number>): P
         correos++;
       }
     }
-    await sleep(150);
+    await sleep(400);
   }
   if (correos > 0) conteo.set("Correo", correos);
 }

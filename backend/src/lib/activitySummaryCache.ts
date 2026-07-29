@@ -89,15 +89,18 @@ export async function refreshActivitySummary(desde: string = DESDE_DEFAULT): Pro
   }
 }
 
-// "Cron" interno: recalcula automáticamente cada N horas (por defecto 6) sin
-// necesitar tocar index.ts (archivo compartido con trabajo en curso del
-// compañero) — el efecto se dispara solo al importarse este módulo, que ya
-// ocurre en el arranque normal vía forecast.ts. Primera corrida ~60s después
-// de levantar el servidor (tiempo de sobra para que initDb() ya haya
-// terminado). Deshabilitado en modo demo/sin Monday.
-const CRON_HOURS = Number(process.env.ACTIVIDADES_RESUMEN_CRON_HOURS ?? 6);
-if (forecastMondayEnabled && CRON_HOURS > 0) {
+// "Cron" interno OPCIONAL: solo corre si ACTIVIDADES_RESUMEN_CRON_HOURS está
+// definido en el entorno — mismo criterio que CALLS_SYNC_CRON_HOURS/
+// NBA_CRON_HOURS/LEADS_SYNC_CRON_HOURS en este repo (todos apagados por
+// defecto). El efecto se dispara solo al importarse este módulo (ya ocurre
+// en el arranque normal vía forecast.ts), sin tocar index.ts. Primera
+// corrida a los 5 min de levantar el servidor — de sobra para que el
+// servidor esté sirviendo con normalidad antes de la carga pesada del job.
+// Mientras no se defina la variable, el resumen solo se actualiza con el
+// botón "Recalcular" (POST /actividades-agregado/refresh).
+const CRON_HOURS = Number(process.env.ACTIVIDADES_RESUMEN_CRON_HOURS);
+if (forecastMondayEnabled && Number.isFinite(CRON_HOURS) && CRON_HOURS > 0) {
   const tick = () => { refreshActivitySummary().catch(() => {}); };
-  setTimeout(tick, 60_000).unref();
+  setTimeout(tick, 300_000).unref();
   setInterval(tick, CRON_HOURS * 3_600_000).unref();
 }
