@@ -606,6 +606,24 @@ callsRouter.get("/gemini-env-debug", async (_req, res) => {
   });
 });
 
+// TEMP DEBUG — reproduce el camino REAL de geminiStructured (systemInstruction
+// + responseMimeType JSON + thinkingConfig) con un schema minimo, para aislar
+// cual parametro causa el 400 INVALID_ARGUMENT visto con el modelo nuevo.
+callsRouter.get("/gemini-structured-debug", async (_req, res) => {
+  try {
+    const { geminiStructured } = await import("../lib/gemini.js");
+    const out = await geminiStructured<{ ok: boolean }>({
+      system: "Eres un asistente de prueba.",
+      prompt: "Responde con ok=true.",
+      inputSchema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] },
+      operation: "debug_test"
+    });
+    res.json({ ok: true, out });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 callsRouter.get("/gemini-test-model", async (req, res) => {
   try {
     const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
