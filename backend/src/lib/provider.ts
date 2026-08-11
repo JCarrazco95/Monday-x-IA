@@ -45,9 +45,13 @@ export const isMockMode = PROVIDER === "demo";
 const CLAUDE_DEFAULT = process.env.CLAUDE_MODEL_DEFAULT ?? "claude-haiku-4-5";
 const CLAUDE_HEAVY = process.env.CLAUDE_MODEL_HEAVY ?? "claude-haiku-4-5";
 
-// Modelos Gemini gratuitos por defecto (configurables). Flash es gratis.
-const GEMINI_DEFAULT = process.env.GEMINI_MODEL_DEFAULT ?? "gemini-2.5-flash";
-const GEMINI_HEAVY = process.env.GEMINI_MODEL_HEAVY ?? "gemini-2.5-flash";
+// Modelos Gemini gratuitos por defecto (configurables). "gemini-2.5-flash"
+// empezó a devolver 404 "no longer available to new users" (Google lo
+// retiró para esta cuenta) — se cambia al alias "-latest", que Google
+// mantiene apuntando siempre a su modelo flash vigente, para no volver a
+// romperse en silencio cuando retiren la siguiente versión pineada.
+const GEMINI_DEFAULT = process.env.GEMINI_MODEL_DEFAULT ?? "gemini-flash-latest";
+const GEMINI_HEAVY = process.env.GEMINI_MODEL_HEAVY ?? "gemini-flash-latest";
 
 export const MODEL_DEFAULT =
   PROVIDER === "gemini" ? GEMINI_DEFAULT : CLAUDE_DEFAULT;
