@@ -606,6 +606,33 @@ callsRouter.get("/gemini-env-debug", async (_req, res) => {
   });
 });
 
+// TEMP DEBUG — replica la llamada REST cruda de generateContent con las
+// mismas config keys que geminiStructured, activando/desactivando cada una
+// por query param, para aislar cual causa el 400 INVALID_ARGUMENT.
+callsRouter.get("/gemini-config-debug", async (req, res) => {
+  try {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (!key) return res.status(400).json({ error: "Falta GEMINI_API_KEY/GOOGLE_API_KEY" });
+    const modelo = (req.query.modelo as string) ?? "gemini-flash-latest";
+    const generationConfig: Record<string, unknown> = {};
+    if (req.query.json !== "0") generationConfig.responseMimeType = "application/json";
+    if (req.query.thinking !== "0") generationConfig.thinkingConfig = { thinkingBudget: 0 };
+    const body = {
+      contents: [{ parts: [{ text: 'Responde con un JSON {"ok": true}.' }] }],
+      systemInstruction: { parts: [{ text: "Eres un asistente de prueba." }] },
+      generationConfig
+    };
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    );
+    const json = await r.json();
+    res.json({ modelo, configUsada: generationConfig, status: r.status, respuesta: json });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // TEMP DEBUG — reproduce el camino REAL de geminiStructured (systemInstruction
 // + responseMimeType JSON + thinkingConfig) con un schema minimo, para aislar
 // cual parametro causa el 400 INVALID_ARGUMENT visto con el modelo nuevo.
