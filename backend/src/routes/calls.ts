@@ -575,3 +575,20 @@ callsRouter.get("/usage-historico", async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// TEMP DEBUG — modelos Gemini disponibles para esta API key (gemini-2.5-flash
+// empezó a devolver 404 "no longer available to new users").
+callsRouter.get("/gemini-models-debug", async (_req, res) => {
+  try {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (!key) return res.status(400).json({ error: "Falta GEMINI_API_KEY/GOOGLE_API_KEY" });
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+    const json = await r.json();
+    const models = (json.models ?? [])
+      .filter((m: { supportedGenerationMethods?: string[] }) => m.supportedGenerationMethods?.includes("generateContent"))
+      .map((m: { name: string; displayName?: string }) => ({ name: m.name, displayName: m.displayName }));
+    res.json({ status: r.status, count: models.length, models });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
