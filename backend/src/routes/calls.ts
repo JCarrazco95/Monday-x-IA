@@ -595,6 +595,17 @@ callsRouter.get("/gemini-models-debug", async (_req, res) => {
 
 // TEMP DEBUG — prueba una llamada real de generateContent con un modelo
 // candidato (para confirmar cuál sirve antes de cambiar el default en código).
+callsRouter.get("/gemini-env-debug", async (_req, res) => {
+  const { MODEL_DEFAULT, MODEL_HEAVY, PROVIDER } = await import("../lib/provider.js");
+  res.json({
+    PROVIDER,
+    MODEL_DEFAULT,
+    MODEL_HEAVY,
+    env_GEMINI_MODEL_DEFAULT: process.env.GEMINI_MODEL_DEFAULT ?? null,
+    env_GEMINI_MODEL_HEAVY: process.env.GEMINI_MODEL_HEAVY ?? null
+  });
+});
+
 callsRouter.get("/gemini-test-model", async (req, res) => {
   try {
     const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
