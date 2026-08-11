@@ -431,6 +431,32 @@ Evalua la llamada con Sandler (7 etapas), Challenger (6 dimensiones) y la fusion
   });
 }
 
+// Resumenes recortados de Sandler/Challenger para la Pasada 2: la pasada 2
+// ya recibe la transcripcion completa (ahi salen las citas nuevas que
+// necesita para "analisisProfundo"/"citasDestacadas"), asi que NO hace falta
+// repetirle cada cita/acierto/fallo de las 7 etapas Sandler + 6 dimensiones
+// Challenger (eso es ~2400 tokens de contexto que no aportaban nada a esta
+// pasada). Solo se le pasa el veredicto (scores + fortalezas/areas a mejorar)
+// para que el coaching sea consistente con lo que ya se evaluo.
+function resumenSandlerParaCoaching(s: SandlerAnalysis) {
+  return {
+    puntajeFinal: s.puntajeFinal,
+    banda: s.banda,
+    fortalezas: s.fortalezas,
+    areasMejora: s.areasMejora,
+    momentoClave: s.momentoClave
+  };
+}
+function resumenChallengerParaCoaching(c: ChallengerAnalysis) {
+  return {
+    score: c.score,
+    banda: c.banda,
+    perfilVendedor: c.perfilVendedor,
+    fortalezas: c.fortalezas,
+    areasMejora: c.areasMejora
+  };
+}
+
 // Pasada 2 — coaching del vendedor + analisis profundo + oportunidades (una sola llamada).
 async function runCoachingOps(
   input: CallIntelligenceInput,
@@ -447,11 +473,11 @@ Transcripcion:
 ${input.transcript}
 """
 
-== Sandler (JSON) ==
-${JSON.stringify(sandler)}
+== Veredicto Sandler (resumen) ==
+${JSON.stringify(resumenSandlerParaCoaching(sandler))}
 
-== Challenger (JSON) ==
-${JSON.stringify(challenger)}
+== Veredicto Challenger (resumen) ==
+${JSON.stringify(resumenChallengerParaCoaching(challenger))}
 
 Genera el coaching del vendedor, el analisis profundo de la llamada y las oportunidades de upsell/cross-sell. Todo en una sola respuesta.`,
     toolName: "coaching_oportunidades_result",
