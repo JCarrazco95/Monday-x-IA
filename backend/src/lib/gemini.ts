@@ -5,13 +5,13 @@ import { withRetry } from "./retry.js";
 import type { WebResearchResult } from "./claude.js";
 
 /** Normaliza el usageMetadata de Gemini al formato común de telemetría. */
-function trackGeminiUsage(model: string, response: unknown): void {
+function trackGeminiUsage(model: string, response: unknown, operation?: string): void {
   const meta = (response as { usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number } })
     .usageMetadata;
   trackUsage(model, {
     input_tokens: meta?.promptTokenCount ?? 0,
     output_tokens: meta?.candidatesTokenCount ?? 0
-  });
+  }, operation);
 }
 
 // ===========================================================================
@@ -66,6 +66,8 @@ export async function geminiStructured<T>(opts: {
   inputSchema: Record<string, unknown>;
   model?: string;
   retryOpts?: { retries?: number; baseDelayMs?: number; floor429Ms?: number };
+  /** Etiqueta de operación para la telemetría persistente (ver `trackUsage`). */
+  operation?: string;
 }): Promise<T> {
   const ai = getAi();
   const systemInstruction = `${opts.system}
@@ -87,7 +89,7 @@ ${JSON.stringify(opts.inputSchema)}`;
     }
   }), "gemini structured", opts.retryOpts);
 
-  trackGeminiUsage(geminiModel(opts.model), response);
+  trackGeminiUsage(geminiModel(opts.model), response, opts.operation);
   const text = response.text ?? "";
   if (!text) throw new Error("Gemini devolvió una respuesta vacía.");
   return parseJsonLoose<T>(text);
@@ -130,7 +132,7 @@ export async function geminiResearch(opts: {
     }), "gemini research (sin web)");
   }
 
-  trackGeminiUsage(model, response);
+  trackGeminiUsage(model, response, "web_research");
   const text = response.text ?? "";
 
   // Extrae fuentes del grounding metadata.

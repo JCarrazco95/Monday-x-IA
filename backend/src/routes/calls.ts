@@ -558,28 +558,19 @@ callsRouter.get("/", async (req, res) => {
   }
 });
 
-// TEMP DEBUG — volumen real de llamadas desde una fecha (para estimar costo
-// de un backfill histórico). No transcribe nada, solo metadata de Aircall.
-callsRouter.get("/volumen-debug", async (req, res) => {
+// GET /api/calls/usage-historico[?operation=&desde=&hasta=] -> consumo real
+// de IA persistido (ver aiUsageStore.ts), para comparar proveedores/pasadas
+// de Call Intelligence a lo largo del tiempo (sobrevive a reinicios, a
+// diferencia de /api/usage que es solo en memoria).
+callsRouter.get("/usage-historico", async (req, res) => {
   try {
-    const sinceISO = (req.query.since as string) ?? "2026-07-23";
-    const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
-    const calls = await listRecentCalls({ sinceUnix, maxPages: 30 });
-    const contestadas = calls.filter((c) => c.answered);
-    const duraciones = contestadas.map((c) => c.durationSec).sort((a, b) => a - b);
-    const suma = duraciones.reduce((s, d) => s + d, 0);
-    const prom = duraciones.length ? Math.round(suma / duraciones.length) : 0;
-    const mediana = duraciones.length ? duraciones[Math.floor(duraciones.length / 2)] : 0;
-    res.json({
-      sinceISO,
-      totalLlamadas: calls.length,
-      contestadas: contestadas.length,
-      noContestadas: calls.length - contestadas.length,
-      duracionPromedioSeg: prom,
-      duracionMedianaSeg: mediana,
-      duracionMinSeg: duraciones[0] ?? 0,
-      duracionMaxSeg: duraciones[duraciones.length - 1] ?? 0
+    const { usageHistorico } = await import("../lib/aiUsageStore.js");
+    const data = await usageHistorico({
+      operation: req.query.operation as string | undefined,
+      desde: req.query.desde as string | undefined,
+      hasta: req.query.hasta as string | undefined
     });
+    res.json(data);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }

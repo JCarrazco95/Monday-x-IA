@@ -22,6 +22,16 @@ import { transcribeRecording, transcriptionEnabled } from "./transcription.js";
 import { getCallsBoardItems, callsBoardConfigured } from "./monday.js";
 import { db } from "../db/index.js";
 
+// Interruptor de "fase de venta": mientras el cliente no haya cerrado la
+// compra, los caminos AUTOMÁTICOS (webhook de Aircall, cron de sync) no
+// deben gastar IA en cada llamada nueva sin que nadie lo pida. Los caminos
+// MANUALES (pegar una transcripción, analizar un ID puntual desde el panel)
+// siguen funcionando siempre — sirven para hacer demos reales al cliente sin
+// prender el gasto continuo del histórico completo. Se activa quitando la
+// variable o poniéndola en "true" el día que se cierre la venta.
+const CALL_INTELLIGENCE_LIVE = (process.env.CALL_INTELLIGENCE_LIVE ?? "true").toLowerCase() !== "false";
+export const callIntelligenceLive = CALL_INTELLIGENCE_LIVE;
+
 export interface AircallIngestResult {
   ok: boolean;
   analizada: boolean;
@@ -46,9 +56,30 @@ export async function ingestAircallCall(
     recordingHint?: string | null;
     /** Transcripción ya provista (p. ej. pegada a mano); evita ir a Aircall. */
     transcriptOverride?: string | null;
+    /** true SOLO desde caminos automáticos (webhook, cron) — respeta
+     *  CALL_INTELLIGENCE_LIVE. Las rutas manuales del panel lo dejan en
+     *  false a propósito para poder seguir haciendo demos. */
+    respectLiveFlag?: boolean;
   } = {}
 ): Promise<AircallIngestResult> {
   if (!callId) return { ok: false, analizada: false, motivo: "Falta el ID de la llamada." };
+
+  if (opts.respectLiveFlag && !CALL_INTELLIGENCE_LIVE) {
+    const itemIdPausa = `aircall-${callId}`;
+    logActivity({
+      agentId: "call_intelligence",
+      type: "info",
+      title: "Análisis en pausa — modo venta activo",
+      detail: "CALL_INTELLIGENCE_LIVE=false: la llamada se registró pero no se analizó con IA. Se reactiva quitando esa variable (o poniéndola en true) cuando cierre la venta.",
+      reference: `#${itemIdPausa}`
+    });
+    return {
+      ok: true,
+      analizada: false,
+      itemId: itemIdPausa,
+      motivo: "Análisis en pausa (modo venta) — activa CALL_INTELLIGENCE_LIVE para reanudar."
+    };
+  }
 
   // Detalle de la llamada (grabación, número, contacto). Si Aircall no está
   // configurado, getAircallCall devuelve null; seguimos con los hints/override.
@@ -440,7 +471,7 @@ export async function syncAircallDirect(opts: { max?: number; sinceISO?: string 
     procesadas++;
 
     try {
-      const res = await ingestAircallCall(c.id);
+      const res = await ingestAircallCall(c.id, { respectLiveFlag: true });
       if (res.analizada) {
         out.analizadas++;
         if (res.itemId) analyzed.add(res.itemId);

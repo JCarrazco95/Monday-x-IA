@@ -149,7 +149,8 @@ webhooksRouter.post("/aircall", async (req, res) => {
     await ingestAircallCall(callId, {
       numeroHint: data.raw_digits ?? null,
       contactoHint,
-      recordingHint: data.recording ?? null
+      recordingHint: data.recording ?? null,
+      respectLiveFlag: true
     });
   } catch (err) {
     logActivity({

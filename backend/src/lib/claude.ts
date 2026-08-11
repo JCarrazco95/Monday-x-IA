@@ -53,7 +53,8 @@ export async function structuredCompletion<T>(opts: {
       prompt: opts.prompt,
       inputSchema: opts.inputSchema,
       model: opts.model,
-      retryOpts: opts.retryOpts
+      retryOpts: opts.retryOpts,
+      operation: opts.toolName
     });
   }
 
@@ -82,7 +83,7 @@ export async function structuredCompletion<T>(opts: {
     ],
     tool_choice: { type: "tool", name: opts.toolName }
   }), `claude structuredCompletion (${opts.toolName})`, opts.retryOpts);
-  trackUsage(model, response.usage);
+  trackUsage(model, response.usage, opts.toolName);
 
   const toolUse = response.content.find(
     (block): block is Anthropic.ToolUseBlock => block.type === "tool_use"
@@ -151,7 +152,7 @@ export async function webResearch(opts: {
     usedWeb = false;
     response = await withRetry(() => anthropic.messages.create(baseParams), "claude webResearch (sin web)");
   }
-  trackUsage(baseParams.model, response.usage);
+  trackUsage(baseParams.model, response.usage, "web_research");
 
   const text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
