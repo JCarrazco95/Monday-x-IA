@@ -557,3 +557,30 @@ callsRouter.get("/", async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// TEMP DEBUG — volumen real de llamadas desde una fecha (para estimar costo
+// de un backfill histórico). No transcribe nada, solo metadata de Aircall.
+callsRouter.get("/volumen-debug", async (req, res) => {
+  try {
+    const sinceISO = (req.query.since as string) ?? "2026-07-23";
+    const sinceUnix = Math.floor(new Date(sinceISO).getTime() / 1000);
+    const calls = await listRecentCalls({ sinceUnix, maxPages: 30 });
+    const contestadas = calls.filter((c) => c.answered);
+    const duraciones = contestadas.map((c) => c.durationSec).sort((a, b) => a - b);
+    const suma = duraciones.reduce((s, d) => s + d, 0);
+    const prom = duraciones.length ? Math.round(suma / duraciones.length) : 0;
+    const mediana = duraciones.length ? duraciones[Math.floor(duraciones.length / 2)] : 0;
+    res.json({
+      sinceISO,
+      totalLlamadas: calls.length,
+      contestadas: contestadas.length,
+      noContestadas: calls.length - contestadas.length,
+      duracionPromedioSeg: prom,
+      duracionMedianaSeg: mediana,
+      duracionMinSeg: duraciones[0] ?? 0,
+      duracionMaxSeg: duraciones[duraciones.length - 1] ?? 0
+    });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
