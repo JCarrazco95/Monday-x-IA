@@ -592,3 +592,25 @@ callsRouter.get("/gemini-models-debug", async (_req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// TEMP DEBUG — prueba una llamada real de generateContent con un modelo
+// candidato (para confirmar cuál sirve antes de cambiar el default en código).
+callsRouter.get("/gemini-test-model", async (req, res) => {
+  try {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    if (!key) return res.status(400).json({ error: "Falta GEMINI_API_KEY/GOOGLE_API_KEY" });
+    const modelo = (req.query.modelo as string) ?? "gemini-flash-latest";
+    const r = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${key}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: "Responde solo con la palabra OK." }] }] })
+      }
+    );
+    const json = await r.json();
+    res.json({ modelo, status: r.status, respuesta: json });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
